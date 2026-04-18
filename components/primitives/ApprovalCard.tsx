@@ -105,20 +105,22 @@ export function ApprovalCard({ payload, state, onApprove, onReject }: Props) {
 
       {!approved && !rejected && (
         <>
-          {/* Typed confirmation for payment + large-payment */}
-          <div className="approval-confirm-row">
-            <label className="approval-confirm-label">
-              Type <code className="approval-confirm-code">{confirmCode}</code> to continue
-            </label>
-            <input
-              className="approval-confirm-input"
-              placeholder={confirmCode}
-              value={confirmInput}
-              onChange={e => setConfirmInput(e.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </div>
+          {/* Typed confirmation — hidden once the request has been dispatched */}
+          {!requestSent && (
+            <div className="approval-confirm-row">
+              <label className="approval-confirm-label">
+                Type <code className="approval-confirm-code">{confirmCode}</code> to continue
+              </label>
+              <input
+                className="approval-confirm-input"
+                placeholder={confirmCode}
+                value={confirmInput}
+                onChange={e => setConfirmInput(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </div>
+          )}
 
           {stake === 'payment' && (
             <div className="approval-actions">
