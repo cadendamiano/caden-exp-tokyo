@@ -1,4 +1,4 @@
-import { BILLS, VENDORS, AGING, CATEGORY_SPEND } from './data';
+import { BILLS, VENDORS, AGING, CATEGORY_SPEND, EXPENSES, EMPLOYEES } from './data';
 import { getBillEnvironment } from './secrets';
 import {
   apList,
@@ -7,7 +7,7 @@ import {
   apFindDuplicateInvoices,
   type ApFilter,
 } from './bill/ap';
-import { seRequest } from './bill/se';
+import { seRequest, seListExpenses, seGetEmployee, type SeExpenseFilter } from './bill/se';
 
 export type ToolDef = {
   name: string;
@@ -72,6 +72,28 @@ export const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: 'list_expenses',
+    description: 'List expense reports or card transactions from Bill Spend & Expense. Optionally filter by employee or status.',
+    parameters: {
+      type: 'object',
+      properties: {
+        employeeId: { type: 'string', description: 'Filter by employee id' },
+        status: { type: 'string', description: 'Filter by expense status (e.g. approved, pending)' },
+      },
+    },
+  },
+  {
+    name: 'get_employee',
+    description: 'Get a single Bill Spend & Expense employee by id.',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Employee id' },
+      },
+      required: ['id'],
+    },
+  },
+  {
     name: 'render_artifact',
     description:
       'Open an interactive artifact card in the UI. Use when the user asks to visualize, list, or configure something that has a matching artifact kind.',
@@ -120,20 +142,34 @@ async function runRealTool(
         data: null,
       };
     }
-    if (ctx.billProduct === 'se' && env.product === 'se') {
-      return {
-        ok: false,
-        summary: 'Bill S&E not yet wired',
-        data: { note: 'S&E adapter is a scaffold; OAuth flow not yet implemented.' },
-      };
-    }
     if (ctx.billProduct === 'se') {
+      if (name === 'list_expenses') {
+        const filters: SeExpenseFilter[] = [];
+        if (input?.employeeId) filters.push({ field: 'employeeId', value: String(input.employeeId) });
+        if (input?.status) filters.push({ field: 'status', value: String(input.status) });
+        const expenses = await seListExpenses(env, filters);
+        const total = expenses.reduce((s: number, e: any) => s + Number(e.amount ?? 0), 0);
+        return {
+          ok: true,
+          summary: `${expenses.length} expenses · $${total.toLocaleString('en-US', { maximumFractionDigits: 0 })}`,
+          data: expenses,
+        };
+      }
+      if (name === 'get_employee') {
+        if (!input?.id) return { ok: false, summary: 'employee id required', data: null };
+        const employee = await seGetEmployee(env, String(input.id));
+        return {
+          ok: true,
+          summary: `employee ${employee?.id ?? input.id}`,
+          data: employee,
+        };
+      }
       try {
         await seRequest(env, '/me');
       } catch (e: any) {
         return {
           ok: false,
-          summary: e?.message ?? 'Bill S&E not yet wired',
+          summary: e?.message ?? 'Bill S&E request failed',
           data: null,
         };
       }
@@ -233,6 +269,25 @@ async function runMockTool(
         },
       ];
       return { ok: true, summary: `${pairs.length} suspect pairs`, data: pairs };
+    }
+    if (name === 'list_expenses') {
+      const employeeId = input?.employeeId;
+      const status = input?.status;
+      let expenses = EXPENSES.slice();
+      if (employeeId) expenses = expenses.filter(e => e.employee === employeeId);
+      if (status) expenses = expenses.filter(e => e.status === status);
+      const total = expenses.reduce((s, e) => s + e.amount, 0);
+      return {
+        ok: true,
+        summary: `${expenses.length} expenses · $${total.toLocaleString('en-US', { maximumFractionDigits: 0 })}`,
+        data: expenses,
+      };
+    }
+    if (name === 'get_employee') {
+      if (!input?.id) return { ok: false, summary: 'employee id required', data: null };
+      const employee = EMPLOYEES.find(e => e.id === String(input.id));
+      if (!employee) return { ok: false, summary: `employee ${input.id} not found`, data: null };
+      return { ok: true, summary: `employee ${employee.id}`, data: employee };
     }
     if (name === 'render_artifact') {
       return { ok: true, summary: 'artifact opened in UI', data: input };
