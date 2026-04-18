@@ -1,11 +1,23 @@
-export function Net15RuleArtifact() {
+'use client';
+
+import { useStore } from '@/lib/store';
+import type { Artifact } from '@/lib/store';
+
+type Props = { artifact: Artifact };
+
+export function Net15RuleArtifact({ artifact }: Props) {
+  const activateArtifact = useStore(s => s.activateArtifact);
+  const isActive = artifact.status === 'active';
+  const canActivate = Boolean(artifact.dryRunAcknowledged);
+  const statusLabel = artifact.status ?? 'draft';
+
   return (
     <div>
       <div className="artifact-title">
         <h2>Automation rule</h2>
       </div>
       <div className="artifact-subtitle">
-        <span>draft</span>
+        <span>{statusLabel}</span>
         <span className="sep">·</span>
         <span>trigger: bill.created</span>
         <span className="sep">·</span>
@@ -14,7 +26,9 @@ export function Net15RuleArtifact() {
       <div className="rule-card">
         <div className="rule-name">
           <h3>Flag large Net-15 bills for review</h3>
-          <span className="status-pill"><span className="dot" />draft</span>
+          <span className={'status-pill' + (isActive ? ' ok' : '')}>
+            <span className="dot" />{statusLabel}
+          </span>
         </div>
         <div className="rule-desc">
           Catch bills that will need urgent attention before they age — surface them to the AP team immediately.
@@ -74,9 +88,32 @@ export function Net15RuleArtifact() {
         </div>
 
         <div className="rule-actions">
-          <button className="btn btn-primary">Turn on rule</button>
-          <button className="btn btn-ghost">Run dry-run (30d)</button>
-          <button className="btn btn-ghost">Edit as code</button>
+          {isActive ? (
+            <span className="status-pill active" style={{ fontSize: 12 }}>
+              <span className="dot" style={{ background: 'var(--pos)' }} />Rule active
+            </span>
+          ) : (
+            <>
+              <div
+                title={canActivate ? undefined : 'View Preview first to activate'}
+                style={{ display: 'inline-block' }}
+              >
+                <button
+                  className="btn btn-primary"
+                  disabled={!canActivate}
+                  style={!canActivate ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+                  onClick={() => canActivate && activateArtifact(artifact.id)}
+                >
+                  Activate rule
+                </button>
+              </div>
+              {!canActivate && (
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-4)', marginLeft: 8 }}>
+                  View Preview first
+                </span>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>

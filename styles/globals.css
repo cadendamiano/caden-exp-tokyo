@@ -1018,3 +1018,199 @@ input, textarea, select{ font-family: inherit; color: inherit; }
 /* fade-in animation for streamed content */
 .fade-in{ animation: fadeIn 0.18s ease-out; }
 @keyframes fadeIn{ from{ opacity: 0; transform: translateY(2px); } to{ opacity: 1; transform: none; } }
+
+/* ---------- Artifact pane: content area ---------- */
+.artifact-content{
+  display: flex; flex-direction: column;
+  min-height: 0; overflow: hidden;
+  flex: 1;
+}
+.artifact-content > .artifact-body{
+  flex: 1; overflow: auto; padding: 22px 24px 32px;
+}
+
+/* ---------- Artifact view bar (Logic / Preview / Code tabs + provenance) ---------- */
+.artifact-view-bar{
+  display: flex; align-items: center; gap: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  flex: none;
+  padding: 0 16px;
+  min-height: 36px;
+}
+.artifact-view-tabs{
+  display: flex; align-items: stretch; gap: 2px;
+}
+.artifact-view-tab{
+  padding: 0 12px; height: 36px;
+  font-family: var(--mono); font-size: 11px;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--ink-4); border-bottom: 2px solid transparent;
+  background: none; cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+.artifact-view-tab:hover{ color: var(--ink-2); }
+.artifact-view-tab.active{ color: var(--teal-ink); border-bottom-color: var(--teal); }
+
+/* ---------- Artifact provenance strip ---------- */
+.artifact-provenance{
+  display: flex; align-items: center; gap: 8px;
+  margin-left: auto;
+  font-family: var(--mono); font-size: 10.5px; color: var(--ink-4);
+}
+.artifact-status-badge{
+  padding: 2px 7px; border-radius: 999px;
+  font-family: var(--mono); font-size: 10px; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  border: 1px solid var(--line); background: var(--surface-2);
+  color: var(--ink-3);
+}
+.artifact-status-badge.active{
+  color: var(--pos);
+  border-color: color-mix(in oklab, var(--pos) 35%, var(--line));
+  background: color-mix(in oklab, var(--pos) 8%, var(--surface));
+}
+.artifact-status-badge.paused{
+  color: var(--ink-3); background: var(--surface-2);
+}
+.artifact-status-badge.draft{
+  color: var(--warn);
+  border-color: color-mix(in oklab, var(--warn) 35%, var(--line));
+  background: var(--warn-soft);
+}
+.artifact-prov-version{
+  display: inline-flex; align-items: center; gap: 4px;
+  color: var(--ink-2); font-weight: 500;
+}
+.artifact-prov-dot{
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--warn);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--warn) 22%, transparent);
+  display: inline-block;
+}
+.artifact-prov-sep{ color: var(--ink-4); }
+.artifact-prov-author{ color: var(--ink-3); }
+
+/* ---------- Preview view ---------- */
+.preview-view{
+  display: flex; flex-direction: column; gap: 14px;
+}
+.preview-header{
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px;
+}
+.preview-summary{
+  font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink);
+}
+.preview-as-of{
+  font-family: var(--mono); font-size: 10.5px; color: var(--ink-4); white-space: nowrap;
+}
+.preview-table-wrap{
+  border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
+  background: var(--surface);
+}
+.preview-table{
+  display: flex; flex-direction: column;
+}
+.preview-table-head{
+  display: grid; gap: 12px;
+  padding: 7px 12px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--mono); font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--ink-4);
+}
+.preview-table-row{
+  display: grid; gap: 12px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line-2);
+  font-family: var(--mono); font-size: 12px; color: var(--ink-2);
+  transition: background 0.08s;
+}
+.preview-table-row:first-of-type{ border-top: none; }
+.preview-table-row:hover{ background: var(--surface-2); }
+.preview-footnote{
+  font-family: var(--mono); font-size: 10.5px; color: var(--ink-4);
+}
+.preview-loading{
+  display: flex; align-items: center; padding: 24px 0;
+}
+.preview-empty{
+  padding: 24px 0;
+}
+
+/* ---------- Code view ---------- */
+.code-view{
+  display: flex; flex-direction: column; gap: 10px;
+}
+.code-view-meta{
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--mono); font-size: 10.5px; color: var(--ink-4);
+}
+.code-view-version{
+  display: inline-flex; align-items: center; gap: 5px;
+  color: var(--ink-2); font-weight: 600;
+}
+.code-view-edit-dot{
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--warn);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--warn) 22%, transparent);
+  display: inline-block;
+}
+.code-view-author{ color: var(--ink-3); }
+.code-view-badge{
+  margin-left: auto;
+  padding: 2px 7px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface-2);
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--ink-4);
+}
+.code-view-warning{
+  font-family: var(--mono); font-size: 11px;
+  color: var(--warn); padding: 8px 12px;
+  background: var(--warn-soft);
+  border: 1px solid color-mix(in oklab, var(--warn) 25%, var(--line));
+  border-radius: var(--radius-sm);
+}
+
+/* ---------- Approval: typed confirmation ---------- */
+.approval-confirm-row{
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--line-2);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.approval-confirm-label{
+  font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.approval-confirm-code{
+  font-family: var(--mono); font-size: 11px;
+  padding: 1px 6px; border-radius: 4px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  color: var(--ink); font-weight: 600; letter-spacing: 0.04em;
+}
+.approval-confirm-input{
+  width: 100%; padding: 7px 10px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-family: var(--mono); font-size: 12.5px; color: var(--ink);
+  letter-spacing: 0.04em;
+}
+.approval-confirm-input:focus{
+  outline: none;
+  border-color: var(--teal);
+  box-shadow: var(--shadow-focus);
+}
+.approval-second-badge{
+  margin-left: auto;
+  font-family: var(--mono); font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--warn);
+  padding: 2px 8px; border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--warn) 35%, var(--line));
+  background: var(--warn-soft);
+}
+.approval-request-sent{
+  font-family: var(--mono); font-size: 12px; color: var(--pos);
+  padding: 8px 0;
+}

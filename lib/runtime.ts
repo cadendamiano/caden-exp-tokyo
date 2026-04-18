@@ -86,7 +86,12 @@ function executeStep(flow: Flow, step: FlowStep, mult: number) {
     s.removeTurnsByKind('building');
     if (flow.artifact) {
       const art = flow.artifact;
-      s.setArtifacts(prev => (prev.find(p => p.id === art.id) ? prev : [...prev, art]));
+      s.setArtifacts(prev => (prev.find(p => p.id === art.id) ? prev : [...prev, {
+        ...art,
+        status: 'draft' as const,
+        version: 1,
+        createdBy: 'Coworker',
+      }]));
     }
     s.addTurn({
       id: newId('ac'),
@@ -232,7 +237,14 @@ export async function runLLM(userText: string) {
         } else if (ev.type === 'artifact') {
           const artId = `art_${ev.kind.replace('-', '_')}`;
           useStore.getState().setArtifacts(prev =>
-            prev.find(p => p.id === artId) ? prev : [...prev, { id: artId, kind: ev.kind, label: ev.label ?? ev.kind }]
+            prev.find(p => p.id === artId) ? prev : [...prev, {
+              id: artId,
+              kind: ev.kind,
+              label: ev.label ?? ev.kind,
+              status: 'draft' as const,
+              version: 1,
+              createdBy: 'Coworker',
+            }]
           );
           useStore.getState().addTurn({
             id: newId('ac'),
@@ -353,7 +365,14 @@ export async function runLLMTesting(userText: string) {
         } else if (ev.type === 'artifact') {
           const artId = `art_${ev.kind.replace('-', '_')}`;
           useStore.getState().setArtifactsInActiveThread(prev =>
-            prev.find(p => p.id === artId) ? prev : [...prev, { id: artId, kind: ev.kind, label: ev.label ?? ev.kind }]
+            prev.find(p => p.id === artId) ? prev : [...prev, {
+              id: artId,
+              kind: ev.kind,
+              label: ev.label ?? ev.kind,
+              status: 'draft' as const,
+              version: 1,
+              createdBy: 'Coworker',
+            }]
           );
           useStore.getState().addTurnToActiveThread({
             id: newId('ac'),

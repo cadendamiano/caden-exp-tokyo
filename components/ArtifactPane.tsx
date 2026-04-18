@@ -1,12 +1,16 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useStore } from '@/lib/store';
 import { Icon } from './primitives/Icon';
 import { APTableArtifact } from './artifacts/APTableArtifact';
 import { SpendChartArtifact } from './artifacts/SpendChartArtifact';
 import { Net15RuleArtifact } from './artifacts/Net15RuleArtifact';
 import { CRMFlowArtifact } from './artifacts/CRMFlowArtifact';
+import { ArtifactPreview } from './ArtifactPreview';
+import { ArtifactCode } from './ArtifactCode';
 import type { ArtifactKind } from '@/lib/flows';
+import type { ArtifactStatus } from '@/lib/store';
 
 function glyphFor(kind: ArtifactKind) {
   if (kind === 'ap-table') return <Icon.Table />;
@@ -16,8 +20,28 @@ function glyphFor(kind: ArtifactKind) {
   return <Icon.Doc />;
 }
 
+type ViewTab = 'logic' | 'preview' | 'code';
+
+function statusBadgeClass(status: ArtifactStatus | undefined): string {
+  if (status === 'active') return 'artifact-status-badge active';
+  if (status === 'paused') return 'artifact-status-badge paused';
+  return 'artifact-status-badge draft';
+}
+
+function timeAgo(ts: number | undefined): string {
+  if (!ts) return '';
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
 export function ArtifactPane() {
   const mode = useStore(s => s.mode);
+  const showCodeView = useStore(s => s.tweaks.showCodeView);
   const demoArtifacts = useStore(s => s.artifacts);
   const threads = useStore(s => s.testingThreads);
   const activeThreadId = useStore(s => s.activeTestingThreadId);
@@ -29,11 +53,18 @@ export function ArtifactPane() {
   const selectedBills = useStore(s => s.selectedBills);
   const toggleBill = useStore(s => s.toggleBill);
 
+  const [view, setView] = useState<ViewTab>('logic');
+
   const activeThread = threads.find(t => t.id === activeThreadId);
   const artifacts = mode === 'testing' ? (activeThread?.artifacts ?? []) : demoArtifacts;
 
   const cur = artifacts.find(a => a.id === active);
   const isOpen = !!active;
+
+  // Reset to logic view whenever the open artifact changes
+  useEffect(() => {
+    setView('logic');
+  }, [active]);
 
   const closeOne = (id: string) => {
     if (mode === 'testing') {
@@ -51,6 +82,7 @@ export function ArtifactPane() {
         onClick={() => setActive(null)}
       />
       <section className={'artifact-pane' + (isOpen ? ' open' : '')}>
+        {/* Artifact selection tabs (top strip) */}
         <div className="artifact-tabs">
           {artifacts.length === 0 ? (
             <div
@@ -93,14 +125,54 @@ export function ArtifactPane() {
           </div>
         </div>
 
-        <div className="artifact-body">
-          {!cur && <EmptyArtifact />}
-          {cur?.kind === 'ap-table' && (
-            <APTableArtifact selected={new Set(selectedBills)} onToggle={toggleBill} />
+        {/* Content area: view bar + body */}
+        <div className="artifact-content">
+          {cur ? (
+            <>
+              {/* View switcher + provenance */}
+              <div className="artifact-view-bar">
+                <div className="artifact-view-tabs">
+                  {(['logic', 'preview', ...(showCodeView ? ['code'] : [])] as ViewTab[]).map(v => (
+                    <button
+                      key={v}
+                      className={'artifact-view-tab' + (view === v ? ' active' : '')}
+                      onClick={() => setView(v)}
+                    >
+                      {v === 'logic' ? 'Logic' : v === 'preview' ? 'Preview' : 'Code'}
+                    </button>
+                  ))}
+                </div>
+                <div className="artifact-provenance">
+                  <span className={statusBadgeClass(cur.status)}>
+                    {cur.status ?? 'draft'}
+                  </span>
+                  <span className="artifact-prov-version">
+                    {cur.editedBy && <span className="artifact-prov-dot" title="Hand-edited — logic and code may differ" />}
+                    v{cur.version ?? 1}
+                  </span>
+                  <span className="artifact-prov-sep">·</span>
+                  <span className="artifact-prov-author">
+                    {cur.createdBy ?? 'Coworker'}
+                    {cur.editedBy ? ` · ${cur.editedBy} edited ${timeAgo(cur.editedAt)}` : ''}
+                  </span>
+                </div>
+              </div>
+
+              {/* Artifact body */}
+              <div className="artifact-body">
+                {view === 'preview' && <ArtifactPreview artifact={cur} />}
+                {view === 'code' && <ArtifactCode artifact={cur} />}
+                {view === 'logic' && cur.kind === 'ap-table' && (
+                  <APTableArtifact selected={new Set(selectedBills)} onToggle={toggleBill} />
+                )}
+                {view === 'logic' && cur.kind === 'rule-net15' && <Net15RuleArtifact artifact={cur} />}
+                {view === 'logic' && cur.kind === 'spend-chart' && <SpendChartArtifact />}
+                {view === 'logic' && cur.kind === 'crm-flow' && <CRMFlowArtifact artifact={cur} />}
+              </div>
+            </>
+          ) : (
+            <EmptyArtifact />
           )}
-          {cur?.kind === 'rule-net15' && <Net15RuleArtifact />}
-          {cur?.kind === 'spend-chart' && <SpendChartArtifact />}
-          {cur?.kind === 'crm-flow' && <CRMFlowArtifact />}
         </div>
       </section>
     </>

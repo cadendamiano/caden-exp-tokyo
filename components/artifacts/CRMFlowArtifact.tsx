@@ -1,3 +1,8 @@
+'use client';
+
+import { useStore } from '@/lib/store';
+import type { Artifact } from '@/lib/store';
+
 const MAPS = [
   { src: 'bill.paymentStatus',   dst: 'deal.dealstage',      xf: 'map: "0" → "Paid"' },
   { src: 'payment.amount',       dst: 'deal.amount',         xf: 'copy' },
@@ -6,7 +11,13 @@ const MAPS = [
   { src: 'payment.confirmation', dst: 'deal.bill_payment_id',xf: 'copy' },
 ];
 
-export function CRMFlowArtifact() {
+type Props = { artifact: Artifact };
+
+export function CRMFlowArtifact({ artifact }: Props) {
+  const activateArtifact = useStore(s => s.activateArtifact);
+  const isActive = artifact.status === 'active';
+  const canActivate = Boolean(artifact.dryRunAcknowledged);
+
   return (
     <div>
       <div className="artifact-title">
@@ -50,9 +61,38 @@ export function CRMFlowArtifact() {
         </div>
 
         <div className="rule-actions">
-          <button className="btn btn-primary">Turn on (new events)</button>
-          <button className="btn btn-ghost">Turn on + backfill 18</button>
-          <button className="btn btn-ghost">View 2 unmatched</button>
+          {isActive ? (
+            <span className="status-pill active" style={{ fontSize: 12 }}>
+              <span className="dot" style={{ background: 'var(--pos)' }} />Flow active
+            </span>
+          ) : (
+            <>
+              <div
+                title={canActivate ? undefined : 'View Preview first to activate'}
+                style={{ display: 'inline-block' }}
+              >
+                <button
+                  className="btn btn-primary"
+                  disabled={!canActivate}
+                  style={!canActivate ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+                  onClick={() => canActivate && activateArtifact(artifact.id)}
+                >
+                  Turn on (new events)
+                </button>
+              </div>
+              {!canActivate && (
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-4)', marginLeft: 8 }}>
+                  View Preview first
+                </span>
+              )}
+              <button className="btn btn-ghost" disabled={!canActivate}
+                style={!canActivate ? { opacity: 0.4 } : undefined}
+              >
+                Turn on + backfill 18
+              </button>
+              <button className="btn btn-ghost">View 2 unmatched</button>
+            </>
+          )}
         </div>
       </div>
 

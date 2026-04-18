@@ -125,6 +125,7 @@ export const CONNECTORS: { name: string; status: 'ok' | 'warn'; meta: string }[]
 
 export const DEMO_PROMPTS = [
   { label: '/ap show overdue',     prompt: 'Show me all overdue AP across every vendor, grouped by urgency.' },
+  { label: '/pay large · 2nd approver', prompt: 'Pay the Q1 professional services invoices from Crestline Legal and Fulton & Hart.' },
   { label: '/pay batch',            prompt: 'Pay the 3 overdue invoices via ACH from our Ops Checking account.' },
   { label: '/automate net15-flag',  prompt: 'Create an automation: when a new bill comes in with Net 15 terms and amount > $5k, flag it for review and ping #ap in Slack.' },
   { label: '/chart vendor-spend',   prompt: 'Visualize Q1 spend by vendor category.' },
