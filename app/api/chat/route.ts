@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI, Type } from '@google/genai';
 import { TOOLS, runTool, SYSTEM_PROMPT } from '@/lib/tools';
+import { getAnthropicKey, getGeminiKey } from '@/lib/secrets';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -54,8 +55,8 @@ export async function POST(req: NextRequest) {
 
 // ── Anthropic ──────────────────────────────────────────────────────────
 async function runAnthropic(userMessage: string, send: (ev: Event) => void) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set in .env.local');
+  const apiKey = await getAnthropicKey();
+  if (!apiKey) throw new Error('Anthropic API key not set. Configure it in Settings (or ANTHROPIC_API_KEY in .env.local).');
 
   const client = new Anthropic({ apiKey });
   const tools = TOOLS.map(t => ({
@@ -126,8 +127,8 @@ async function runAnthropic(userMessage: string, send: (ev: Event) => void) {
 
 // ── Gemini ─────────────────────────────────────────────────────────────
 async function runGemini(userMessage: string, send: (ev: Event) => void) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error('GEMINI_API_KEY not set in .env.local');
+  const apiKey = await getGeminiKey();
+  if (!apiKey) throw new Error('Gemini API key not set. Configure it in Settings (or GEMINI_API_KEY in .env.local).');
 
   const ai = new GoogleGenAI({ apiKey });
 
