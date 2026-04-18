@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI, Type } from '@google/genai';
-import { TOOLS, runTool, SYSTEM_PROMPT } from '@/lib/tools';
+import { TOOLS, runTool, SYSTEM_PROMPT, TESTING_SYSTEM_PROMPT, type ToolContext } from '@/lib/tools';
 import { getAnthropicKey, getGeminiKey } from '@/lib/secrets';
 
 export const runtime = 'nodejs';
@@ -20,10 +20,20 @@ export function sseEncode(ev: Event) {
 }
 
 export async function POST(req: NextRequest) {
-  const { provider, userMessage } = (await req.json()) as {
+  const body = (await req.json()) as {
     provider: 'anthropic' | 'gemini';
     userMessage: string;
+    mode?: 'demo' | 'testing';
+    billEnvId?: string;
+    billProduct?: 'ap' | 'se';
   };
+  const { provider, userMessage } = body;
+  const ctx: ToolContext = {
+    mode: body.mode ?? 'demo',
+    billEnvId: body.billEnvId,
+    billProduct: body.billProduct,
+  };
+  const systemPrompt = ctx.mode === 'testing' ? TESTING_SYSTEM_PROMPT : SYSTEM_PROMPT;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -31,9 +41,9 @@ export async function POST(req: NextRequest) {
       const send = (ev: Event) => controller.enqueue(encoder.encode(sseEncode(ev)));
       try {
         if (provider === 'gemini') {
-          await runGemini(userMessage, send);
+          await runGemini(userMessage, send, ctx, systemPrompt);
         } else {
-          await runAnthropic(userMessage, send);
+          await runAnthropic(userMessage, send, ctx, systemPrompt);
         }
       } catch (e: any) {
         send({ type: 'error', message: e?.message ?? 'unknown error' });
@@ -54,7 +64,12 @@ export async function POST(req: NextRequest) {
 }
 
 // ── Anthropic ──────────────────────────────────────────────────────────
-async function runAnthropic(userMessage: string, send: (ev: Event) => void) {
+async function runAnthropic(
+  userMessage: string,
+  send: (ev: Event) => void,
+  ctx: ToolContext,
+  systemPrompt: string
+) {
   const apiKey = await getAnthropicKey();
   if (!apiKey) throw new Error('Anthropic API key not set. Configure it in Settings (or ANTHROPIC_API_KEY in .env.local).');
 
@@ -73,7 +88,7 @@ async function runAnthropic(userMessage: string, send: (ev: Event) => void) {
     const stream = await client.messages.stream({
       model: 'claude-sonnet-4-5-20250929',
       max_tokens: 2048,
-      system: SYSTEM_PROMPT,
+      system: systemPrompt,
       tools,
       messages,
     });
@@ -100,7 +115,7 @@ async function runAnthropic(userMessage: string, send: (ev: Event) => void) {
     const toolResults: any[] = [];
     for (const tu of toolUses) {
       send({ type: 'tool-call', id: tu.id, name: tu.name, input: tu.input });
-      const res = await runTool(tu.name, tu.input);
+      const res = await runTool(tu.name, tu.input, ctx);
       send({ type: 'tool-result', id: tu.id, name: tu.name, input: tu.input, ok: res.ok, summary: res.summary });
       if (tu.name === 'render_artifact') {
         const inp = tu.input as any;
@@ -126,7 +141,12 @@ async function runAnthropic(userMessage: string, send: (ev: Event) => void) {
 }
 
 // ── Gemini ─────────────────────────────────────────────────────────────
-async function runGemini(userMessage: string, send: (ev: Event) => void) {
+async function runGemini(
+  userMessage: string,
+  send: (ev: Event) => void,
+  ctx: ToolContext,
+  systemPrompt: string
+) {
   const apiKey = await getGeminiKey();
   if (!apiKey) throw new Error('Gemini API key not set. Configure it in Settings (or GEMINI_API_KEY in .env.local).');
 
@@ -149,7 +169,7 @@ async function runGemini(userMessage: string, send: (ev: Event) => void) {
       model: 'gemini-2.5-pro',
       contents,
       config: {
-        systemInstruction: SYSTEM_PROMPT,
+        systemInstruction: systemPrompt,
         tools: geminiTools as any,
       },
     });
@@ -180,7 +200,7 @@ async function runGemini(userMessage: string, send: (ev: Event) => void) {
     const toolParts: any[] = [];
     for (const tc of toolCalls) {
       send({ type: 'tool-call', id: tc.id, name: tc.name, input: tc.input });
-      const res = await runTool(tc.name, tc.input);
+      const res = await runTool(tc.name, tc.input, ctx);
       send({ type: 'tool-result', id: tc.id, name: tc.name, input: tc.input, ok: res.ok, summary: res.summary });
       if (tc.name === 'render_artifact') {
         const inp = tc.input as any;

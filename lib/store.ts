@@ -6,6 +6,8 @@ import type { Turn } from './turns';
 import type { ArtifactKind } from './flows';
 
 export type Provider = 'anthropic' | 'gemini';
+export type Mode = 'demo' | 'testing';
+export type BillProduct = 'ap' | 'se';
 
 export type Tweaks = {
   accentHue: number;
@@ -22,6 +24,18 @@ export type Artifact = {
   filter?: string;
 };
 
+export type Thread = {
+  id: string;
+  title: string;
+  createdAt: number;
+  turns: Turn[];
+  artifacts: Artifact[];
+  selectedBills: string[];
+  approvalStates: Record<string, 'approved' | 'rejected'>;
+  billEnvId?: string;
+  billProduct?: BillProduct;
+};
+
 type State = {
   tweaks: Tweaks;
   turns: Turn[];
@@ -31,6 +45,10 @@ type State = {
   approvalStates: Record<string, 'approved' | 'rejected'>;
   streaming: boolean;
   composer: string;
+
+  mode: Mode;
+  testingThreads: Thread[];
+  activeTestingThreadId: string | null;
 
   setTweak: <K extends keyof Tweaks>(k: K, v: Tweaks[K]) => void;
   setComposer: (s: string) => void;
@@ -44,6 +62,17 @@ type State = {
   setApproval: (batchId: string, state: 'approved' | 'rejected') => void;
   reset: () => void;
   seedWelcome: () => void;
+
+  setMode: (m: Mode) => void;
+  newThread: (title?: string) => string;
+  setActiveThread: (id: string) => void;
+  deleteThread: (id: string) => void;
+  renameThread: (id: string, title: string) => void;
+  addTurnToActiveThread: (t: Turn) => void;
+  updateTurnInActiveThread: (id: string, patch: Partial<Turn>) => void;
+  setArtifactsInActiveThread: (fn: (prev: Artifact[]) => Artifact[]) => void;
+  setApprovalInActiveThread: (batchId: string, state: 'approved' | 'rejected') => void;
+  setThreadBillEnv: (id: string, envId: string | undefined, product: BillProduct) => void;
 };
 
 const WELCOME_TURN: Turn = {
@@ -65,9 +94,22 @@ const DEFAULT_TWEAKS: Tweaks = {
   provider: 'anthropic',
 };
 
+function createThread(title?: string): Thread {
+  return {
+    id: `thr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+    title: title ?? 'New thread',
+    createdAt: Date.now(),
+    turns: [],
+    artifacts: [],
+    selectedBills: [],
+    approvalStates: {},
+    billProduct: 'ap',
+  };
+}
+
 export const useStore = create<State>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       tweaks: DEFAULT_TWEAKS,
       turns: [WELCOME_TURN],
       artifacts: [],
@@ -76,6 +118,10 @@ export const useStore = create<State>()(
       approvalStates: {},
       streaming: false,
       composer: '',
+
+      mode: 'demo',
+      testingThreads: [],
+      activeTestingThreadId: null,
 
       setTweak: (k, v) => set(s => ({ tweaks: { ...s.tweaks, [k]: v } })),
       setComposer: (composer) => set({ composer }),
@@ -104,6 +150,90 @@ export const useStore = create<State>()(
           composer: '',
         }),
       seedWelcome: () => set({ turns: [WELCOME_TURN] }),
+
+      setMode: (mode) =>
+        set({ mode, streaming: false, composer: '', activeArtifact: null }),
+
+      newThread: (title) => {
+        const thread = createThread(title);
+        set(s => ({
+          testingThreads: [...s.testingThreads, thread],
+          activeTestingThreadId: thread.id,
+        }));
+        return thread.id;
+      },
+
+      setActiveThread: (id) => set({ activeTestingThreadId: id, activeArtifact: null }),
+
+      deleteThread: (id) =>
+        set(s => {
+          const remaining = s.testingThreads.filter(t => t.id !== id);
+          const stillActive = s.activeTestingThreadId === id
+            ? (remaining[0]?.id ?? null)
+            : s.activeTestingThreadId;
+          return { testingThreads: remaining, activeTestingThreadId: stillActive };
+        }),
+
+      renameThread: (id, title) =>
+        set(s => ({
+          testingThreads: s.testingThreads.map(t =>
+            t.id === id ? { ...t, title: title || 'Untitled thread' } : t
+          ),
+        })),
+
+      addTurnToActiveThread: (t) =>
+        set(s => {
+          if (!s.activeTestingThreadId) return s;
+          return {
+            testingThreads: s.testingThreads.map(th =>
+              th.id === s.activeTestingThreadId ? { ...th, turns: [...th.turns, t] } : th
+            ),
+          };
+        }),
+
+      updateTurnInActiveThread: (id, patch) =>
+        set(s => {
+          if (!s.activeTestingThreadId) return s;
+          return {
+            testingThreads: s.testingThreads.map(th =>
+              th.id === s.activeTestingThreadId
+                ? {
+                    ...th,
+                    turns: th.turns.map(t => (t.id === id ? ({ ...t, ...patch } as Turn) : t)),
+                  }
+                : th
+            ),
+          };
+        }),
+
+      setArtifactsInActiveThread: (fn) =>
+        set(s => {
+          if (!s.activeTestingThreadId) return s;
+          return {
+            testingThreads: s.testingThreads.map(th =>
+              th.id === s.activeTestingThreadId ? { ...th, artifacts: fn(th.artifacts) } : th
+            ),
+          };
+        }),
+
+      setApprovalInActiveThread: (batchId, state) =>
+        set(s => {
+          if (!s.activeTestingThreadId) return s;
+          return {
+            testingThreads: s.testingThreads.map(th =>
+              th.id === s.activeTestingThreadId
+                ? { ...th, approvalStates: { ...th.approvalStates, [batchId]: state } }
+                : th
+            ),
+          };
+        }),
+
+      setThreadBillEnv: (id, envId, product) =>
+        set(s => ({
+          testingThreads: s.testingThreads.map(t =>
+            t.id === id ? { ...t, billEnvId: envId, billProduct: product } : t
+          ),
+        })),
     }),
     {
       name: 'bcw:state',
@@ -113,7 +243,16 @@ export const useStore = create<State>()(
         artifacts: s.artifacts,
         activeArtifact: s.activeArtifact,
         approvalStates: s.approvalStates,
+        mode: s.mode,
+        testingThreads: s.testingThreads,
+        activeTestingThreadId: s.activeTestingThreadId,
       }),
     }
   )
 );
+
+export function getActiveThread(): Thread | undefined {
+  const s = useStore.getState();
+  if (!s.activeTestingThreadId) return undefined;
+  return s.testingThreads.find(t => t.id === s.activeTestingThreadId);
+}

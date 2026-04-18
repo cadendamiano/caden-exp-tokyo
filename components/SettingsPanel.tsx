@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useStore } from '@/lib/store';
 import { Icon } from './primitives/Icon';
 
 type ProviderView = { configured: boolean; masked: string };
+type BillProductTag = 'ap' | 'se' | 'both';
 
 type BillEnvView = {
   id: string;
@@ -12,6 +14,7 @@ type BillEnvView = {
   username: string;
   orgId: string;
   passwordConfigured: boolean;
+  product: BillProductTag;
 };
 
 type SettingsView = {
@@ -30,6 +33,7 @@ type BillDraft = {
   devKeyMasked: string;
   devKeyConfigured: boolean;
   passwordConfigured: boolean;
+  product: BillProductTag;
   isNew: boolean;
 };
 
@@ -43,6 +47,7 @@ const EMPTY_DRAFT = (id: string): BillDraft => ({
   devKeyMasked: '',
   devKeyConfigured: false,
   passwordConfigured: false,
+  product: 'ap',
   isNew: true,
 });
 
@@ -57,11 +62,17 @@ function toDraft(env: BillEnvView): BillDraft {
     devKeyMasked: env.devKey,
     devKeyConfigured: Boolean(env.devKey),
     passwordConfigured: env.passwordConfigured,
+    product: env.product ?? 'ap',
     isNew: false,
   };
 }
 
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
+  const mode = useStore(s => s.mode);
+  const setMode = useStore(s => s.setMode);
+  const newThread = useStore(s => s.newThread);
+  const testingThreads = useStore(s => s.testingThreads);
+
   const [view, setView] = useState<SettingsView | null>(null);
   const [anthropicInput, setAnthropicInput] = useState('');
   const [geminiInput, setGeminiInput] = useState('');
@@ -89,6 +100,15 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     };
   }, []);
 
+  function toggleMode() {
+    const next = mode === 'demo' ? 'testing' : 'demo';
+    setMode(next);
+    if (next === 'testing' && testingThreads.length === 0) {
+      newThread('First thread');
+    }
+    onClose();
+  }
+
   async function saveAll() {
     setSaving(true);
     setError(null);
@@ -102,6 +122,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           name: d.name || 'Sandbox',
           username: d.username,
           orgId: d.orgId,
+          product: d.product,
         };
         if (!d.isNew) entry.id = d.id;
         if (d.devKeyInput.length > 0) entry.devKey = d.devKeyInput;
@@ -171,6 +192,23 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <div className="tweaks-body settings-body">
+        <section className="settings-section mode-section">
+          <div className="settings-section-head">
+            <span>App mode</span>
+            <span className={'status-pill' + (mode === 'testing' ? ' warn' : ' ok')}>
+              {mode}
+            </span>
+          </div>
+          <button className="mode-toggle-btn" onClick={toggleMode} type="button">
+            {mode === 'demo' ? 'Switch to Test Mode' : 'Switch to Demo Mode'}
+          </button>
+          <div className="settings-help">
+            {mode === 'demo'
+              ? 'Demo mode runs scripted flows and mocks. Switch to Test Mode to call real Bill sandbox APIs.'
+              : 'Test Mode sends every prompt to the real LLM and calls the configured Bill sandbox for each thread.'}
+          </div>
+        </section>
+
         {!view && !error && <div className="settings-loading">Loading…</div>}
 
         {view && (
@@ -251,6 +289,23 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                     >
                       <Icon.Trash />
                     </button>
+                  </div>
+                  <div className="env-field">
+                    <span>Product</span>
+                    <div className="env-product-toggle">
+                      {(['ap', 'se', 'both'] as const).map(p => (
+                        <button
+                          key={p}
+                          type="button"
+                          className={
+                            'env-product-btn' + (d.product === p ? ' active' : '')
+                          }
+                          onClick={() => updateDraft(d.id, { product: p })}
+                        >
+                          {p === 'ap' ? 'AP' : p === 'se' ? 'S&E' : 'Both'}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <label className="env-field">
                     <span>Dev key</span>

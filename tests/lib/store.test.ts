@@ -17,6 +17,9 @@ const CLEAN_STATE = {
   approvalStates: {},
   streaming: false,
   composer: '',
+  mode: 'demo' as const,
+  testingThreads: [],
+  activeTestingThreadId: null,
 };
 
 beforeEach(() => {
@@ -264,5 +267,136 @@ describe('seedWelcome', () => {
     expect(turns).toHaveLength(1);
     expect(turns[0].id).toBe('welcome');
     expect((turns[0] as any).welcome).toBe(true);
+  });
+});
+
+describe('mode', () => {
+  it('defaults to demo', () => {
+    expect(useStore.getState().mode).toBe('demo');
+  });
+
+  it('setMode switches to testing and back', () => {
+    useStore.getState().setMode('testing');
+    expect(useStore.getState().mode).toBe('testing');
+    useStore.getState().setMode('demo');
+    expect(useStore.getState().mode).toBe('demo');
+  });
+
+  it('setMode clears streaming, composer, and activeArtifact', () => {
+    useStore.setState({ streaming: true, composer: 'x', activeArtifact: 'a1' });
+    useStore.getState().setMode('testing');
+    const s = useStore.getState();
+    expect(s.streaming).toBe(false);
+    expect(s.composer).toBe('');
+    expect(s.activeArtifact).toBeNull();
+  });
+});
+
+describe('testing threads', () => {
+  it('newThread creates and activates a thread with given title', () => {
+    const id = useStore.getState().newThread('hello');
+    const s = useStore.getState();
+    expect(s.testingThreads).toHaveLength(1);
+    expect(s.testingThreads[0].title).toBe('hello');
+    expect(s.testingThreads[0].id).toBe(id);
+    expect(s.activeTestingThreadId).toBe(id);
+  });
+
+  it('newThread defaults title', () => {
+    const id = useStore.getState().newThread();
+    const t = useStore.getState().testingThreads.find(x => x.id === id)!;
+    expect(t.title).toBe('New thread');
+    expect(t.billProduct).toBe('ap');
+    expect(t.turns).toEqual([]);
+  });
+
+  it('setActiveThread switches the active id', () => {
+    const a = useStore.getState().newThread('A');
+    const b = useStore.getState().newThread('B');
+    useStore.getState().setActiveThread(a);
+    expect(useStore.getState().activeTestingThreadId).toBe(a);
+    useStore.getState().setActiveThread(b);
+    expect(useStore.getState().activeTestingThreadId).toBe(b);
+  });
+
+  it('deleteThread removes the thread', () => {
+    const a = useStore.getState().newThread('A');
+    const b = useStore.getState().newThread('B');
+    useStore.getState().deleteThread(a);
+    const s = useStore.getState();
+    expect(s.testingThreads.map(t => t.id)).toEqual([b]);
+  });
+
+  it('deleting the active thread activates a sibling', () => {
+    const a = useStore.getState().newThread('A');
+    const b = useStore.getState().newThread('B');
+    useStore.getState().setActiveThread(a);
+    useStore.getState().deleteThread(a);
+    expect(useStore.getState().activeTestingThreadId).toBe(b);
+  });
+
+  it('deleting the last thread leaves activeTestingThreadId null', () => {
+    const a = useStore.getState().newThread('only');
+    useStore.getState().deleteThread(a);
+    expect(useStore.getState().activeTestingThreadId).toBeNull();
+  });
+
+  it('renameThread updates the title', () => {
+    const id = useStore.getState().newThread('old');
+    useStore.getState().renameThread(id, 'new');
+    const t = useStore.getState().testingThreads.find(x => x.id === id)!;
+    expect(t.title).toBe('new');
+  });
+
+  it('renameThread with empty string falls back to a placeholder title', () => {
+    const id = useStore.getState().newThread('keep');
+    useStore.getState().renameThread(id, '');
+    const t = useStore.getState().testingThreads.find(x => x.id === id)!;
+    expect(t.title).toBe('Untitled thread');
+  });
+
+  it('addTurnToActiveThread appends to the right thread only', () => {
+    const a = useStore.getState().newThread('A');
+    const b = useStore.getState().newThread('B');
+    useStore.getState().setActiveThread(a);
+    useStore.getState().addTurnToActiveThread({ id: 't1', kind: 'user', text: 'hi' });
+    const s = useStore.getState();
+    const aTh = s.testingThreads.find(x => x.id === a)!;
+    const bTh = s.testingThreads.find(x => x.id === b)!;
+    expect(aTh.turns).toHaveLength(1);
+    expect(bTh.turns).toHaveLength(0);
+  });
+
+  it('addTurnToActiveThread is a no-op with no active thread', () => {
+    useStore.getState().addTurnToActiveThread({ id: 't1', kind: 'user', text: 'hi' });
+    expect(useStore.getState().testingThreads).toHaveLength(0);
+  });
+
+  it('updateTurnInActiveThread patches a turn', () => {
+    const id = useStore.getState().newThread('A');
+    useStore.getState().addTurnToActiveThread({ id: 'a1', kind: 'agent', text: '', streaming: true });
+    useStore.getState().updateTurnInActiveThread('a1', { text: 'done', streaming: false });
+    const t = useStore.getState().testingThreads.find(x => x.id === id)!;
+    const turn = t.turns.find(tt => tt.id === 'a1')!;
+    expect((turn as any).text).toBe('done');
+    expect((turn as any).streaming).toBe(false);
+  });
+
+  it('setThreadBillEnv writes envId and product', () => {
+    const id = useStore.getState().newThread('A');
+    useStore.getState().setThreadBillEnv(id, 'env_abc', 'se');
+    const t = useStore.getState().testingThreads.find(x => x.id === id)!;
+    expect(t.billEnvId).toBe('env_abc');
+    expect(t.billProduct).toBe('se');
+  });
+
+  it('setApprovalInActiveThread records on active thread only', () => {
+    const a = useStore.getState().newThread('A');
+    const b = useStore.getState().newThread('B');
+    useStore.getState().setActiveThread(a);
+    useStore.getState().setApprovalInActiveThread('btch_1', 'approved');
+    const s = useStore.getState();
+    expect(s.testingThreads.find(x => x.id === a)!.approvalStates['btch_1']).toBe('approved');
+    expect(s.testingThreads.find(x => x.id === b)!.approvalStates['btch_1']).toBeUndefined();
   });
 });
