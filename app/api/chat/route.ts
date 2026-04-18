@@ -14,7 +14,7 @@ type Event =
   | { type: 'done' }
   | { type: 'error'; message: string };
 
-function sseEncode(ev: Event) {
+export function sseEncode(ev: Event) {
   return `data: ${JSON.stringify(ev)}\n\n`;
 }
 
@@ -203,7 +203,7 @@ async function runGemini(userMessage: string, send: (ev: Event) => void) {
   }
 }
 
-function jsonSchemaToGemini(s: any): any {
+export function jsonSchemaToGemini(s: any): any {
   if (!s || typeof s !== 'object') return s;
   const out: any = {};
   if (s.type === 'object') {
