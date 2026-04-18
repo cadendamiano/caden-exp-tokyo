@@ -89,7 +89,7 @@ type State = {
 const WELCOME_TURN: Turn = {
   id: 'welcome',
   kind: 'agent',
-  text: `Hi Riya — I'm connected to your BILL workspace (\`meridian-ops\`). I can read any AP/AR/Payment record, draft payments for your approval, build automations on BILL events, and generate artifacts from your data.
+  text: `I'm connected to your BILL workspace (\`meridian-ops\`). I can read any AP/AR/Payment record, draft payments for your approval, build automations on BILL events, and generate artifacts from your data.
 
 Every action that moves money requires a human approval gate. I'll never pay a bill or change a vendor record without showing you the exact payload first.
 
