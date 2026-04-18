@@ -9,6 +9,7 @@ import { Composer } from '@/components/Composer';
 import { Turn } from '@/components/Turn';
 import { ArtifactPane } from '@/components/ArtifactPane';
 import { TweaksPanel } from '@/components/TweaksPanel';
+import { SettingsPanel } from '@/components/SettingsPanel';
 
 export default function Page() {
   const turns = useStore(s => s.turns);
@@ -20,6 +21,7 @@ export default function Page() {
   const reset = useStore(s => s.reset);
 
   const [tweaksOpen, setTweaksOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -49,7 +51,7 @@ export default function Page() {
     <div className="app">
       <TopBar onOpenTweaks={() => setTweaksOpen(v => !v)} />
 
-      <Rail onNewSession={reset} />
+      <Rail onNewSession={reset} onOpenSettings={() => setSettingsOpen(v => !v)} />
 
       <main className="convo">
         <div className="convo-stream">
@@ -77,6 +79,7 @@ export default function Page() {
       <ArtifactPane />
 
       {tweaksOpen && <TweaksPanel onClose={() => setTweaksOpen(false)} />}
+      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
     </div>
   );
 }

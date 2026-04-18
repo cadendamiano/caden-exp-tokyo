@@ -1,0 +1,332 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { Icon } from './primitives/Icon';
+
+type ProviderView = { configured: boolean; masked: string };
+
+type BillEnvView = {
+  id: string;
+  name: string;
+  devKey: string;
+  username: string;
+  orgId: string;
+  passwordConfigured: boolean;
+};
+
+type SettingsView = {
+  anthropic: ProviderView;
+  gemini: ProviderView;
+  billEnvironments: BillEnvView[];
+};
+
+type BillDraft = {
+  id: string;
+  name: string;
+  username: string;
+  orgId: string;
+  devKeyInput: string;
+  passwordInput: string;
+  devKeyMasked: string;
+  devKeyConfigured: boolean;
+  passwordConfigured: boolean;
+  isNew: boolean;
+};
+
+const EMPTY_DRAFT = (id: string): BillDraft => ({
+  id,
+  name: '',
+  username: '',
+  orgId: '',
+  devKeyInput: '',
+  passwordInput: '',
+  devKeyMasked: '',
+  devKeyConfigured: false,
+  passwordConfigured: false,
+  isNew: true,
+});
+
+function toDraft(env: BillEnvView): BillDraft {
+  return {
+    id: env.id,
+    name: env.name,
+    username: env.username,
+    orgId: env.orgId,
+    devKeyInput: '',
+    passwordInput: '',
+    devKeyMasked: env.devKey,
+    devKeyConfigured: Boolean(env.devKey),
+    passwordConfigured: env.passwordConfigured,
+    isNew: false,
+  };
+}
+
+export function SettingsPanel({ onClose }: { onClose: () => void }) {
+  const [view, setView] = useState<SettingsView | null>(null);
+  const [anthropicInput, setAnthropicInput] = useState('');
+  const [geminiInput, setGeminiInput] = useState('');
+  const [drafts, setDrafts] = useState<BillDraft[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/settings', { cache: 'no-store' });
+        if (!res.ok) throw new Error('Failed to load settings');
+        const data = (await res.json()) as SettingsView;
+        if (cancelled) return;
+        setView(data);
+        setDrafts(data.billEnvironments.map(toDraft));
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message ?? 'Failed to load settings');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function saveAll() {
+    setSaving(true);
+    setError(null);
+    try {
+      const patch: Record<string, unknown> = {};
+      if (anthropicInput.length > 0) patch.anthropicApiKey = anthropicInput;
+      if (geminiInput.length > 0) patch.geminiApiKey = geminiInput;
+
+      patch.billEnvironments = drafts.map(d => {
+        const entry: Record<string, unknown> = {
+          name: d.name || 'Sandbox',
+          username: d.username,
+          orgId: d.orgId,
+        };
+        if (!d.isNew) entry.id = d.id;
+        if (d.devKeyInput.length > 0) entry.devKey = d.devKeyInput;
+        if (d.passwordInput.length > 0) entry.password = d.passwordInput;
+        return entry;
+      });
+
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      const next = (await res.json()) as SettingsView;
+      setView(next);
+      setDrafts(next.billEnvironments.map(toDraft));
+      setAnthropicInput('');
+      setGeminiInput('');
+      setSavedAt(Date.now());
+    } catch (e: any) {
+      setError(e?.message ?? 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function clearProvider(which: 'anthropic' | 'gemini') {
+    setSaving(true);
+    setError(null);
+    try {
+      const key = which === 'anthropic' ? 'anthropicApiKey' : 'geminiApiKey';
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ [key]: '' }),
+      });
+      if (!res.ok) throw new Error('Clear failed');
+      const next = (await res.json()) as SettingsView;
+      setView(next);
+      if (which === 'anthropic') setAnthropicInput('');
+      else setGeminiInput('');
+    } catch (e: any) {
+      setError(e?.message ?? 'Clear failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function addEnvironment() {
+    setDrafts(prev => [...prev, EMPTY_DRAFT(`draft_${prev.length}_${Date.now()}`)]);
+  }
+
+  function updateDraft(id: string, patch: Partial<BillDraft>) {
+    setDrafts(prev => prev.map(d => (d.id === id ? { ...d, ...patch } : d)));
+  }
+
+  function removeDraft(id: string) {
+    setDrafts(prev => prev.filter(d => d.id !== id));
+  }
+
+  return (
+    <div className="settings-panel">
+      <div className="tweaks-head">
+        <span>Settings</span>
+        <button className="icon-btn" onClick={onClose} aria-label="Close">
+          <Icon.Close />
+        </button>
+      </div>
+      <div className="tweaks-body settings-body">
+        {!view && !error && <div className="settings-loading">Loading…</div>}
+
+        {view && (
+          <>
+            <section className="settings-section">
+              <div className="settings-section-head">
+                <span>Anthropic API key</span>
+                <StatusPill configured={view.anthropic.configured} />
+              </div>
+              <input
+                type="password"
+                className="settings-input"
+                placeholder={view.anthropic.configured ? view.anthropic.masked : 'sk-ant-…'}
+                value={anthropicInput}
+                onChange={e => setAnthropicInput(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {view.anthropic.configured && (
+                <button
+                  className="settings-link"
+                  onClick={() => clearProvider('anthropic')}
+                  disabled={saving}
+                >
+                  Clear
+                </button>
+              )}
+            </section>
+
+            <section className="settings-section">
+              <div className="settings-section-head">
+                <span>Gemini API key</span>
+                <StatusPill configured={view.gemini.configured} />
+              </div>
+              <input
+                type="password"
+                className="settings-input"
+                placeholder={view.gemini.configured ? view.gemini.masked : 'AIza…'}
+                value={geminiInput}
+                onChange={e => setGeminiInput(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {view.gemini.configured && (
+                <button
+                  className="settings-link"
+                  onClick={() => clearProvider('gemini')}
+                  disabled={saving}
+                >
+                  Clear
+                </button>
+              )}
+            </section>
+
+            <section className="settings-section">
+              <div className="settings-section-head">
+                <span>Bill sandbox environments</span>
+                <button className="settings-link" onClick={addEnvironment}>
+                  + Add
+                </button>
+              </div>
+              {drafts.length === 0 && (
+                <div className="settings-empty">No sandbox environments yet.</div>
+              )}
+              {drafts.map(d => (
+                <div key={d.id} className="env-card">
+                  <div className="env-card-head">
+                    <input
+                      className="settings-input env-name"
+                      placeholder="Name (e.g. sbx-primary)"
+                      value={d.name}
+                      onChange={e => updateDraft(d.id, { name: e.target.value })}
+                    />
+                    <button
+                      className="icon-btn"
+                      onClick={() => removeDraft(d.id)}
+                      aria-label="Remove environment"
+                    >
+                      <Icon.Trash />
+                    </button>
+                  </div>
+                  <label className="env-field">
+                    <span>Dev key</span>
+                    <input
+                      type="password"
+                      className="settings-input"
+                      placeholder={d.devKeyConfigured ? d.devKeyMasked : 'devKey'}
+                      value={d.devKeyInput}
+                      onChange={e => updateDraft(d.id, { devKeyInput: e.target.value })}
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                  </label>
+                  <label className="env-field">
+                    <span>Username</span>
+                    <input
+                      className="settings-input"
+                      placeholder="api-user@company.com"
+                      value={d.username}
+                      onChange={e => updateDraft(d.id, { username: e.target.value })}
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label className="env-field">
+                    <span>Password</span>
+                    <input
+                      type="password"
+                      className="settings-input"
+                      placeholder={d.passwordConfigured ? '•••• configured' : 'password'}
+                      value={d.passwordInput}
+                      onChange={e => updateDraft(d.id, { passwordInput: e.target.value })}
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                  </label>
+                  <label className="env-field">
+                    <span>Org ID</span>
+                    <input
+                      className="settings-input"
+                      placeholder="00901…"
+                      value={d.orgId}
+                      onChange={e => updateDraft(d.id, { orgId: e.target.value })}
+                      autoComplete="off"
+                    />
+                  </label>
+                </div>
+              ))}
+            </section>
+
+            {error && <div className="settings-error">{error}</div>}
+
+            <div className="settings-footer">
+              <button
+                className="settings-save"
+                onClick={saveAll}
+                disabled={saving}
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+              {savedAt && !saving && !error && (
+                <span className="settings-saved">Saved</span>
+              )}
+            </div>
+          </>
+        )}
+
+        {error && !view && <div className="settings-error">{error}</div>}
+      </div>
+    </div>
+  );
+}
+
+function StatusPill({ configured }: { configured: boolean }) {
+  return (
+    <span className={'status-pill' + (configured ? ' ok' : '')}>
+      {configured ? 'configured' : 'missing'}
+    </span>
+  );
+}

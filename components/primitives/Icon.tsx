@@ -11,4 +11,6 @@ export const Icon = {
   Rule:    () => (<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 2h6M2 5h6M2 8h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>),
   Flow:    () => (<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><rect x="1" y="3" width="3" height="4" stroke="currentColor" strokeWidth="1"/><rect x="6" y="3" width="3" height="4" stroke="currentColor" strokeWidth="1"/><path d="M4 5h2" stroke="currentColor" strokeWidth="1"/></svg>),
   Code:    () => (<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3.5 3L1.5 5L3.5 7M6.5 3L8.5 5L6.5 7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>),
+  Gear:    () => (<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="1.9" stroke="currentColor" strokeWidth="1.2"/><path d="M6 1.2v1.3M6 9.5v1.3M1.2 6h1.3M9.5 6h1.3M2.6 2.6l.9.9M8.5 8.5l.9.9M2.6 9.4l.9-.9M8.5 3.5l.9-.9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>),
+  Trash:   () => (<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 2.8h7M3.8 2.8V1.8h2.4v1M2.6 2.8l.4 6.2h4l.4-6.2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>),
 };
