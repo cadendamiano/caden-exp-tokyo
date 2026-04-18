@@ -12,6 +12,8 @@ export type BillEnvironment = {
   password: string;
   orgId: string;
   product: BillProductTag;
+  seClientId?: string;
+  seClientSecret?: string;
 };
 
 export type Secrets = {
@@ -28,6 +30,8 @@ export type BillEnvironmentMasked = {
   orgId: string;
   passwordConfigured: boolean;
   product: BillProductTag;
+  seClientId: string;
+  seClientSecretConfigured: boolean;
 };
 
 export type SecretsMasked = {
@@ -61,6 +65,8 @@ export async function readSecrets(): Promise<Secrets> {
         password: String(e.password ?? ''),
         orgId: String(e.orgId ?? ''),
         product: normalizeProduct((e as any).product),
+        seClientId: (e as any).seClientId ? String((e as any).seClientId) : undefined,
+        seClientSecret: (e as any).seClientSecret ? String((e as any).seClientSecret) : undefined,
       })),
     };
   } catch (err: any) {
@@ -118,6 +124,8 @@ export function toMaskedView(s: Secrets): SecretsMasked {
       orgId: e.orgId,
       passwordConfigured: Boolean(e.password),
       product: e.product,
+      seClientId: e.seClientId ?? '',
+      seClientSecretConfigured: Boolean(e.seClientSecret),
     })),
   };
 }

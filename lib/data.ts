@@ -21,6 +21,24 @@ export type Bill = {
 export type AgingBucket = { bucket: string; amount: number };
 export type CategorySpend = { cat: string; amount: number; pct: number };
 
+export type ExpenseStatus = 'approved' | 'pending' | 'rejected';
+export type Expense = {
+  id: string;
+  employee: string;
+  category: string;
+  amount: number;
+  date: string;
+  status: ExpenseStatus;
+};
+
+export type Employee = {
+  id: string;
+  name: string;
+  email: string;
+  department: string;
+  role: string;
+};
+
 export const VENDORS: Vendor[] = [
   { id: 'vnd_01', name: 'Acme Cloud Services', handle: 'acme-cloud', terms: 'Net 30', category: 'Software' },
   { id: 'vnd_02', name: 'Northwind Logistics', handle: 'northwind', terms: 'Net 15', category: 'Shipping' },
@@ -68,6 +86,25 @@ export const CATEGORY_SPEND: CategorySpend[] = [
   { cat: 'Marketing',    amount:  8890, pct:  8 },
   { cat: 'Shipping',     amount:  3214, pct:  3 },
   { cat: 'Other',        amount: 17000, pct: 15 },
+];
+
+export const EMPLOYEES: Employee[] = [
+  { id: 'emp_01', name: 'Avery Chen',      email: 'avery@company.com',   department: 'Engineering', role: 'Staff engineer' },
+  { id: 'emp_02', name: 'Jordan Patel',    email: 'jordan@company.com',  department: 'Marketing',   role: 'Growth lead' },
+  { id: 'emp_03', name: 'Sam Okafor',      email: 'sam@company.com',     department: 'Sales',       role: 'AE' },
+  { id: 'emp_04', name: 'Riley Nakamura',  email: 'riley@company.com',   department: 'Design',      role: 'Design manager' },
+  { id: 'emp_05', name: 'Morgan Hughes',   email: 'morgan@company.com',  department: 'Finance',     role: 'Controller' },
+];
+
+export const EXPENSES: Expense[] = [
+  { id: 'exp_1001', employee: 'emp_01', category: 'Software',    amount:  128.00, date: '2026-04-02', status: 'approved' },
+  { id: 'exp_1002', employee: 'emp_01', category: 'Travel',      amount:  642.55, date: '2026-04-08', status: 'approved' },
+  { id: 'exp_1003', employee: 'emp_02', category: 'Ads',         amount: 2400.00, date: '2026-04-09', status: 'pending'  },
+  { id: 'exp_1004', employee: 'emp_03', category: 'Meals',       amount:   88.40, date: '2026-04-11', status: 'approved' },
+  { id: 'exp_1005', employee: 'emp_03', category: 'Travel',      amount: 1125.00, date: '2026-04-13', status: 'pending'  },
+  { id: 'exp_1006', employee: 'emp_04', category: 'Software',    amount:   59.00, date: '2026-04-15', status: 'approved' },
+  { id: 'exp_1007', employee: 'emp_05', category: 'Conferences', amount: 1899.00, date: '2026-04-16', status: 'rejected' },
+  { id: 'exp_1008', employee: 'emp_02', category: 'Meals',       amount:  142.10, date: '2026-04-17', status: 'approved' },
 ];
 
 export const SESSIONS = [

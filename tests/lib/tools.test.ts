@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TOOLS, runTool } from '@/lib/tools';
-import { BILLS, VENDORS, AGING, CATEGORY_SPEND } from '@/lib/data';
+import { BILLS, VENDORS, AGING, CATEGORY_SPEND, EXPENSES, EMPLOYEES } from '@/lib/data';
 import { __clearBillSessionCacheForTests } from '@/lib/bill/auth';
+import { __clearSeTokenCacheForTests } from '@/lib/bill/se';
 
 vi.mock('@/lib/secrets', async () => {
   const actual = await vi.importActual<typeof import('@/lib/secrets')>('@/lib/secrets');
@@ -28,6 +29,8 @@ vi.mock('@/lib/secrets', async () => {
           password: 'p',
           orgId: '001',
           product: 'se' as const,
+          seClientId: 'se_client',
+          seClientSecret: 'se_secret',
         };
       }
       return undefined;
@@ -36,8 +39,8 @@ vi.mock('@/lib/secrets', async () => {
 });
 
 describe('TOOLS definitions', () => {
-  it('exports exactly 6 tools', () => {
-    expect(TOOLS).toHaveLength(6);
+  it('exports exactly 8 tools', () => {
+    expect(TOOLS).toHaveLength(8);
   });
 
   it('every tool has a name, description, and parameters', () => {
@@ -58,6 +61,8 @@ describe('TOOLS definitions', () => {
     expect(names).toContain('get_aging_summary');
     expect(names).toContain('get_category_spend');
     expect(names).toContain('find_duplicate_invoices');
+    expect(names).toContain('list_expenses');
+    expect(names).toContain('get_employee');
     expect(names).toContain('render_artifact');
   });
 
@@ -340,15 +345,87 @@ describe('runTool — testing mode (real Bill adapter, mocked fetch)', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('S&E env surfaces "not yet wired" without calling fetch', async () => {
-    const fetchSpy = vi.spyOn(global, 'fetch');
+  it('list_expenses (S&E) obtains an OAuth token then calls /expenses', async () => {
+    __clearSeTokenCacheForTests();
+    const tokenRes = { access_token: 'tok_se_1', token_type: 'Bearer', expires_in: 1800 };
+    const expensesRes = {
+      results: [
+        { id: 'e1', amount: 50, employeeId: 'emp_01', status: 'approved' },
+        { id: 'e2', amount: 125, employeeId: 'emp_02', status: 'pending' },
+      ],
+    };
+    const fetchSpy = mockSequence(tokenRes, expensesRes);
+
     const result = await runTool(
-      'list_bills',
+      'list_expenses',
       {},
       { mode: 'testing', billEnvId: 'env_se', billProduct: 'se' }
     );
+
+    expect(result.ok).toBe(true);
+    expect((result.data as any[]).length).toBe(2);
+    expect(result.summary).toMatch(/2 expenses/);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    const [tokenUrl, tokenInit] = fetchSpy.mock.calls[0];
+    expect(String(tokenUrl)).toMatch(/\/oauth\/token$/);
+    const tokenBody = new URLSearchParams(String((tokenInit as RequestInit).body));
+    expect(tokenBody.get('grant_type')).toBe('client_credentials');
+    expect(tokenBody.get('client_id')).toBe('se_client');
+
+    const [expUrl, expInit] = fetchSpy.mock.calls[1];
+    expect(String(expUrl)).toMatch(/\/expenses\?/);
+    const authHeader = new Headers((expInit as RequestInit).headers).get('authorization');
+    expect(authHeader).toBe('Bearer tok_se_1');
+  });
+
+  it('get_employee (S&E) reuses cached token for subsequent calls', async () => {
+    __clearSeTokenCacheForTests();
+    const tokenRes = { access_token: 'tok_se_2', token_type: 'Bearer', expires_in: 1800 };
+    const employeeRes = { id: 'emp_01', name: 'Avery Chen', email: 'avery@company.com' };
+    const fetchSpy = mockSequence(tokenRes, employeeRes);
+
+    const result = await runTool(
+      'get_employee',
+      { id: 'emp_01' },
+      { mode: 'testing', billEnvId: 'env_se', billProduct: 'se' }
+    );
+
+    expect(result.ok).toBe(true);
+    expect((result.data as any).id).toBe('emp_01');
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(String(fetchSpy.mock.calls[1][0])).toMatch(/\/employees\/emp_01$/);
+  });
+});
+
+describe('runTool — mock S&E (list_expenses, get_employee)', () => {
+  it('list_expenses returns all mock expenses', async () => {
+    const result = await runTool('list_expenses', {});
+    expect(result.ok).toBe(true);
+    expect((result.data as any[]).length).toBe(EXPENSES.length);
+  });
+
+  it('list_expenses filters by employeeId', async () => {
+    const result = await runTool('list_expenses', { employeeId: 'emp_01' });
+    const rows = result.data as any[];
+    expect(rows.length).toBeGreaterThan(0);
+    for (const r of rows) expect(r.employee).toBe('emp_01');
+  });
+
+  it('list_expenses filters by status', async () => {
+    const result = await runTool('list_expenses', { status: 'pending' });
+    const rows = result.data as any[];
+    for (const r of rows) expect(r.status).toBe('pending');
+  });
+
+  it('get_employee returns a known employee', async () => {
+    const result = await runTool('get_employee', { id: EMPLOYEES[0].id });
+    expect(result.ok).toBe(true);
+    expect((result.data as any).id).toBe(EMPLOYEES[0].id);
+  });
+
+  it('get_employee returns ok=false when id is missing', async () => {
+    const result = await runTool('get_employee', {});
     expect(result.ok).toBe(false);
-    expect(result.summary).toMatch(/S&E not yet wired/);
-    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

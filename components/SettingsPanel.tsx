@@ -15,6 +15,8 @@ type BillEnvView = {
   orgId: string;
   passwordConfigured: boolean;
   product: BillProductTag;
+  seClientId: string;
+  seClientSecretConfigured: boolean;
 };
 
 type SettingsView = {
@@ -34,6 +36,10 @@ type BillDraft = {
   devKeyConfigured: boolean;
   passwordConfigured: boolean;
   product: BillProductTag;
+  seClientIdInput: string;
+  seClientSecretInput: string;
+  seClientIdCurrent: string;
+  seClientSecretConfigured: boolean;
   isNew: boolean;
 };
 
@@ -48,6 +54,10 @@ const EMPTY_DRAFT = (id: string): BillDraft => ({
   devKeyConfigured: false,
   passwordConfigured: false,
   product: 'ap',
+  seClientIdInput: '',
+  seClientSecretInput: '',
+  seClientIdCurrent: '',
+  seClientSecretConfigured: false,
   isNew: true,
 });
 
@@ -63,6 +73,10 @@ function toDraft(env: BillEnvView): BillDraft {
     devKeyConfigured: Boolean(env.devKey),
     passwordConfigured: env.passwordConfigured,
     product: env.product ?? 'ap',
+    seClientIdInput: '',
+    seClientSecretInput: '',
+    seClientIdCurrent: env.seClientId ?? '',
+    seClientSecretConfigured: Boolean(env.seClientSecretConfigured),
     isNew: false,
   };
 }
@@ -127,6 +141,10 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         if (!d.isNew) entry.id = d.id;
         if (d.devKeyInput.length > 0) entry.devKey = d.devKeyInput;
         if (d.passwordInput.length > 0) entry.password = d.passwordInput;
+        if (d.product === 'se' || d.product === 'both') {
+          if (d.seClientIdInput.length > 0) entry.seClientId = d.seClientIdInput;
+          if (d.seClientSecretInput.length > 0) entry.seClientSecret = d.seClientSecretInput;
+        }
         return entry;
       });
 
@@ -351,6 +369,33 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                       autoComplete="off"
                     />
                   </label>
+                  {(d.product === 'se' || d.product === 'both') && (
+                    <>
+                      <label className="env-field">
+                        <span>S&amp;E client id</span>
+                        <input
+                          className="settings-input"
+                          placeholder={d.seClientIdCurrent || 'client id'}
+                          value={d.seClientIdInput}
+                          onChange={e => updateDraft(d.id, { seClientIdInput: e.target.value })}
+                          autoComplete="off"
+                          spellCheck={false}
+                        />
+                      </label>
+                      <label className="env-field">
+                        <span>S&amp;E client secret</span>
+                        <input
+                          type="password"
+                          className="settings-input"
+                          placeholder={d.seClientSecretConfigured ? '•••• configured' : 'client secret'}
+                          value={d.seClientSecretInput}
+                          onChange={e => updateDraft(d.id, { seClientSecretInput: e.target.value })}
+                          autoComplete="off"
+                          spellCheck={false}
+                        />
+                      </label>
+                    </>
+                  )}
                 </div>
               ))}
             </section>

@@ -19,6 +19,8 @@ type IncomingBillEnv = {
   password?: string;
   orgId?: string;
   product?: 'ap' | 'se' | 'both';
+  seClientId?: string;
+  seClientSecret?: string;
 };
 
 type IncomingPatch = {
@@ -65,6 +67,14 @@ export async function POST(req: NextRequest) {
         incomingProduct === 'se' || incomingProduct === 'both' || incomingProduct === 'ap'
           ? incomingProduct
           : (prev?.product ?? 'ap');
+      const seClientId =
+        incoming.seClientId !== undefined
+          ? (String(incoming.seClientId) || undefined)
+          : prev?.seClientId;
+      const seClientSecret =
+        incoming.seClientSecret !== undefined
+          ? (String(incoming.seClientSecret) || undefined)
+          : prev?.seClientSecret;
       merged.push({
         id,
         name: String(incoming.name ?? prev?.name ?? '').trim() || 'Sandbox',
@@ -73,6 +83,8 @@ export async function POST(req: NextRequest) {
         password: incoming.password !== undefined ? String(incoming.password) : (prev?.password ?? ''),
         orgId: incoming.orgId !== undefined ? String(incoming.orgId) : (prev?.orgId ?? ''),
         product,
+        seClientId,
+        seClientSecret,
       });
     }
     next.billEnvironments = merged;
