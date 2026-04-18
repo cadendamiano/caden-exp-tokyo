@@ -39,9 +39,9 @@ vi.mock('@/lib/secrets', async () => {
 });
 
 describe('TOOLS definitions', () => {
-  it('exports 15 tools total (14 model + 1 internal)', () => {
-    expect(TOOLS).toHaveLength(15);
-    expect(MODEL_TOOLS).toHaveLength(14);
+  it('exports 71 tools total (70 model + 1 internal)', () => {
+    expect(TOOLS).toHaveLength(71);
+    expect(MODEL_TOOLS).toHaveLength(70);
     expect(INTERNAL_TOOLS).toHaveLength(1);
   });
 

@@ -501,7 +501,7 @@ export async function runLLM(userText: string, opts?: ForcedArtifact) {
     }
   } catch (e: any) {
     useStore.getState().updateTurnInActiveWorkspaceThread(agentId, {
-      text: `_Couldn't reach the model. ${e?.message ?? 'unknown error'}. Set ANTHROPIC_API_KEY / GEMINI_API_KEY in .env.local and restart._`,
+      text: `_Couldn't reach the model: ${e?.message ?? 'unknown error'}. Check your API key in Settings._`,
       streaming: false,
     });
   } finally {

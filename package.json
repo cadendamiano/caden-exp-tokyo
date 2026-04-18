@@ -24,8 +24,8 @@
     "electron:dist:zip": "npm run electron:build && electron-builder --mac --config.mac.target=zip"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
-    "@google/genai": "^0.7.0",
+    "@anthropic-ai/sdk": "^0.90.0",
+    "@google/genai": "^1.50.1",
     "@univerjs/core": "^0.21.1",
     "@univerjs/design": "^0.21.1",
     "@univerjs/engine-formula": "^0.21.1",
