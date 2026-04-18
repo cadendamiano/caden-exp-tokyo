@@ -9,6 +9,7 @@ const CLEAN_STATE = {
     streamSpeed: 'normal' as const,
     showConnectors: true,
     provider: 'anthropic' as const,
+    showCodeView: false,
   },
   turns: [] as Turn[],
   artifacts: [],
@@ -43,6 +44,21 @@ describe('setTweak', () => {
   it('can switch density to compact', () => {
     useStore.getState().setTweak('density', 'compact');
     expect(useStore.getState().tweaks.density).toBe('compact');
+  });
+
+  it('can enable showCodeView', () => {
+    useStore.getState().setTweak('showCodeView', true);
+    expect(useStore.getState().tweaks.showCodeView).toBe(true);
+  });
+
+  it('can disable showCodeView after enabling', () => {
+    useStore.getState().setTweak('showCodeView', true);
+    useStore.getState().setTweak('showCodeView', false);
+    expect(useStore.getState().tweaks.showCodeView).toBe(false);
+  });
+
+  it('showCodeView defaults to false', () => {
+    expect(useStore.getState().tweaks.showCodeView).toBe(false);
   });
 });
 
@@ -289,6 +305,103 @@ describe('mode', () => {
     expect(s.streaming).toBe(false);
     expect(s.composer).toBe('');
     expect(s.activeArtifact).toBeNull();
+  });
+});
+
+const DRAFT_ARTIFACT = {
+  id: 'art_1',
+  kind: 'rule-net15' as const,
+  label: 'Net-15 rule',
+  status: 'draft' as const,
+  version: 1,
+  createdBy: 'Coworker',
+};
+
+describe('activateArtifact', () => {
+  it('changes artifact status to active in demo mode', () => {
+    useStore.getState().setArtifacts(() => [DRAFT_ARTIFACT]);
+    useStore.getState().activateArtifact('art_1');
+    const art = useStore.getState().artifacts.find(a => a.id === 'art_1')!;
+    expect(art.status).toBe('active');
+  });
+
+  it('increments version on activation', () => {
+    useStore.getState().setArtifacts(() => [DRAFT_ARTIFACT]);
+    useStore.getState().activateArtifact('art_1');
+    const art = useStore.getState().artifacts.find(a => a.id === 'art_1')!;
+    expect(art.version).toBe(2);
+  });
+
+  it('does not affect other artifacts', () => {
+    const other = { ...DRAFT_ARTIFACT, id: 'art_2', label: 'Other' };
+    useStore.getState().setArtifacts(() => [DRAFT_ARTIFACT, other]);
+    useStore.getState().activateArtifact('art_1');
+    const otherArt = useStore.getState().artifacts.find(a => a.id === 'art_2')!;
+    expect(otherArt.status).toBe('draft');
+    expect(otherArt.version).toBe(1);
+  });
+
+  it('activates artifact in the active testing thread', () => {
+    useStore.getState().setMode('testing');
+    const id = useStore.getState().newThread('A');
+    useStore.getState().setArtifactsInActiveThread(() => [DRAFT_ARTIFACT]);
+    useStore.getState().activateArtifact('art_1');
+    const thread = useStore.getState().testingThreads.find(t => t.id === id)!;
+    expect(thread.artifacts[0].status).toBe('active');
+    expect(thread.artifacts[0].version).toBe(2);
+  });
+
+  it('does not touch demo artifacts when in testing mode', () => {
+    useStore.getState().setArtifacts(() => [DRAFT_ARTIFACT]);
+    useStore.getState().setMode('testing');
+    useStore.getState().newThread('A');
+    useStore.getState().setArtifactsInActiveThread(() => [{ ...DRAFT_ARTIFACT, id: 'art_thread' }]);
+    useStore.getState().activateArtifact('art_1');  // 'art_1' only in demo artifacts
+    // demo artifact should be untouched
+    const demoArt = useStore.getState().artifacts.find(a => a.id === 'art_1')!;
+    expect(demoArt.status).toBe('draft');
+  });
+});
+
+describe('acknowledgeArtifactDryRun', () => {
+  it('sets dryRunAcknowledged to true in demo mode', () => {
+    useStore.getState().setArtifacts(() => [DRAFT_ARTIFACT]);
+    useStore.getState().acknowledgeArtifactDryRun('art_1');
+    const art = useStore.getState().artifacts.find(a => a.id === 'art_1')!;
+    expect(art.dryRunAcknowledged).toBe(true);
+  });
+
+  it('does not change status or version', () => {
+    useStore.getState().setArtifacts(() => [DRAFT_ARTIFACT]);
+    useStore.getState().acknowledgeArtifactDryRun('art_1');
+    const art = useStore.getState().artifacts.find(a => a.id === 'art_1')!;
+    expect(art.status).toBe('draft');
+    expect(art.version).toBe(1);
+  });
+
+  it('does not affect other artifacts', () => {
+    const other = { ...DRAFT_ARTIFACT, id: 'art_2', label: 'Other' };
+    useStore.getState().setArtifacts(() => [DRAFT_ARTIFACT, other]);
+    useStore.getState().acknowledgeArtifactDryRun('art_1');
+    const otherArt = useStore.getState().artifacts.find(a => a.id === 'art_2')!;
+    expect(otherArt.dryRunAcknowledged).toBeFalsy();
+  });
+
+  it('sets dryRunAcknowledged in the active testing thread', () => {
+    useStore.getState().setMode('testing');
+    const id = useStore.getState().newThread('A');
+    useStore.getState().setArtifactsInActiveThread(() => [DRAFT_ARTIFACT]);
+    useStore.getState().acknowledgeArtifactDryRun('art_1');
+    const thread = useStore.getState().testingThreads.find(t => t.id === id)!;
+    expect(thread.artifacts[0].dryRunAcknowledged).toBe(true);
+  });
+
+  it('is idempotent — calling twice stays true', () => {
+    useStore.getState().setArtifacts(() => [DRAFT_ARTIFACT]);
+    useStore.getState().acknowledgeArtifactDryRun('art_1');
+    useStore.getState().acknowledgeArtifactDryRun('art_1');
+    const art = useStore.getState().artifacts.find(a => a.id === 'art_1')!;
+    expect(art.dryRunAcknowledged).toBe(true);
   });
 });
 

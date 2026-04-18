@@ -116,10 +116,68 @@ describe('FLOWS', () => {
     expect(payload.items.length).toBeGreaterThan(0);
   });
 
+  it('pay_batch approval has stake of "payment"', () => {
+    const step = FLOWS.pay_batch.steps.find(s => s.kind === 'approval')!;
+    expect((step as any).payload.stake).toBe('payment');
+  });
+
   it('flows with artifacts declare an artifact object', () => {
     expect(FLOWS.ap_overdue.artifact).toBeDefined();
     expect(FLOWS.chart_spend.artifact).toBeDefined();
     expect(FLOWS.automate_net15.artifact).toBeDefined();
     expect(FLOWS.crm_sync.artifact).toBeDefined();
+  });
+});
+
+describe('pay_large flow', () => {
+  it('exists in FLOWS', () => {
+    expect(FLOWS.pay_large).toBeDefined();
+  });
+
+  it('has an approval step', () => {
+    const step = FLOWS.pay_large.steps.find(s => s.kind === 'approval');
+    expect(step).toBeDefined();
+  });
+
+  it('approval has stake of "large-payment"', () => {
+    const step = FLOWS.pay_large.steps.find(s => s.kind === 'approval')!;
+    expect((step as any).payload.stake).toBe('large-payment');
+  });
+
+  it('approval has requiresSecondApprover: true', () => {
+    const step = FLOWS.pay_large.steps.find(s => s.kind === 'approval')!;
+    expect((step as any).payload.requiresSecondApprover).toBe(true);
+  });
+
+  it('total exceeds 25000', () => {
+    const step = FLOWS.pay_large.steps.find(s => s.kind === 'approval')!;
+    expect((step as any).payload.total).toBeGreaterThan(25000);
+  });
+
+  it('has at least 2 line items', () => {
+    const step = FLOWS.pay_large.steps.find(s => s.kind === 'approval')!;
+    expect((step as any).payload.items.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('matchFlow — pay_large', () => {
+  it('matches pay_large when prompt mentions Crestline', () => {
+    expect(matchFlow('Pay the Crestline Legal invoice')).toBe('pay_large');
+  });
+
+  it('matches pay_large when prompt mentions Fulton', () => {
+    expect(matchFlow('Pay the Fulton & Hart consulting invoice')).toBe('pay_large');
+  });
+
+  it('matches pay_large when prompt mentions professional services', () => {
+    expect(matchFlow('Pay Q1 professional services invoices')).toBe('pay_large');
+  });
+
+  it('still matches pay_batch for ACH overdue (no large-payment keywords)', () => {
+    expect(matchFlow('Pay the 3 overdue invoices via ACH')).toBe('pay_batch');
+  });
+
+  it('still matches pay_batch when prompt contains ACH and 3', () => {
+    expect(matchFlow('Send 3 ACH payments')).toBe('pay_batch');
   });
 });

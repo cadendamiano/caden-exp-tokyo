@@ -145,11 +145,63 @@ describe('runFlow', () => {
     expect((approvalTurn as any).payload.batchId).toBe('btch_0041');
   });
 
+  it('pay_batch approval turn has stake "payment"', () => {
+    runFlow('pay_batch');
+    vi.runAllTimers();
+    const approvalTurn = useStore.getState().turns.find(t => t.kind === 'approval')!;
+    expect((approvalTurn as any).payload.stake).toBe('payment');
+  });
+
+  it('pay_large adds an approval turn with stake "large-payment"', () => {
+    runFlow('pay_large');
+    vi.runAllTimers();
+    const approvalTurn = useStore.getState().turns.find(t => t.kind === 'approval')!;
+    expect(approvalTurn).toBeDefined();
+    expect((approvalTurn as any).payload.stake).toBe('large-payment');
+    expect((approvalTurn as any).payload.requiresSecondApprover).toBe(true);
+  });
+
+  it('pay_large total exceeds 25000', () => {
+    runFlow('pay_large');
+    vi.runAllTimers();
+    const approvalTurn = useStore.getState().turns.find(t => t.kind === 'approval')!;
+    expect((approvalTurn as any).payload.total).toBeGreaterThan(25000);
+  });
+
   it('adds an artifact to the store when a flow declares one', () => {
     runFlow('chart_spend');
     vi.runAllTimers();
     const { artifacts } = useStore.getState();
     expect(artifacts.some(a => a.id === 'art_spend_chart')).toBe(true);
+  });
+
+  it('artifact created by a flow has status "draft"', () => {
+    runFlow('chart_spend');
+    vi.runAllTimers();
+    const art = useStore.getState().artifacts.find(a => a.id === 'art_spend_chart')!;
+    expect(art.status).toBe('draft');
+  });
+
+  it('artifact created by a flow has version 1', () => {
+    runFlow('chart_spend');
+    vi.runAllTimers();
+    const art = useStore.getState().artifacts.find(a => a.id === 'art_spend_chart')!;
+    expect(art.version).toBe(1);
+  });
+
+  it('artifact created by a flow has createdBy "Coworker"', () => {
+    runFlow('chart_spend');
+    vi.runAllTimers();
+    const art = useStore.getState().artifacts.find(a => a.id === 'art_spend_chart')!;
+    expect(art.createdBy).toBe('Coworker');
+  });
+
+  it('artifact created by automate_net15 starts as draft and has no dryRunAcknowledged', () => {
+    runFlow('automate_net15');
+    vi.runAllTimers();
+    const art = useStore.getState().artifacts.find(a => a.id === 'art_rule_net15')!;
+    expect(art.status).toBe('draft');
+    expect(art.dryRunAcknowledged).toBeFalsy();
   });
 
   it('removes building turns once the artifact-card step fires', () => {
