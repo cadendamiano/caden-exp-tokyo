@@ -28,11 +28,13 @@ export type FlowStep =
       delay?: number;
       payload: {
         batchId: string;
+        stake: 'query' | 'automation' | 'payment' | 'large-payment';
         from: string;
         method: string;
         scheduledFor: string;
         items: { vendor: string; invoice: string; amount: number }[];
         total: number;
+        requiresSecondApprover?: boolean;
       };
     }
   | { kind: 'suggest'; delay?: number; items: string[] };
@@ -91,6 +93,7 @@ Want me to queue the overdue three for ACH payment from Ops Checking?` },
       { kind: 'agent-stream', delay: 400, text: 'Draft batch ready. Review and approve:' },
       { kind: 'approval', payload: {
         batchId: 'btch_0041',
+        stake: 'payment',
         from: 'Ops Checking ••4821',
         method: 'ACH',
         scheduledFor: 'Today, 4:00 PM PT',
@@ -191,6 +194,34 @@ Want a YoY comparison, or a CFO one-pager?` },
     artifact: { id: 'art_crm_flow', kind: 'crm-flow', label: 'Flow · Payment → HubSpot' },
   },
 
+  pay_large: {
+    id: 'pay_large',
+    title: 'Pay large vendor batch',
+    steps: [
+      { kind: 'user', text: 'Pay the Q1 professional services invoices from Crestline Legal and Fulton & Hart.' },
+      { kind: 'agent-stream', delay: 220, text:
+`I'll prepare a batch ACH payment for these two invoices totaling **$40,500**. Because this batch exceeds $25,000, it requires a second approver before submission. I'll need your review first, then route to your Controller.` },
+      { kind: 'tools', delay: 700, rows: [
+        { verb: 'GET',  path: '/v3/api/list/BankAccount', filter: "nickname='Ops Checking'", status: '200', result: '1 record' },
+        { verb: 'POST', path: '/v3/api/PayBill/prepare',  filter: 'billIds=[4185,4186]', status: '200', result: 'batch staged · pending 2nd approval' },
+      ] },
+      { kind: 'agent-stream', delay: 400, text: 'Draft batch ready — requires Controller sign-off before execution:' },
+      { kind: 'approval', payload: {
+        batchId: 'btch_0042',
+        stake: 'large-payment',
+        requiresSecondApprover: true,
+        from: 'Ops Checking ••4821',
+        method: 'ACH',
+        scheduledFor: 'Pending second approval',
+        items: [
+          { vendor: 'Crestline Legal LLP',       invoice: 'CL-22-0318', amount: 28500.00 },
+          { vendor: 'Fulton & Hart Consulting',  invoice: 'FH-Q2-014',  amount: 12000.00 },
+        ],
+        total: 40500.00,
+      } },
+    ],
+  },
+
   dupe_sweep: {
     id: 'dupe_sweep',
     title: 'Duplicate invoice sweep',
@@ -213,6 +244,7 @@ Open the artifact to review each pair side-by-side. I won't void anything withou
 
 export function matchFlow(text: string): string | null {
   const low = text.toLowerCase();
+  if (low.includes('pay') && (low.includes('crestline') || low.includes('fulton') || low.includes('professional') || low.includes('large') || low.includes('q1'))) return 'pay_large';
   if (low.includes('pay') && (low.includes('3') || low.includes('ach') || low.includes('overdue'))) return 'pay_batch';
   if (low.includes('overdue') || (low.includes('show') && low.includes('ap'))) return 'ap_overdue';
   if (low.includes('net 15') || low.includes('automation') || low.includes('rule')) return 'automate_net15';

@@ -1,4 +1,13 @@
-export function Net15RuleArtifact() {
+import { useStore } from '@/lib/store';
+import type { Artifact } from '@/lib/store';
+
+type Props = { artifact: Artifact };
+
+export function Net15RuleArtifact({ artifact }: Props) {
+  const activateArtifact = useStore(s => s.activateArtifact);
+  const isActive = artifact.status === 'active';
+  const canActivate = Boolean(artifact.dryRunAcknowledged);
+
   return (
     <div>
       <div className="artifact-title">
@@ -74,9 +83,32 @@ export function Net15RuleArtifact() {
         </div>
 
         <div className="rule-actions">
-          <button className="btn btn-primary">Turn on rule</button>
-          <button className="btn btn-ghost">Run dry-run (30d)</button>
-          <button className="btn btn-ghost">Edit as code</button>
+          {isActive ? (
+            <span className="status-pill active" style={{ fontSize: 12 }}>
+              <span className="dot" style={{ background: 'var(--pos)' }} />Rule active
+            </span>
+          ) : (
+            <>
+              <div
+                title={canActivate ? undefined : 'View Preview first to activate'}
+                style={{ display: 'inline-block' }}
+              >
+                <button
+                  className="btn btn-primary"
+                  disabled={!canActivate}
+                  style={!canActivate ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+                  onClick={() => canActivate && activateArtifact(artifact.id)}
+                >
+                  Activate rule
+                </button>
+              </div>
+              {!canActivate && (
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-4)', marginLeft: 8 }}>
+                  View Preview first
+                </span>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -93,4 +93,5 @@ export const DEMO_PROMPTS = [
   { label: '/chart vendor-spend',   prompt: 'Visualize Q1 spend by vendor category.' },
   { label: '/crm sync paid→deal',   prompt: 'When a payment clears in BILL, update the matching HubSpot deal to "Paid" and sync the amount.' },
   { label: '/dupe sweep',           prompt: 'Scan the last 60 days of AP for likely duplicate invoices and list them.' },
+  { label: '/pay large · 2nd approver', prompt: 'Pay the Q1 professional services invoices from Crestline Legal and Fulton & Hart.' },
 ];

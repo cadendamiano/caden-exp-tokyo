@@ -70,6 +70,8 @@ function toDraft(env: BillEnvView): BillDraft {
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const mode = useStore(s => s.mode);
   const setMode = useStore(s => s.setMode);
+  const showCodeView = useStore(s => s.tweaks.showCodeView);
+  const setTweak = useStore(s => s.setTweak);
   const newThread = useStore(s => s.newThread);
   const testingThreads = useStore(s => s.testingThreads);
 
@@ -192,6 +194,26 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <div className="tweaks-body settings-body">
+        <section className="settings-section">
+          <div className="settings-section-head">
+            <span>Code view</span>
+            <span className={'status-pill' + (showCodeView ? ' ok' : '')}>
+              {showCodeView ? 'enabled' : 'off'}
+            </span>
+          </div>
+          <label className="tweak-toggle" style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
+            <input
+              type="checkbox"
+              checked={showCodeView}
+              onChange={e => setTweak('showCodeView', e.target.checked)}
+            />
+            Show Code tab in artifact view (role-gated)
+          </label>
+          <div className="settings-help">
+            When enabled, a Code tab appears on artifacts showing a read-only parameterized representation of the logic.
+          </div>
+        </section>
+
         <section className="settings-section mode-section">
           <div className="settings-section-head">
             <span>App mode</span>

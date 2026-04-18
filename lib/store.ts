@@ -15,13 +15,22 @@ export type Tweaks = {
   streamSpeed: 'fast' | 'normal' | 'slow';
   showConnectors: boolean;
   provider: Provider;
+  showCodeView: boolean;
 };
+
+export type ArtifactStatus = 'draft' | 'active' | 'paused';
 
 export type Artifact = {
   id: string;
   kind: ArtifactKind;
   label: string;
   filter?: string;
+  status: ArtifactStatus;
+  version: number;
+  createdBy: string;
+  editedBy?: string;
+  editedAt?: number;
+  dryRunAcknowledged?: boolean;
 };
 
 export type Thread = {
@@ -73,6 +82,8 @@ type State = {
   setArtifactsInActiveThread: (fn: (prev: Artifact[]) => Artifact[]) => void;
   setApprovalInActiveThread: (batchId: string, state: 'approved' | 'rejected') => void;
   setThreadBillEnv: (id: string, envId: string | undefined, product: BillProduct) => void;
+  activateArtifact: (id: string) => void;
+  acknowledgeArtifactDryRun: (id: string) => void;
 };
 
 const WELCOME_TURN: Turn = {
@@ -92,6 +103,7 @@ const DEFAULT_TWEAKS: Tweaks = {
   streamSpeed: 'normal',
   showConnectors: true,
   provider: 'anthropic',
+  showCodeView: false,
 };
 
 function createThread(title?: string): Thread {
@@ -234,6 +246,38 @@ export const useStore = create<State>()(
             t.id === id ? { ...t, billEnvId: envId, billProduct: product } : t
           ),
         })),
+
+      activateArtifact: (id) =>
+        set(s => {
+          const patch = (a: Artifact) =>
+            a.id === id ? { ...a, status: 'active' as ArtifactStatus, version: (a.version || 1) + 1 } : a;
+          if (s.mode === 'testing' && s.activeTestingThreadId) {
+            return {
+              testingThreads: s.testingThreads.map(th =>
+                th.id === s.activeTestingThreadId
+                  ? { ...th, artifacts: th.artifacts.map(patch) }
+                  : th
+              ),
+            };
+          }
+          return { artifacts: s.artifacts.map(patch) };
+        }),
+
+      acknowledgeArtifactDryRun: (id) =>
+        set(s => {
+          const patch = (a: Artifact) =>
+            a.id === id ? { ...a, dryRunAcknowledged: true } : a;
+          if (s.mode === 'testing' && s.activeTestingThreadId) {
+            return {
+              testingThreads: s.testingThreads.map(th =>
+                th.id === s.activeTestingThreadId
+                  ? { ...th, artifacts: th.artifacts.map(patch) }
+                  : th
+              ),
+            };
+          }
+          return { artifacts: s.artifacts.map(patch) };
+        }),
     }),
     {
       name: 'bcw:state',
