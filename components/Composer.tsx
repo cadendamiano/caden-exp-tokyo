@@ -3,13 +3,14 @@
 import { useRef, useEffect } from 'react';
 import { DEMO_PROMPTS } from '@/lib/data';
 import { useStore } from '@/lib/store';
-import { runFlow, runLLM } from '@/lib/runtime';
+import { runFlow, runLLM, runLLMTesting } from '@/lib/runtime';
 import { matchFlow } from '@/lib/flows';
 
 export function Composer() {
   const composer = useStore(s => s.composer);
   const setComposer = useStore(s => s.setComposer);
   const streaming = useStore(s => s.streaming);
+  const mode = useStore(s => s.mode);
   const ref = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -19,8 +20,12 @@ export function Composer() {
   const onSubmit = () => {
     const v = composer.trim();
     if (!v || streaming) return;
-    const matched = matchFlow(v);
     setComposer('');
+    if (mode === 'testing') {
+      runLLMTesting(v);
+      return;
+    }
+    const matched = matchFlow(v);
     if (matched) {
       runFlow(matched);
     } else {
@@ -35,6 +40,11 @@ export function Composer() {
     }
   };
 
+  const placeholder =
+    mode === 'testing'
+      ? 'Ask something — calls the real Bill sandbox configured for this thread'
+      : `Ask the coworker something — e.g. "show me all overdue AP" or "/" for commands`;
+
   return (
     <div className="composer">
       <div className="composer-shell">
@@ -43,21 +53,27 @@ export function Composer() {
           value={composer}
           onChange={(e) => setComposer(e.target.value)}
           onKeyDown={onKey}
-          placeholder={`Ask the coworker something — e.g. "show me all overdue AP" or "/" for commands`}
+          placeholder={placeholder}
           rows={1}
           disabled={streaming}
           style={{ opacity: streaming ? 0.55 : 1 }}
         />
         <div className="composer-actions">
-          {DEMO_PROMPTS.slice(0, 4).map(p => (
-            <button
-              key={p.label}
-              className="composer-chip"
-              onClick={() => setComposer(p.prompt)}
-            >
-              {p.label}
-            </button>
-          ))}
+          {mode === 'demo' ? (
+            DEMO_PROMPTS.slice(0, 4).map(p => (
+              <button
+                key={p.label}
+                className="composer-chip"
+                onClick={() => setComposer(p.prompt)}
+              >
+                {p.label}
+              </button>
+            ))
+          ) : (
+            <span className="composer-testing-note">
+              real sandbox · uses configured Bill env
+            </span>
+          )}
           <div className="composer-spacer" />
           <ProviderIndicator />
           <button className="send-btn" onClick={onSubmit} disabled={streaming}>

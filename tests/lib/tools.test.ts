@@ -1,6 +1,39 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TOOLS, runTool } from '@/lib/tools';
 import { BILLS, VENDORS, AGING, CATEGORY_SPEND } from '@/lib/data';
+import { __clearBillSessionCacheForTests } from '@/lib/bill/auth';
+
+vi.mock('@/lib/secrets', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/secrets')>('@/lib/secrets');
+  return {
+    ...actual,
+    getBillEnvironment: vi.fn(async (id: string) => {
+      if (id === 'env_test') {
+        return {
+          id: 'env_test',
+          name: 'sbx',
+          devKey: 'DEV',
+          username: 'u',
+          password: 'p',
+          orgId: '001',
+          product: 'ap' as const,
+        };
+      }
+      if (id === 'env_se') {
+        return {
+          id: 'env_se',
+          name: 'sbx-se',
+          devKey: 'DEV',
+          username: 'u',
+          password: 'p',
+          orgId: '001',
+          product: 'se' as const,
+        };
+      }
+      return undefined;
+    }),
+  };
+});
 
 describe('TOOLS definitions', () => {
   it('exports exactly 6 tools', () => {
@@ -207,5 +240,115 @@ describe('runTool — unknown tool', () => {
     expect(result.ok).toBe(false);
     expect(result.summary).toContain('unknown tool');
     expect(result.data).toBeNull();
+  });
+});
+
+describe('runTool — testing mode (real Bill adapter, mocked fetch)', () => {
+  beforeEach(() => {
+    __clearBillSessionCacheForTests();
+    vi.restoreAllMocks();
+  });
+
+  function mockSequence(...responses: any[]) {
+    const fetchSpy = vi.spyOn(global, 'fetch');
+    for (const res of responses) {
+      fetchSpy.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => res,
+        text: async () => '',
+      } as unknown as Response);
+    }
+    return fetchSpy;
+  }
+
+  it('list_bills calls Login then List/Bill and returns mapped data', async () => {
+    const loginRes = {
+      response_status: 0,
+      response_message: 'ok',
+      response_data: { sessionId: 'sess_1' },
+    };
+    const listRes = {
+      response_status: 0,
+      response_message: 'ok',
+      response_data: [
+        { id: 'b1', amount: 100, paymentStatus: '1', vendorId: 'v1', invoiceNumber: 'A-1', dueDate: '2026-01-01' },
+        { id: 'b2', amount: 200, paymentStatus: '1', vendorId: 'v1', invoiceNumber: 'A-2', dueDate: '2026-02-01' },
+      ],
+    };
+    const fetchSpy = mockSequence(loginRes, listRes);
+
+    const result = await runTool(
+      'list_bills',
+      { status: 'overdue' },
+      { mode: 'testing', billEnvId: 'env_test', billProduct: 'ap' }
+    );
+
+    expect(result.ok).toBe(true);
+    expect((result.data as any[])).toHaveLength(2);
+    expect(result.summary).toMatch(/2 bills/);
+    expect(result.summary).toContain('$300');
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    const listCall = fetchSpy.mock.calls[1];
+    expect(String(listCall[0])).toMatch(/\/api\/v3\/List\/Bill\.json$/);
+    const body = JSON.parse(String((listCall[1] as RequestInit).body));
+    expect(body.sessionId).toBe('sess_1');
+    expect(Array.isArray(body.filters)).toBe(true);
+    expect(body.filters[0]).toMatchObject({ field: 'paymentStatus' });
+  });
+
+  it('returns a clear error when the Bill env is not found', async () => {
+    const result = await runTool(
+      'list_vendors',
+      {},
+      { mode: 'testing', billEnvId: 'env_missing', billProduct: 'ap' }
+    );
+    expect(result.ok).toBe(false);
+    expect(result.summary).toMatch(/not found/);
+  });
+
+  it('surfaces the Bill AP error message when login fails', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        response_status: 1,
+        response_message: 'BDC_1234 invalid credentials',
+        response_data: {},
+      }),
+      text: async () => '',
+    } as unknown as Response);
+
+    const result = await runTool(
+      'list_vendors',
+      {},
+      { mode: 'testing', billEnvId: 'env_test', billProduct: 'ap' }
+    );
+    expect(result.ok).toBe(false);
+    expect(result.summary).toMatch(/invalid credentials/);
+  });
+
+  it('render_artifact in testing mode still returns ok without hitting Bill', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch');
+    const result = await runTool(
+      'render_artifact',
+      { kind: 'ap-table', title: 'Open AP' },
+      { mode: 'testing', billEnvId: 'env_test', billProduct: 'ap' }
+    );
+    expect(result.ok).toBe(true);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('S&E env surfaces "not yet wired" without calling fetch', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch');
+    const result = await runTool(
+      'list_bills',
+      {},
+      { mode: 'testing', billEnvId: 'env_se', billProduct: 'se' }
+    );
+    expect(result.ok).toBe(false);
+    expect(result.summary).toMatch(/S&E not yet wired/);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

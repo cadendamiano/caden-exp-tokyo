@@ -17,18 +17,30 @@ function glyphFor(kind: ArtifactKind) {
 }
 
 export function ArtifactPane() {
-  const artifacts = useStore(s => s.artifacts);
+  const mode = useStore(s => s.mode);
+  const demoArtifacts = useStore(s => s.artifacts);
+  const threads = useStore(s => s.testingThreads);
+  const activeThreadId = useStore(s => s.activeTestingThreadId);
+  const setDemoArtifacts = useStore(s => s.setArtifacts);
+  const setThreadArtifacts = useStore(s => s.setArtifactsInActiveThread);
+
   const active = useStore(s => s.activeArtifact);
   const setActive = useStore(s => s.setActiveArtifact);
-  const setArtifacts = useStore(s => s.setArtifacts);
   const selectedBills = useStore(s => s.selectedBills);
   const toggleBill = useStore(s => s.toggleBill);
+
+  const activeThread = threads.find(t => t.id === activeThreadId);
+  const artifacts = mode === 'testing' ? (activeThread?.artifacts ?? []) : demoArtifacts;
 
   const cur = artifacts.find(a => a.id === active);
   const isOpen = !!active;
 
   const closeOne = (id: string) => {
-    setArtifacts(prev => prev.filter(x => x.id !== id));
+    if (mode === 'testing') {
+      setThreadArtifacts(prev => prev.filter(x => x.id !== id));
+    } else {
+      setDemoArtifacts(prev => prev.filter(x => x.id !== id));
+    }
     if (active === id) setActive(null);
   };
 

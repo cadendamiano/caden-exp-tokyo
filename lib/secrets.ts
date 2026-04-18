@@ -2,6 +2,8 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 
+export type BillProductTag = 'ap' | 'se' | 'both';
+
 export type BillEnvironment = {
   id: string;
   name: string;
@@ -9,6 +11,7 @@ export type BillEnvironment = {
   username: string;
   password: string;
   orgId: string;
+  product: BillProductTag;
 };
 
 export type Secrets = {
@@ -24,6 +27,7 @@ export type BillEnvironmentMasked = {
   username: string;
   orgId: string;
   passwordConfigured: boolean;
+  product: BillProductTag;
 };
 
 export type SecretsMasked = {
@@ -36,14 +40,28 @@ const SECRETS_PATH = path.join(process.cwd(), '.secrets.local.json');
 
 const EMPTY: Secrets = { billEnvironments: [] };
 
+function normalizeProduct(p: unknown): BillProductTag {
+  if (p === 'se' || p === 'both') return p;
+  return 'ap';
+}
+
 export async function readSecrets(): Promise<Secrets> {
   try {
     const raw = await fs.readFile(SECRETS_PATH, 'utf8');
     const parsed = JSON.parse(raw) as Partial<Secrets>;
+    const envs = Array.isArray(parsed.billEnvironments) ? parsed.billEnvironments : [];
     return {
       anthropicApiKey: parsed.anthropicApiKey,
       geminiApiKey: parsed.geminiApiKey,
-      billEnvironments: Array.isArray(parsed.billEnvironments) ? parsed.billEnvironments : [],
+      billEnvironments: envs.map(e => ({
+        id: String(e.id ?? ''),
+        name: String(e.name ?? ''),
+        devKey: String(e.devKey ?? ''),
+        username: String(e.username ?? ''),
+        password: String(e.password ?? ''),
+        orgId: String(e.orgId ?? ''),
+        product: normalizeProduct((e as any).product),
+      })),
     };
   } catch (err: any) {
     if (err?.code === 'ENOENT') return { ...EMPTY };
@@ -99,6 +117,7 @@ export function toMaskedView(s: Secrets): SecretsMasked {
       username: e.username,
       orgId: e.orgId,
       passwordConfigured: Boolean(e.password),
+      product: e.product,
     })),
   };
 }
