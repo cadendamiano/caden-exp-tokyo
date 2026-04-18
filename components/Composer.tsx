@@ -60,7 +60,7 @@ export function Composer() {
         />
         <div className="composer-actions">
           {mode === 'demo' ? (
-            DEMO_PROMPTS.slice(0, 4).map(p => (
+            DEMO_PROMPTS.slice(0, 5).map(p => (
               <button
                 key={p.label}
                 className="composer-chip"

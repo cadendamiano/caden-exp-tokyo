@@ -1,3 +1,5 @@
+'use client';
+
 import { useStore } from '@/lib/store';
 import type { Artifact } from '@/lib/store';
 
@@ -7,6 +9,7 @@ export function Net15RuleArtifact({ artifact }: Props) {
   const activateArtifact = useStore(s => s.activateArtifact);
   const isActive = artifact.status === 'active';
   const canActivate = Boolean(artifact.dryRunAcknowledged);
+  const statusLabel = artifact.status ?? 'draft';
 
   return (
     <div>
@@ -14,7 +17,7 @@ export function Net15RuleArtifact({ artifact }: Props) {
         <h2>Automation rule</h2>
       </div>
       <div className="artifact-subtitle">
-        <span>draft</span>
+        <span>{statusLabel}</span>
         <span className="sep">·</span>
         <span>trigger: bill.created</span>
         <span className="sep">·</span>
@@ -23,7 +26,9 @@ export function Net15RuleArtifact({ artifact }: Props) {
       <div className="rule-card">
         <div className="rule-name">
           <h3>Flag large Net-15 bills for review</h3>
-          <span className="status-pill"><span className="dot" />draft</span>
+          <span className={'status-pill' + (isActive ? ' ok' : '')}>
+            <span className="dot" />{statusLabel}
+          </span>
         </div>
         <div className="rule-desc">
           Catch bills that will need urgent attention before they age — surface them to the AP team immediately.
