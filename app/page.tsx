@@ -8,6 +8,7 @@ import { Rail } from '@/components/Rail';
 import { Composer } from '@/components/Composer';
 import { Turn } from '@/components/Turn';
 import { ArtifactPane } from '@/components/ArtifactPane';
+import { ResizeHandle } from '@/components/ResizeHandle';
 import { TweaksPanel } from '@/components/TweaksPanel';
 import { SettingsPanel } from '@/components/SettingsPanel';
 
@@ -26,6 +27,8 @@ export default function Page() {
 
   const [tweaksOpen, setTweaksOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [railW, setRailW] = useState(240);
+  const [convoW, setConvoW] = useState(480);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const activeThread = useMemo(
@@ -65,13 +68,15 @@ export default function Page() {
   }, [turns.length]);
 
   return (
-    <div className="app">
+    <div className="app" style={{ '--rail-w': railW + 'px', '--convo-w': convoW + 'px' } as React.CSSProperties}>
       <TopBar onOpenTweaks={() => setTweaksOpen(v => !v)} />
 
       <Rail
         onNewSession={mode === 'testing' ? () => newThread() : reset}
         onOpenSettings={() => setSettingsOpen(v => !v)}
       />
+
+      <ResizeHandle onDelta={d => setRailW(w => Math.max(160, w + d))} />
 
       <main className="convo">
         <div className="convo-stream">
@@ -105,6 +110,8 @@ export default function Page() {
         </div>
         <Composer />
       </main>
+
+      <ResizeHandle onDelta={d => setConvoW(w => Math.max(280, w + d))} />
 
       <ArtifactPane />
 

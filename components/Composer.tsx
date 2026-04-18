@@ -47,6 +47,25 @@ export function Composer() {
 
   return (
     <div className="composer">
+      {mode === 'demo' ? (
+        <div className="composer-chips">
+          {DEMO_PROMPTS.slice(0, 5).map(p => (
+            <button
+              key={p.label}
+              className="composer-chip"
+              onClick={() => setComposer(p.prompt)}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="composer-chips">
+          <span className="composer-testing-note">
+            real sandbox · uses configured Bill env
+          </span>
+        </div>
+      )}
       <div className="composer-shell">
         <textarea
           ref={ref}
@@ -59,21 +78,6 @@ export function Composer() {
           style={{ opacity: streaming ? 0.55 : 1 }}
         />
         <div className="composer-actions">
-          {mode === 'demo' ? (
-            DEMO_PROMPTS.slice(0, 5).map(p => (
-              <button
-                key={p.label}
-                className="composer-chip"
-                onClick={() => setComposer(p.prompt)}
-              >
-                {p.label}
-              </button>
-            ))
-          ) : (
-            <span className="composer-testing-note">
-              real sandbox · uses configured Bill env
-            </span>
-          )}
           <div className="composer-spacer" />
           <ProviderIndicator />
           <button className="send-btn" onClick={onSubmit} disabled={streaming}>
