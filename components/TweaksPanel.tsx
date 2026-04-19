@@ -1,6 +1,7 @@
 'use client';
 
-import { useStore, type Provider } from '@/lib/store';
+import { useStore } from '@/lib/store';
+import { MODELS } from '@/lib/models';
 import { Icon } from './primitives/Icon';
 
 const HUES = [195, 170, 215, 245, 25, 145];
@@ -17,13 +18,16 @@ export function TweaksPanel({ onClose }: { onClose: () => void }) {
       </div>
       <div className="tweaks-body">
         <div className="tweak-row">
-          <label>Provider</label>
+          <label>Model</label>
           <select
-            value={tweaks.provider}
-            onChange={(e) => set('provider', e.target.value as Provider)}
+            value={tweaks.modelId}
+            onChange={(e) => set('modelId', e.target.value)}
           >
-            <option value="anthropic">Anthropic · Claude Sonnet 4.5</option>
-            <option value="gemini">Google · Gemini 2.5 Pro</option>
+            {MODELS.map(m => (
+              <option key={m.id} value={m.id}>
+                {m.label} — {m.sub}
+              </option>
+            ))}
           </select>
         </div>
         <div className="tweak-row">

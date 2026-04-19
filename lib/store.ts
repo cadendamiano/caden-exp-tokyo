@@ -5,8 +5,8 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Turn } from './turns';
 import type { ArtifactKind, FlowStep } from './flows';
 import type { DatasetKey } from './data';
+import { DEFAULT_MODEL_ID, MODELS, type ModelId, type Provider } from './models';
 
-export type Provider = 'anthropic' | 'gemini';
 export type Mode = 'demo' | 'testing';
 export type BillProduct = 'ap' | 'se';
 
@@ -21,10 +21,12 @@ export type Tweaks = {
   density: 'comfortable' | 'compact';
   streamSpeed: 'fast' | 'normal' | 'slow';
   showConnectors: boolean;
-  provider: Provider;
+  modelId: ModelId;
   showCodeView: boolean;
   demoDataset: DatasetKey;
 };
+
+export type SettingsStatus = { anthropic: boolean; gemini: boolean };
 
 export type ArtifactStatus = 'draft' | 'active' | 'paused';
 
@@ -64,12 +66,14 @@ type State = {
   approvalPayloads: Record<string, ApprovalPayload>;
   streaming: boolean;
   composer: string;
+  settingsStatus: SettingsStatus | null;
 
   mode: Mode;
   testingThreads: Thread[];
   activeTestingThreadId: string | null;
 
   setTweak: <K extends keyof Tweaks>(k: K, v: Tweaks[K]) => void;
+  setSettingsStatus: (status: SettingsStatus | null) => void;
   setComposer: (s: string) => void;
   setStreaming: (b: boolean) => void;
   addTurn: (t: Turn) => void;
@@ -114,7 +118,7 @@ const DEFAULT_TWEAKS: Tweaks = {
   density: 'comfortable',
   streamSpeed: 'normal',
   showConnectors: true,
-  provider: 'anthropic',
+  modelId: DEFAULT_MODEL_ID,
   showCodeView: false,
   demoDataset: 'logistics',
 };
@@ -145,12 +149,14 @@ export const useStore = create<State>()(
       approvalPayloads: {},
       streaming: false,
       composer: '',
+      settingsStatus: null,
 
       mode: 'demo',
       testingThreads: [],
       activeTestingThreadId: null,
 
       setTweak: (k, v) => set(s => ({ tweaks: { ...s.tweaks, [k]: v } })),
+      setSettingsStatus: (settingsStatus) => set({ settingsStatus }),
       setComposer: (composer) => set({ composer }),
       setStreaming: (streaming) => set({ streaming }),
       addTurn: (t) => set(s => ({ turns: [...s.turns, t] })),
@@ -312,10 +318,17 @@ export const useStore = create<State>()(
     {
       name: 'bcw:state',
       storage: createJSONStorage(() => localStorage),
-      version: 3,
+      version: 4,
       migrate: (persisted: any, fromVersion: number) => {
         if (persisted && fromVersion < 2) {
           persisted.tweaks = { ...DEFAULT_TWEAKS, ...(persisted.tweaks ?? {}) };
+        }
+        if (persisted?.tweaks && fromVersion < 4) {
+          const legacy = persisted.tweaks.provider as Provider | undefined;
+          const firstGemini = MODELS.find(m => m.provider === 'gemini')?.id;
+          persisted.tweaks.modelId =
+            legacy === 'gemini' ? (firstGemini ?? DEFAULT_MODEL_ID) : DEFAULT_MODEL_ID;
+          delete persisted.tweaks.provider;
         }
         return persisted;
       },

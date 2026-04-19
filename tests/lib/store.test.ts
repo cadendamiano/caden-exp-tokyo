@@ -8,7 +8,7 @@ const CLEAN_STATE = {
     density: 'comfortable' as const,
     streamSpeed: 'normal' as const,
     showConnectors: true,
-    provider: 'anthropic' as const,
+    modelId: 'claude-sonnet-4-5',
     showCodeView: false,
     demoDataset: 'default' as const,
   },
@@ -20,6 +20,7 @@ const CLEAN_STATE = {
   approvalPayloads: {},
   streaming: false,
   composer: '',
+  settingsStatus: null,
   mode: 'demo' as const,
   testingThreads: [],
   activeTestingThreadId: null,
@@ -48,12 +49,12 @@ describe('setTweak', () => {
     const { tweaks } = useStore.getState();
     expect(tweaks.accentHue).toBe(270);
     expect(tweaks.density).toBe('comfortable');
-    expect(tweaks.provider).toBe('anthropic');
+    expect(tweaks.modelId).toBe('claude-sonnet-4-5');
   });
 
-  it('can change the provider', () => {
-    useStore.getState().setTweak('provider', 'gemini');
-    expect(useStore.getState().tweaks.provider).toBe('gemini');
+  it('can change the model', () => {
+    useStore.getState().setTweak('modelId', 'gemini-2.5-pro');
+    expect(useStore.getState().tweaks.modelId).toBe('gemini-2.5-pro');
   });
 
   it('can switch density to compact', () => {
@@ -290,6 +291,66 @@ describe('setApprovalPayload', () => {
     const s = useStore.getState();
     expect(s.testingThreads.find(t => t.id === a)!.approvalPayloads['btch_t1']).toEqual(p);
     expect(s.testingThreads.find(t => t.id === b)!.approvalPayloads['btch_t1']).toBeUndefined();
+  });
+});
+
+describe('persist migration v3 -> v4', () => {
+  it('maps legacy tweaks.provider: gemini to tweaks.modelId: gemini-2.5-pro', async () => {
+    localStorage.setItem(
+      'bcw:state',
+      JSON.stringify({
+        state: {
+          tweaks: {
+            accentHue: 195,
+            density: 'comfortable',
+            streamSpeed: 'normal',
+            showConnectors: true,
+            provider: 'gemini',
+            showCodeView: false,
+            demoDataset: 'default',
+          },
+          artifacts: [],
+          approvalStates: {},
+          mode: 'demo',
+          testingThreads: [],
+          activeTestingThreadId: null,
+        },
+        version: 3,
+      })
+    );
+    await (useStore as any).persist.rehydrate();
+    const { tweaks } = useStore.getState();
+    expect(tweaks.modelId).toBe('gemini-2.5-pro');
+    expect((tweaks as any).provider).toBeUndefined();
+  });
+
+  it('maps legacy tweaks.provider: anthropic to tweaks.modelId: claude-sonnet-4-5', async () => {
+    localStorage.setItem(
+      'bcw:state',
+      JSON.stringify({
+        state: {
+          tweaks: {
+            accentHue: 195,
+            density: 'comfortable',
+            streamSpeed: 'normal',
+            showConnectors: true,
+            provider: 'anthropic',
+            showCodeView: false,
+            demoDataset: 'default',
+          },
+          artifacts: [],
+          approvalStates: {},
+          mode: 'demo',
+          testingThreads: [],
+          activeTestingThreadId: null,
+        },
+        version: 3,
+      })
+    );
+    await (useStore as any).persist.rehydrate();
+    const { tweaks } = useStore.getState();
+    expect(tweaks.modelId).toBe('claude-sonnet-4-5');
+    expect((tweaks as any).provider).toBeUndefined();
   });
 });
 

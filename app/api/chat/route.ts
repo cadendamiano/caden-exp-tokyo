@@ -5,6 +5,7 @@ import { MODEL_TOOLS, runTool, SYSTEM_PROMPT, TESTING_SYSTEM_PROMPT, type ToolCo
 import type { DatasetKey } from '@/lib/data';
 import type { FlowStep } from '@/lib/flows';
 import { getAnthropicKey, getGeminiKey } from '@/lib/secrets';
+import { providerOf } from '@/lib/models';
 
 type ApprovalPayload = Extract<FlowStep, { kind: 'approval' }>['payload'];
 
@@ -26,14 +27,15 @@ export function sseEncode(ev: Event) {
 
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as {
-    provider: 'anthropic' | 'gemini';
+    model: string;
     userMessage: string;
     mode?: 'demo' | 'testing';
     billEnvId?: string;
     billProduct?: 'ap' | 'se';
     demoDataset?: DatasetKey;
   };
-  const { provider, userMessage } = body;
+  const { model, userMessage } = body;
+  const provider = providerOf(model);
   const ctx: ToolContext = {
     mode: body.mode ?? 'demo',
     billEnvId: body.billEnvId,
@@ -48,9 +50,9 @@ export async function POST(req: NextRequest) {
       const send = (ev: Event) => controller.enqueue(encoder.encode(sseEncode(ev)));
       try {
         if (provider === 'gemini') {
-          await runGemini(userMessage, send, ctx, systemPrompt);
+          await runGemini(model, userMessage, send, ctx, systemPrompt);
         } else {
-          await runAnthropic(userMessage, send, ctx, systemPrompt);
+          await runAnthropic(model, userMessage, send, ctx, systemPrompt);
         }
       } catch (e: any) {
         send({ type: 'error', message: e?.message ?? 'unknown error' });
@@ -72,6 +74,7 @@ export async function POST(req: NextRequest) {
 
 // ── Anthropic ──────────────────────────────────────────────────────────
 async function runAnthropic(
+  model: string,
   userMessage: string,
   send: (ev: Event) => void,
   ctx: ToolContext,
@@ -93,7 +96,7 @@ async function runAnthropic(
 
   for (let turn = 0; turn < 4; turn++) {
     const stream = await client.messages.stream({
-      model: 'claude-sonnet-4-5-20250929',
+      model,
       max_tokens: 2048,
       system: systemPrompt,
       tools,
@@ -153,6 +156,7 @@ async function runAnthropic(
 
 // ── Gemini ─────────────────────────────────────────────────────────────
 async function runGemini(
+  model: string,
   userMessage: string,
   send: (ev: Event) => void,
   ctx: ToolContext,
@@ -177,7 +181,7 @@ async function runGemini(
 
   for (let turn = 0; turn < 4; turn++) {
     const stream = await ai.models.generateContentStream({
-      model: 'gemini-2.5-pro',
+      model,
       contents,
       config: {
         systemInstruction: systemPrompt,

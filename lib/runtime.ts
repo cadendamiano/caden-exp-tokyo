@@ -262,7 +262,7 @@ export async function runLLM(userText: string) {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        provider: s.tweaks.provider,
+        model: s.tweaks.modelId,
         userMessage: userText,
         demoDataset: s.tweaks.demoDataset,
       }),
@@ -397,7 +397,7 @@ export async function runLLMTesting(userText: string) {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        provider: s.tweaks.provider,
+        model: s.tweaks.modelId,
         userMessage: userText,
         mode: 'testing',
         billEnvId: active.billEnvId,

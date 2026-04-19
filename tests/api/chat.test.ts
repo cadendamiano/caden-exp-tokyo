@@ -143,7 +143,7 @@ describe('POST handler', () => {
     const { POST } = await import('@/app/api/chat/route');
     const req = new Request('http://localhost/api/chat', {
       method: 'POST',
-      body: JSON.stringify({ provider: 'anthropic', userMessage: 'hello' }),
+      body: JSON.stringify({ model: 'claude-sonnet-4-5', userMessage: 'hello' }),
       headers: { 'content-type': 'application/json' },
     });
 
@@ -165,7 +165,7 @@ describe('POST handler', () => {
     const { POST } = await import('@/app/api/chat/route');
     const req = new Request('http://localhost/api/chat', {
       method: 'POST',
-      body: JSON.stringify({ provider: 'gemini', userMessage: 'hello' }),
+      body: JSON.stringify({ model: 'gemini-2.5-pro', userMessage: 'hello' }),
       headers: { 'content-type': 'application/json' },
     });
 
@@ -185,7 +185,7 @@ describe('POST handler', () => {
     const { POST } = await import('@/app/api/chat/route');
     const req = new Request('http://localhost/api/chat', {
       method: 'POST',
-      body: JSON.stringify({ provider: 'anthropic', userMessage: 'hello' }),
+      body: JSON.stringify({ model: 'claude-sonnet-4-5', userMessage: 'hello' }),
       headers: { 'content-type': 'application/json' },
     });
 
@@ -204,7 +204,7 @@ describe('POST handler', () => {
     const { POST } = await import('@/app/api/chat/route');
     const req = new Request('http://localhost/api/chat', {
       method: 'POST',
-      body: JSON.stringify({ provider: 'anthropic', userMessage: 'hi' }),
+      body: JSON.stringify({ model: 'claude-sonnet-4-5', userMessage: 'hi' }),
       headers: { 'content-type': 'application/json' },
     });
 
