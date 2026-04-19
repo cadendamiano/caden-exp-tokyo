@@ -5,6 +5,8 @@ import { DEMO_PROMPTS, LOGISTICS_DEMO_PROMPTS } from '@/lib/data';
 import { useStore } from '@/lib/store';
 import { runFlow, runLLM, runLLMTesting } from '@/lib/runtime';
 import { matchFlow } from '@/lib/flows';
+import { MODELS, providerOf } from '@/lib/models';
+import { ModelPicker } from './ModelPicker';
 
 export function Composer() {
   const composer = useStore(s => s.composer);
@@ -12,11 +14,45 @@ export function Composer() {
   const streaming = useStore(s => s.streaming);
   const mode = useStore(s => s.mode);
   const demoDataset = useStore(s => s.tweaks.demoDataset);
+  const modelId = useStore(s => s.tweaks.modelId);
+  const settingsStatus = useStore(s => s.settingsStatus);
+  const setSettingsStatus = useStore(s => s.setSettingsStatus);
+  const setTweak = useStore(s => s.setTweak);
   const ref = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (!streaming) ref.current?.focus();
   }, [streaming]);
+
+  useEffect(() => {
+    if (settingsStatus != null) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/settings', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setSettingsStatus({
+          anthropic: Boolean(data?.anthropic?.configured),
+          gemini: Boolean(data?.gemini?.configured),
+        });
+      } catch {
+        // ignore — picker stays optimistic until a subsequent load succeeds
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [settingsStatus, setSettingsStatus]);
+
+  useEffect(() => {
+    if (!settingsStatus) return;
+    const currentProvider = providerOf(modelId);
+    if (settingsStatus[currentProvider]) return;
+    const otherProvider = currentProvider === 'anthropic' ? 'gemini' : 'anthropic';
+    if (!settingsStatus[otherProvider]) return;
+    const fallback = MODELS.find(m => m.provider === otherProvider);
+    if (fallback) setTweak('modelId', fallback.id);
+  }, [settingsStatus, modelId, setTweak]);
 
   const onSubmit = () => {
     const v = composer.trim();
@@ -80,21 +116,12 @@ export function Composer() {
         />
         <div className="composer-actions">
           <div className="composer-spacer" />
-          <ProviderIndicator />
+          <ModelPicker />
           <button className="send-btn" onClick={onSubmit} disabled={streaming}>
             Send <span className="kbd">↵</span>
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-function ProviderIndicator() {
-  const provider = useStore(s => s.tweaks.provider);
-  return (
-    <div className="composer-mode">
-      <span className="dot" /> agent · {provider}
     </div>
   );
 }

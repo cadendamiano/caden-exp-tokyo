@@ -89,6 +89,14 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const setTweak = useStore(s => s.setTweak);
   const newThread = useStore(s => s.newThread);
   const testingThreads = useStore(s => s.testingThreads);
+  const setSettingsStatus = useStore(s => s.setSettingsStatus);
+
+  function publishStatus(next: SettingsView) {
+    setSettingsStatus({
+      anthropic: next.anthropic.configured,
+      gemini: next.gemini.configured,
+    });
+  }
 
   const [view, setView] = useState<SettingsView | null>(null);
   const [anthropicInput, setAnthropicInput] = useState('');
@@ -108,6 +116,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         if (cancelled) return;
         setView(data);
         setDrafts(data.billEnvironments.map(toDraft));
+        publishStatus(data);
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? 'Failed to load settings');
       }
@@ -160,6 +169,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
       const next = (await res.json()) as SettingsView;
       setView(next);
       setDrafts(next.billEnvironments.map(toDraft));
+      publishStatus(next);
       setAnthropicInput('');
       setGeminiInput('');
       setSavedAt(Date.now());
@@ -183,6 +193,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
       if (!res.ok) throw new Error('Clear failed');
       const next = (await res.json()) as SettingsView;
       setView(next);
+      publishStatus(next);
       if (which === 'anthropic') setAnthropicInput('');
       else setGeminiInput('');
     } catch (e: any) {
