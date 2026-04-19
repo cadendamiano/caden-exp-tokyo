@@ -85,6 +85,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const mode = useStore(s => s.mode);
   const setMode = useStore(s => s.setMode);
   const showCodeView = useStore(s => s.tweaks.showCodeView);
+  const demoDataset = useStore(s => s.tweaks.demoDataset);
   const setTweak = useStore(s => s.setTweak);
   const newThread = useStore(s => s.newThread);
   const testingThreads = useStore(s => s.testingThreads);
@@ -229,6 +230,46 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           </label>
           <div className="settings-help">
             When enabled, a Code tab appears on artifacts showing a read-only parameterized representation of the logic.
+          </div>
+        </section>
+
+        <section className="settings-section">
+          <div className="settings-section-head">
+            <span>Demo sandbox dataset</span>
+            <span className="status-pill ok">
+              {demoDataset === 'logistics' ? 'logistics' : 'generic'}
+            </span>
+          </div>
+          <label className="tweak-toggle" style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
+            <input
+              type="radio"
+              name="demoDataset"
+              checked={demoDataset === 'default'}
+              onChange={() => setTweak('demoDataset', 'default')}
+            />
+            <span style={{ display: 'inline-flex', flexDirection: 'column' }}>
+              <span>Generic company</span>
+              <span style={{ color: 'var(--ink-4)', fontSize: 11.5 }}>
+                Acme Cloud · 12 vendors · original demo dataset
+              </span>
+            </span>
+          </label>
+          <label className="tweak-toggle" style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
+            <input
+              type="radio"
+              name="demoDataset"
+              checked={demoDataset === 'logistics'}
+              onChange={() => setTweak('demoDataset', 'logistics')}
+            />
+            <span style={{ display: 'inline-flex', flexDirection: 'column' }}>
+              <span>Crestview Freight Solutions</span>
+              <span style={{ color: 'var(--ink-4)', fontSize: 11.5 }}>
+                Supply chain · 100 employees · 18 vendors
+              </span>
+            </span>
+          </label>
+          <div className="settings-help">
+            Controls which fixture dataset powers demo mode prompts, artifact previews, and the "Demo Sandbox" option in testing mode.
           </div>
         </section>
 

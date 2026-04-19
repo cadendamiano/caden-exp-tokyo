@@ -6,6 +6,8 @@ import { useStore } from '@/lib/store';
 import { runFlow } from '@/lib/runtime';
 import { Icon } from './primitives/Icon';
 
+const DEMO_SANDBOX_ENV_ID = '__demo_sandbox__';
+
 const SESSION_MAP: Record<string, string> = {
   s1: 'pay_batch',
   s2: 'chart_spend',
@@ -213,44 +215,48 @@ function TestingRailBody() {
       {active && (
         <div className="rail-mini">
           <div className="rail-section-label">Bill env for this thread</div>
-          {!envs || envs.length === 0 ? (
-            <div className="rail-empty">
-              No sandbox environments configured. Open Settings to add one.
+          <select
+            className="rail-env-select"
+            value={active.billEnvId ?? ''}
+            onChange={e => {
+              const envId = e.target.value || undefined;
+              if (envId === DEMO_SANDBOX_ENV_ID) {
+                setThreadBillEnv(active.id, envId, 'ap');
+              } else {
+                setThreadBillEnv(active.id, envId, active.billProduct ?? 'ap');
+              }
+            }}
+          >
+            <option value="">— pick an env —</option>
+            <option value={DEMO_SANDBOX_ENV_ID}>Demo Sandbox · fake data</option>
+            {(envs ?? []).map(env => (
+              <option key={env.id} value={env.id}>
+                {env.name} · {env.product}
+              </option>
+            ))}
+          </select>
+          {active.billEnvId !== DEMO_SANDBOX_ENV_ID && (
+            <div className="rail-product-toggle">
+              {(['ap', 'se'] as const).map(p => (
+                <button
+                  key={p}
+                  className={
+                    'rail-product-btn' +
+                    ((active.billProduct ?? 'ap') === p ? ' active' : '')
+                  }
+                  onClick={() =>
+                    setThreadBillEnv(active.id, active.billEnvId, p)
+                  }
+                >
+                  {p === 'ap' ? 'AP' : 'S&E'}
+                </button>
+              ))}
             </div>
-          ) : (
-            <>
-              <select
-                className="rail-env-select"
-                value={active.billEnvId ?? ''}
-                onChange={e => {
-                  const envId = e.target.value || undefined;
-                  setThreadBillEnv(active.id, envId, active.billProduct ?? 'ap');
-                }}
-              >
-                <option value="">— pick an env —</option>
-                {envs.map(env => (
-                  <option key={env.id} value={env.id}>
-                    {env.name} · {env.product}
-                  </option>
-                ))}
-              </select>
-              <div className="rail-product-toggle">
-                {(['ap', 'se'] as const).map(p => (
-                  <button
-                    key={p}
-                    className={
-                      'rail-product-btn' +
-                      ((active.billProduct ?? 'ap') === p ? ' active' : '')
-                    }
-                    onClick={() =>
-                      setThreadBillEnv(active.id, active.billEnvId, p)
-                    }
-                  >
-                    {p === 'ap' ? 'AP' : 'S&E'}
-                  </button>
-                ))}
-              </div>
-            </>
+          )}
+          {envs && envs.length === 0 && active.billEnvId !== DEMO_SANDBOX_ENV_ID && (
+            <div className="rail-empty" style={{ marginTop: 8 }}>
+              No real sandbox envs configured. Pick Demo Sandbox above or add one in Settings.
+            </div>
           )}
         </div>
       )}

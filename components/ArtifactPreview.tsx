@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useStore, getActiveThread } from '@/lib/store';
-import { AGING, BILLS, VENDORS, CATEGORY_SPEND } from '@/lib/data';
+import { getDataset, type DatasetKey } from '@/lib/data';
 import { fmtMoney, fmtMoneyShort } from '@/lib/format';
 import type { ArtifactKind } from '@/lib/flows';
 import type { Artifact } from '@/lib/store';
@@ -22,31 +22,39 @@ type PreviewResult = {
 async function fetchPreview(
   kind: ArtifactKind,
   mode: 'demo' | 'testing',
-  billEnvId?: string,
-  billProduct?: string
+  billEnvId: string | undefined,
+  billProduct: string | undefined,
+  demoDataset: DatasetKey
 ): Promise<PreviewResult> {
   const asOf = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
   if (mode === 'demo') {
-    return buildMockPreview(kind, asOf);
+    return buildMockPreview(kind, asOf, demoDataset);
   }
 
   // Testing mode: fetch real data from /api/dryrun
   const toolName = kindToTool(kind);
-  if (!toolName) return buildMockPreview(kind, asOf);
+  if (!toolName) return buildMockPreview(kind, asOf, demoDataset);
 
   try {
     const res = await fetch('/api/dryrun', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ tool: toolName, input: kindToInput(kind), mode, billEnvId, billProduct }),
+      body: JSON.stringify({
+        tool: toolName,
+        input: kindToInput(kind),
+        mode,
+        billEnvId,
+        billProduct,
+        demoDataset,
+      }),
     });
     if (!res.ok) throw new Error('dryrun failed');
     const json = await res.json() as { ok: boolean; summary: string; data: unknown };
-    if (!json.ok) return buildMockPreview(kind, asOf);
+    if (!json.ok) return buildMockPreview(kind, asOf, demoDataset);
     return buildRealPreview(kind, json.data, json.summary, asOf);
   } catch {
-    return buildMockPreview(kind, asOf);
+    return buildMockPreview(kind, asOf, demoDataset);
   }
 }
 
@@ -63,7 +71,8 @@ function kindToInput(kind: ArtifactKind): Record<string, unknown> {
   return {};
 }
 
-function buildMockPreview(kind: ArtifactKind, asOf: string): PreviewResult {
+function buildMockPreview(kind: ArtifactKind, asOf: string, dataset: DatasetKey): PreviewResult {
+  const { AGING, BILLS, VENDORS, CATEGORY_SPEND } = getDataset(dataset);
   if (kind === 'ap-table') {
     const rows = AGING.map(b => ({ Bucket: b.bucket, Amount: fmtMoney(b.amount) }));
     const total = AGING.reduce((s, a) => s + a.amount, 0);
@@ -94,7 +103,10 @@ function buildMockPreview(kind: ArtifactKind, asOf: string): PreviewResult {
       { Event: 'payment.cleared', Match: 'deal.bill_invoice_id', Result: 'deal staged → Paid', Status: '✓ matched' },
       { Event: 'payment.cleared', Match: 'deal.bill_invoice_id', Result: 'no match found', Status: '⚠ unmatched' },
     ];
-    return { rows, summary: 'Backfill test: 18/20 matched · 2 unmatched', asOf };
+    const summary = dataset === 'logistics'
+      ? 'Backfill test: 17/20 matched · 3 unmatched'
+      : 'Backfill test: 18/20 matched · 2 unmatched';
+    return { rows, summary, asOf };
   }
   return { rows: [], summary: 'No preview available', asOf };
 }
@@ -139,6 +151,7 @@ function buildRealPreview(kind: ArtifactKind, data: unknown, summary: string, as
 
 export function ArtifactPreview({ artifact }: Props) {
   const mode = useStore(s => s.mode);
+  const demoDataset = useStore(s => s.tweaks.demoDataset);
   const acknowledgeArtifactDryRun = useStore(s => s.acknowledgeArtifactDryRun);
   const [result, setResult] = useState<PreviewResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -146,7 +159,7 @@ export function ArtifactPreview({ artifact }: Props) {
   useEffect(() => {
     setLoading(true);
     const thread = getActiveThread();
-    fetchPreview(artifact.kind, mode, thread?.billEnvId, thread?.billProduct)
+    fetchPreview(artifact.kind, mode, thread?.billEnvId, thread?.billProduct, demoDataset)
       .then(r => {
         setResult(r);
         setLoading(false);
@@ -156,7 +169,7 @@ export function ArtifactPreview({ artifact }: Props) {
         }
       })
       .catch(() => setLoading(false));
-  }, [artifact.id, artifact.kind, mode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [artifact.id, artifact.kind, mode, demoDataset]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return (
@@ -208,7 +221,9 @@ export function ArtifactPreview({ artifact }: Props) {
       <div className="preview-footnote">
         {mode === 'testing'
           ? '↳ Data sourced from real Bill sandbox environment'
-          : '↳ Data sourced from demo workspace (meridian-ops)'}
+          : demoDataset === 'logistics'
+            ? '↳ Data sourced from demo workspace (crestview-freight-ops)'
+            : '↳ Data sourced from demo workspace (meridian-ops)'}
       </div>
     </div>
   );

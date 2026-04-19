@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchFlow, FLOWS } from '@/lib/flows';
+import { matchFlow, FLOWS, LOGISTICS_FLOWS } from '@/lib/flows';
 
 describe('matchFlow', () => {
   it('matches pay_batch when message mentions paying overdue invoices', () => {
@@ -179,5 +179,53 @@ describe('matchFlow — pay_large', () => {
 
   it('still matches pay_batch when prompt contains ACH and 3', () => {
     expect(matchFlow('Send 3 ACH payments')).toBe('pay_batch');
+  });
+});
+
+describe('LOGISTICS_FLOWS', () => {
+  const flowIds = ['ap_overdue', 'pay_batch', 'automate_net15', 'chart_spend', 'crm_sync', 'pay_large', 'dupe_sweep'];
+
+  it('contains all 7 expected flow ids', () => {
+    for (const id of flowIds) {
+      expect(LOGISTICS_FLOWS[id]).toBeDefined();
+    }
+  });
+
+  it('every flow has an id, title, and steps array', () => {
+    for (const id of flowIds) {
+      const flow = LOGISTICS_FLOWS[id];
+      expect(typeof flow.id).toBe('string');
+      expect(typeof flow.title).toBe('string');
+      expect(Array.isArray(flow.steps)).toBe(true);
+      expect(flow.steps.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('pay_large requires a second approver and exceeds 25k', () => {
+    const step = LOGISTICS_FLOWS.pay_large.steps.find(s => s.kind === 'approval')!;
+    expect((step as any).payload.requiresSecondApprover).toBe(true);
+    expect((step as any).payload.total).toBeGreaterThan(25000);
+  });
+});
+
+describe('matchFlow — logistics dataset', () => {
+  it("triggers pay_large on 'skylink'", () => {
+    expect(matchFlow('Pay the SkyLink invoice', 'logistics')).toBe('pay_large');
+  });
+
+  it("triggers pay_large on 'air freight'", () => {
+    expect(matchFlow('Pay the air freight bill', 'logistics')).toBe('pay_large');
+  });
+
+  it("default dataset does NOT treat 'skylink' as pay_large", () => {
+    expect(matchFlow('Pay the SkyLink invoice')).not.toBe('pay_large');
+  });
+
+  it("logistics dataset does NOT treat 'crestline' as pay_large", () => {
+    expect(matchFlow('Pay the Crestline invoice', 'logistics')).not.toBe('pay_large');
+  });
+
+  it('overdue still routes to ap_overdue for logistics', () => {
+    expect(matchFlow('show overdue AP', 'logistics')).toBe('ap_overdue');
   });
 });

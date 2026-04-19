@@ -40,6 +40,27 @@ describe('sseEncode', () => {
     const result = sseEncode({ type: 'done' });
     expect(result.endsWith('\n\n')).toBe(true);
   });
+
+  it('serialises an approval event with payload and simulated flag', () => {
+    const result = sseEncode({
+      type: 'approval' as const,
+      payload: {
+        batchId: 'btch_1',
+        stake: 'payment',
+        from: 'Ops ••4821',
+        method: 'ACH',
+        scheduledFor: 'Today',
+        items: [{ vendor: 'V', invoice: 'I', amount: 100 }],
+        total: 100,
+        requiresSecondApprover: false,
+      },
+      simulated: true,
+    });
+    const parsed = JSON.parse(result.slice(6).trim());
+    expect(parsed.type).toBe('approval');
+    expect(parsed.payload.batchId).toBe('btch_1');
+    expect(parsed.simulated).toBe(true);
+  });
 });
 
 // ─── jsonSchemaToGemini ───────────────────────────────────────────────────────

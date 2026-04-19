@@ -3,11 +3,18 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Turn } from './turns';
-import type { ArtifactKind } from './flows';
+import type { ArtifactKind, FlowStep } from './flows';
+import type { DatasetKey } from './data';
 
 export type Provider = 'anthropic' | 'gemini';
 export type Mode = 'demo' | 'testing';
 export type BillProduct = 'ap' | 'se';
+
+// Shared approval state union. `undefined`/missing-key = no entry yet (pre-stage).
+// `'pending'` is set explicitly on rollback from `'submitting'`.
+export type ApprovalState = 'pending' | 'submitting' | 'approved' | 'rejected';
+
+export type ApprovalPayload = Extract<FlowStep, { kind: 'approval' }>['payload'];
 
 export type Tweaks = {
   accentHue: number;
@@ -16,6 +23,7 @@ export type Tweaks = {
   showConnectors: boolean;
   provider: Provider;
   showCodeView: boolean;
+  demoDataset: DatasetKey;
 };
 
 export type ArtifactStatus = 'draft' | 'active' | 'paused';
@@ -40,7 +48,8 @@ export type Thread = {
   turns: Turn[];
   artifacts: Artifact[];
   selectedBills: string[];
-  approvalStates: Record<string, 'approved' | 'rejected'>;
+  approvalStates: Record<string, ApprovalState>;
+  approvalPayloads: Record<string, ApprovalPayload>;
   billEnvId?: string;
   billProduct?: BillProduct;
 };
@@ -51,7 +60,8 @@ type State = {
   artifacts: Artifact[];
   activeArtifact: string | null;
   selectedBills: string[];
-  approvalStates: Record<string, 'approved' | 'rejected'>;
+  approvalStates: Record<string, ApprovalState>;
+  approvalPayloads: Record<string, ApprovalPayload>;
   streaming: boolean;
   composer: string;
 
@@ -68,7 +78,8 @@ type State = {
   setArtifacts: (fn: (prev: Artifact[]) => Artifact[]) => void;
   setActiveArtifact: (id: string | null) => void;
   toggleBill: (id: string) => void;
-  setApproval: (batchId: string, state: 'approved' | 'rejected') => void;
+  setApproval: (batchId: string, state: ApprovalState) => void;
+  setApprovalPayload: (batchId: string, payload: ApprovalPayload) => void;
   reset: () => void;
   seedWelcome: () => void;
 
@@ -80,7 +91,8 @@ type State = {
   addTurnToActiveThread: (t: Turn) => void;
   updateTurnInActiveThread: (id: string, patch: Partial<Turn>) => void;
   setArtifactsInActiveThread: (fn: (prev: Artifact[]) => Artifact[]) => void;
-  setApprovalInActiveThread: (batchId: string, state: 'approved' | 'rejected') => void;
+  setApprovalInActiveThread: (batchId: string, state: ApprovalState) => void;
+  setApprovalPayloadInActiveThread: (batchId: string, payload: ApprovalPayload) => void;
   setThreadBillEnv: (id: string, envId: string | undefined, product: BillProduct) => void;
   activateArtifact: (id: string) => void;
   acknowledgeArtifactDryRun: (id: string) => void;
@@ -104,6 +116,7 @@ const DEFAULT_TWEAKS: Tweaks = {
   showConnectors: true,
   provider: 'anthropic',
   showCodeView: false,
+  demoDataset: 'logistics',
 };
 
 function createThread(title?: string): Thread {
@@ -115,6 +128,7 @@ function createThread(title?: string): Thread {
     artifacts: [],
     selectedBills: [],
     approvalStates: {},
+    approvalPayloads: {},
     billProduct: 'ap',
   };
 }
@@ -128,6 +142,7 @@ export const useStore = create<State>()(
       activeArtifact: null,
       selectedBills: [],
       approvalStates: {},
+      approvalPayloads: {},
       streaming: false,
       composer: '',
 
@@ -151,6 +166,8 @@ export const useStore = create<State>()(
         }),
       setApproval: (batchId, state) =>
         set(s => ({ approvalStates: { ...s.approvalStates, [batchId]: state } })),
+      setApprovalPayload: (batchId, payload) =>
+        set(s => ({ approvalPayloads: { ...s.approvalPayloads, [batchId]: payload } })),
       reset: () =>
         set({
           turns: [WELCOME_TURN],
@@ -158,6 +175,7 @@ export const useStore = create<State>()(
           activeArtifact: null,
           selectedBills: [],
           approvalStates: {},
+          approvalPayloads: {},
           streaming: false,
           composer: '',
         }),
@@ -234,7 +252,19 @@ export const useStore = create<State>()(
           return {
             testingThreads: s.testingThreads.map(th =>
               th.id === s.activeTestingThreadId
-                ? { ...th, approvalStates: { ...th.approvalStates, [batchId]: state } }
+                ? { ...th, approvalStates: { ...(th.approvalStates ?? {}), [batchId]: state } }
+                : th
+            ),
+          };
+        }),
+
+      setApprovalPayloadInActiveThread: (batchId, payload) =>
+        set(s => {
+          if (!s.activeTestingThreadId) return s;
+          return {
+            testingThreads: s.testingThreads.map(th =>
+              th.id === s.activeTestingThreadId
+                ? { ...th, approvalPayloads: { ...(th.approvalPayloads ?? {}), [batchId]: payload } }
                 : th
             ),
           };
@@ -282,15 +312,37 @@ export const useStore = create<State>()(
     {
       name: 'bcw:state',
       storage: createJSONStorage(() => localStorage),
+      version: 3,
+      migrate: (persisted: any, fromVersion: number) => {
+        if (persisted && fromVersion < 2) {
+          persisted.tweaks = { ...DEFAULT_TWEAKS, ...(persisted.tweaks ?? {}) };
+        }
+        return persisted;
+      },
       partialize: (s) => ({
         tweaks: s.tweaks,
         artifacts: s.artifacts,
         activeArtifact: s.activeArtifact,
         approvalStates: s.approvalStates,
+        // approvalPayloads (root): intentionally omitted — regenerate on next run.
         mode: s.mode,
-        testingThreads: s.testingThreads,
+        testingThreads: s.testingThreads.map(t => {
+          const { approvalPayloads: _strip, ...rest } = t;
+          return rest;
+        }),
         activeTestingThreadId: s.activeTestingThreadId,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        // Every load: ensure each thread has approvalPayloads, since partialize strips it.
+        state.testingThreads = (state.testingThreads ?? []).map((t: any) => ({
+          ...t,
+          approvalPayloads: t.approvalPayloads ?? {},
+          approvalStates: t.approvalStates ?? {},
+        }));
+        // Root approvalPayloads is intentionally not persisted — rehydrate empty.
+        state.approvalPayloads = state.approvalPayloads ?? {};
+      },
     }
   )
 );

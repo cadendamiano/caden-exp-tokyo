@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { handleApprove, handleReject, runFlow } from '@/lib/runtime';
-import { useStore } from '@/lib/store';
+import { useStore, type ApprovalPayload } from '@/lib/store';
 import type { Turn } from '@/lib/turns';
 
 const CLEAN_STATE = {
@@ -10,40 +10,86 @@ const CLEAN_STATE = {
     streamSpeed: 'fast' as const,
     showConnectors: true,
     provider: 'anthropic' as const,
+    showCodeView: false,
+    demoDataset: 'default' as const,
   },
   turns: [] as Turn[],
   artifacts: [],
   activeArtifact: null,
   selectedBills: [],
   approvalStates: {},
+  approvalPayloads: {},
   streaming: false,
   composer: '',
+  mode: 'demo' as const,
+  testingThreads: [],
+  activeTestingThreadId: null,
 };
+
+function makePayload(batchId: string, total = 1000): ApprovalPayload {
+  return {
+    batchId,
+    stake: 'payment',
+    from: 'Ops Checking ••4821',
+    method: 'ACH',
+    scheduledFor: 'Today, 4:00 PM PT',
+    items: [{ vendor: 'Test', invoice: 'INV-1', amount: total }],
+    total,
+    requiresSecondApprover: false,
+  };
+}
+
+function mockFetchOk(data: any = { confirmationId: 'PMT-ABC123', simulated: true }) {
+  return vi.spyOn(global, 'fetch').mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: async () => ({ ok: true, summary: 'Batch submitted (simulated)', data }),
+    text: async () => '',
+  } as unknown as Response);
+}
+
+function mockFetchFail() {
+  return vi.spyOn(global, 'fetch').mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: async () => ({ ok: false, summary: 'network down', data: null }),
+    text: async () => '',
+  } as unknown as Response);
+}
 
 beforeEach(() => {
   useStore.setState(CLEAN_STATE);
-  vi.useFakeTimers();
-});
-
-afterEach(() => {
-  vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe('handleApprove', () => {
-  it('records the batch as approved in the store', () => {
-    handleApprove('btch_0041');
+  it('emits a "payload lost" recovery turn when no payload is staged', async () => {
+    await handleApprove('btch_missing');
+    const turns = useStore.getState().turns;
+    expect(turns).toHaveLength(1);
+    expect((turns[0] as any).text).toMatch(/staged payload was lost/);
+  });
+
+  it('records the batch as approved in the store', async () => {
+    useStore.getState().setApprovalPayload('btch_0041', makePayload('btch_0041'));
+    mockFetchOk();
+    await handleApprove('btch_0041');
     expect(useStore.getState().approvalStates['btch_0041']).toBe('approved');
   });
 
-  it('adds an agent turn confirming submission', () => {
-    handleApprove('btch_0041');
+  it('adds an agent turn confirming submission', async () => {
+    useStore.getState().setApprovalPayload('btch_0041', makePayload('btch_0041'));
+    mockFetchOk();
+    await handleApprove('btch_0041');
     const agentTurns = useStore.getState().turns.filter(t => t.kind === 'agent');
     expect(agentTurns.length).toBeGreaterThanOrEqual(1);
     expect((agentTurns[0] as any).text).toContain('Submitting');
   });
 
-  it('adds a tools turn with the PayBill API call', () => {
-    handleApprove('btch_0041');
+  it('adds a tools turn with the PayBill API call', async () => {
+    useStore.getState().setApprovalPayload('btch_0041', makePayload('btch_0041'));
+    mockFetchOk();
+    await handleApprove('btch_0041');
     const toolTurns = useStore.getState().turns.filter(t => t.kind === 'tools');
     expect(toolTurns.length).toBeGreaterThanOrEqual(1);
     const rows = (toolTurns[0] as any).rows as any[];
@@ -51,16 +97,45 @@ describe('handleApprove', () => {
     expect(rows[0].filter).toContain('btch_0041');
   });
 
-  it('adds a follow-up agent turn with the batch confirmation number', () => {
-    handleApprove('btch_0041');
+  it('confirmation id matches PMT-<6 alnum> shape', async () => {
+    useStore.getState().setApprovalPayload('btch_abc123', makePayload('btch_abc123'));
+    mockFetchOk({ confirmationId: 'PMT-ABC123', simulated: true });
+    await handleApprove('btch_abc123');
     const agentTurns = useStore.getState().turns.filter(t => t.kind === 'agent');
-    expect(agentTurns.length).toBe(2);
-    expect((agentTurns[1] as any).text).toContain('PMT-9F48C2');
+    expect((agentTurns[1] as any).text).toMatch(/PMT-[A-Z0-9]{6}/);
   });
 
-  it('adds exactly 3 turns total (agent + tools + agent)', () => {
-    handleApprove('btch_0041');
+  it('adds exactly 3 turns total on happy path (agent + tools + agent)', async () => {
+    useStore.getState().setApprovalPayload('btch_0041', makePayload('btch_0041'));
+    mockFetchOk();
+    await handleApprove('btch_0041');
     expect(useStore.getState().turns).toHaveLength(3);
+  });
+
+  it('rolls back approvalState from submitting to pending on failure', async () => {
+    useStore.getState().setApprovalPayload('btch_fail', makePayload('btch_fail'));
+    mockFetchFail();
+    await handleApprove('btch_fail');
+    expect(useStore.getState().approvalStates['btch_fail']).toBe('pending');
+    const turns = useStore.getState().turns;
+    const lastAgent = [...turns].reverse().find(t => t.kind === 'agent');
+    expect((lastAgent as any).text).toMatch(/Submission failed/);
+    expect((lastAgent as any).text).toMatch(/retry approve or cancel/);
+  });
+
+  it('scope-aware: approves in the active testing thread', async () => {
+    const s = useStore.getState();
+    s.setMode('testing');
+    s.newThread('A');
+    const thread = useStore.getState().testingThreads[0];
+    useStore.getState().setApprovalPayloadInActiveThread('btch_t1', makePayload('btch_t1'));
+    mockFetchOk();
+    await handleApprove('btch_t1');
+
+    const updated = useStore.getState().testingThreads.find(t => t.id === thread.id)!;
+    expect(updated.approvalStates['btch_t1']).toBe('approved');
+    // Demo root approvalStates is untouched
+    expect(useStore.getState().approvalStates['btch_t1']).toBeUndefined();
   });
 });
 
@@ -86,9 +161,11 @@ describe('handleReject', () => {
 });
 
 describe('handleApprove + handleReject interaction', () => {
-  it('each call sets its own batch id independently', () => {
-    handleApprove('btch_A');
-    useStore.setState({ turns: [], approvalStates: {} }, false);
+  it('each call sets its own batch id independently', async () => {
+    useStore.getState().setApprovalPayload('btch_A', makePayload('btch_A'));
+    mockFetchOk();
+    await handleApprove('btch_A');
+    useStore.setState({ turns: [], approvalStates: {}, approvalPayloads: {} }, false);
     handleReject('btch_B');
     expect(useStore.getState().approvalStates['btch_B']).toBe('rejected');
     expect(useStore.getState().approvalStates['btch_A']).toBeUndefined();
@@ -96,6 +173,13 @@ describe('handleApprove + handleReject interaction', () => {
 });
 
 describe('runFlow', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('does not start if already streaming', () => {
     useStore.setState({ streaming: true }, false);
     runFlow('ap_overdue');
