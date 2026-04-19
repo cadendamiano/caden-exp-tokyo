@@ -1,8 +1,14 @@
 'use client';
 
-import { FLOWS, LOGISTICS_FLOWS, type Flow, type FlowStep } from './flows';
+import { FLOWS, LOGISTICS_FLOWS, type ArtifactKind, type Flow, type FlowStep } from './flows';
 import { newId, type Turn } from './turns';
 import { useStore, getActiveThread, type ApprovalPayload } from './store';
+
+export type ForcedArtifact = {
+  forcedKind: ArtifactKind;
+  requirements: string[];
+  commandName: string;
+};
 
 function speedMult(s: 'fast' | 'normal' | 'slow') {
   if (s === 'fast') return 0.3;
@@ -13,8 +19,9 @@ function speedMult(s: 'fast' | 'normal' | 'slow') {
 export function runFlow(flowId: string) {
   const state = useStore.getState();
   if (state.streaming) return;
-  const registry = state.tweaks.demoDataset === 'logistics' ? LOGISTICS_FLOWS : FLOWS;
-  const flow: Flow | undefined = registry[flowId] ?? FLOWS[flowId];
+  const registry: Record<string, Flow> =
+    state.tweaks.demoDataset === 'logistics' ? LOGISTICS_FLOWS : FLOWS;
+  const flow: Flow | undefined = registry[flowId] ?? (FLOWS as Record<string, Flow>)[flowId];
   if (!flow) return;
 
   state.setStreaming(true);
@@ -244,11 +251,14 @@ export function handleReject(batchId: string) {
 }
 
 // ─── Free-text LLM path ─────────────────────────────────────────────────
-export async function runLLM(userText: string) {
+export async function runLLM(userText: string, opts?: ForcedArtifact) {
   const s = useStore.getState();
   if (s.streaming) return;
 
-  s.addTurn({ id: newId('u'), kind: 'user', text: userText });
+  const displayText = opts
+    ? `/${opts.commandName}${userText ? ' ' + userText : ''}`
+    : userText;
+  s.addTurn({ id: newId('u'), kind: 'user', text: displayText });
   s.setStreaming(true);
 
   const agentId = newId('a');
@@ -265,6 +275,11 @@ export async function runLLM(userText: string) {
         model: s.tweaks.modelId,
         userMessage: userText,
         demoDataset: s.tweaks.demoDataset,
+        ...(opts ? {
+          forcedKind: opts.forcedKind,
+          requirements: opts.requirements,
+          commandName: opts.commandName,
+        } : {}),
       }),
     });
     if (!res.ok || !res.body) throw new Error('chat request failed');
@@ -359,7 +374,7 @@ export async function runLLM(userText: string) {
 }
 
 // ─── Testing mode: real Bill sandbox ────────────────────────────────────
-export async function runLLMTesting(userText: string) {
+export async function runLLMTesting(userText: string, opts?: ForcedArtifact) {
   const s = useStore.getState();
   if (s.streaming) return;
 
@@ -373,8 +388,12 @@ export async function runLLMTesting(userText: string) {
   const active = getActiveThread();
   if (!active) return;
 
+  const displayText = opts
+    ? `/${opts.commandName}${userText ? ' ' + userText : ''}`
+    : userText;
+
   if (!active.billEnvId) {
-    s.addTurnToActiveThread({ id: newId('u'), kind: 'user', text: userText });
+    s.addTurnToActiveThread({ id: newId('u'), kind: 'user', text: displayText });
     s.addTurnToActiveThread({
       id: newId('a'),
       kind: 'agent',
@@ -383,7 +402,7 @@ export async function runLLMTesting(userText: string) {
     return;
   }
 
-  s.addTurnToActiveThread({ id: newId('u'), kind: 'user', text: userText });
+  s.addTurnToActiveThread({ id: newId('u'), kind: 'user', text: displayText });
   s.setStreaming(true);
 
   const agentId = newId('a');
@@ -403,6 +422,11 @@ export async function runLLMTesting(userText: string) {
         billEnvId: active.billEnvId,
         billProduct: active.billProduct ?? 'ap',
         demoDataset: s.tweaks.demoDataset,
+        ...(opts ? {
+          forcedKind: opts.forcedKind,
+          requirements: opts.requirements,
+          commandName: opts.commandName,
+        } : {}),
       }),
     });
     if (!res.ok || !res.body) throw new Error('chat request failed');

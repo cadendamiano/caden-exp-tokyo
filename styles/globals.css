@@ -526,6 +526,7 @@ input, textarea, select{ font-family: inherit; color: inherit; }
   padding: 12px 18px 14px;
 }
 .composer-shell{
+  position: relative;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--surface);
@@ -537,6 +538,49 @@ input, textarea, select{ font-family: inherit; color: inherit; }
   border-color: var(--teal-line);
   box-shadow: 0 0 0 4px color-mix(in oklab, var(--teal) 12%, transparent);
 }
+
+.slash-menu{
+  position: absolute;
+  left: 0; right: 0; bottom: calc(100% + 6px);
+  z-index: 20;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+  max-height: 240px; overflow-y: auto;
+}
+.slash-menu-item{
+  padding: 6px 10px; border-radius: 6px; cursor: pointer;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.slash-menu-item.active{ background: color-mix(in oklab, var(--teal) 8%, transparent); }
+.slash-menu-name{
+  font-family: var(--mono); font-size: 12px; color: var(--ink);
+}
+.slash-menu-hint{ font-size: 11px; color: var(--ink-3); }
+.slash-menu-empty{
+  padding: 8px 10px; font-family: var(--mono); font-size: 11px; color: var(--ink-4);
+}
+
+.composer-forced{
+  display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+}
+.composer-forced-chip{
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 4px 3px 8px;
+  background: var(--teal-soft); border: 1px solid var(--teal-line);
+  border-radius: 999px;
+  font-family: var(--mono); font-size: 11px; color: var(--teal-ink);
+}
+.composer-forced-x{
+  display: inline-grid; place-items: center;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: transparent; color: var(--teal-ink);
+  font-size: 13px; line-height: 1;
+}
+.composer-forced-x:hover{ background: color-mix(in oklab, var(--teal) 14%, transparent); }
+.composer-forced-hint{ font-family: var(--mono); font-size: 10.5px; color: var(--ink-4); }
 .composer textarea{
   width: 100%; border: none; outline: none; resize: none;
   background: transparent;
