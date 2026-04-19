@@ -116,3 +116,21 @@ export async function seListExpenses(
 export async function seGetEmployee(env: BillEnvironment, id: string): Promise<any> {
   return seRequest<any>(env, `/employees/${encodeURIComponent(id)}`);
 }
+
+// ─── Write stubs ──────────────────────────────────────────────────────
+// When real S&E write endpoints are wired, these can return the live response
+// (without `simulated: true`) and the dispatcher will pass it through.
+
+export async function seApproveExpense(
+  _env: BillEnvironment,
+  _input: unknown
+): Promise<{ simulated: true; note: string }> {
+  return { simulated: true, note: 'real write endpoint not yet wired' };
+}
+
+export async function seRejectExpense(
+  _env: BillEnvironment,
+  _input: unknown
+): Promise<{ simulated: true; note: string }> {
+  return { simulated: true, note: 'real write endpoint not yet wired' };
+}

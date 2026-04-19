@@ -1,8 +1,8 @@
 'use client';
 
-import { FLOWS, type Flow, type FlowStep } from './flows';
+import { FLOWS, LOGISTICS_FLOWS, type Flow, type FlowStep } from './flows';
 import { newId, type Turn } from './turns';
-import { useStore, getActiveThread } from './store';
+import { useStore, getActiveThread, type ApprovalPayload } from './store';
 
 function speedMult(s: 'fast' | 'normal' | 'slow') {
   if (s === 'fast') return 0.3;
@@ -13,7 +13,8 @@ function speedMult(s: 'fast' | 'normal' | 'slow') {
 export function runFlow(flowId: string) {
   const state = useStore.getState();
   if (state.streaming) return;
-  const flow: Flow | undefined = FLOWS[flowId];
+  const registry = state.tweaks.demoDataset === 'logistics' ? LOGISTICS_FLOWS : FLOWS;
+  const flow: Flow | undefined = registry[flowId] ?? FLOWS[flowId];
   if (!flow) return;
 
   state.setStreaming(true);
@@ -102,10 +103,13 @@ function executeStep(flow: Flow, step: FlowStep, mult: number) {
       meta: step.meta,
       icon: step.icon,
     });
+    // Seed approval payload for any approval step in this flow so handleApprove
+    // can find it via getSubmitContext.
     return;
   }
   if (step.kind === 'approval') {
     s.addTurn({ id: newId('ap'), kind: 'approval', payload: step.payload });
+    s.setApprovalPayload(step.payload.batchId, step.payload);
     return;
   }
   if (step.kind === 'suggest') {
@@ -114,56 +118,125 @@ function executeStep(flow: Flow, step: FlowStep, mult: number) {
   }
 }
 
-export function handleApprove(batchId: string) {
+// ─── Approval submission helpers ──────────────────────────────────────
+
+type SubmitContext = {
+  mode: 'demo' | 'testing';
+  payload: ApprovalPayload | undefined;
+  billEnvId?: string;
+  billProduct?: 'ap' | 'se';
+  demoDataset?: string;
+};
+
+function getSubmitContext(batchId: string): SubmitContext {
   const s = useStore.getState();
   if (s.mode === 'testing') {
-    s.setApprovalInActiveThread(batchId, 'approved');
-    s.addTurnToActiveThread({
+    const thread = getActiveThread();
+    return {
+      mode: 'testing',
+      payload: thread?.approvalPayloads?.[batchId],
+      billEnvId: thread?.billEnvId,
+      billProduct: thread?.billProduct,
+      demoDataset: s.tweaks.demoDataset,
+    };
+  }
+  return {
+    mode: 'demo',
+    payload: s.approvalPayloads[batchId],
+    demoDataset: s.tweaks.demoDataset,
+  };
+}
+
+export async function handleApprove(batchId: string) {
+  const ctx = getSubmitContext(batchId);
+  const s = useStore.getState();
+  const addTurn = ctx.mode === 'testing' ? s.addTurnToActiveThread : s.addTurn;
+  const setApproval = ctx.mode === 'testing' ? s.setApprovalInActiveThread : s.setApproval;
+
+  if (!ctx.payload) {
+    addTurn({
       id: newId('a'),
       kind: 'agent',
-      text: 'Approved — but no real payment was submitted (testing mode is read-only).',
+      text: 'Approved — but the staged payload was lost. Please re-stage the batch.',
     });
     return;
   }
-  s.setApproval(batchId, 'approved');
-  s.addTurn({
-    id: newId('a'),
-    kind: 'agent',
-    text: 'Approved. Submitting the batch to BILL Payments.',
-  });
-  s.addTurn({
-    id: newId('tl'),
-    kind: 'tools',
-    rows: [
-      {
-        verb: 'POST',
-        path: '/v3/api/PayBill/submit',
-        filter: `batchId=${batchId}`,
-        status: '200',
-        result: 'confirmation PMT-9F48C2',
-      },
-    ],
-  });
-  s.addTurn({
-    id: newId('a'),
-    kind: 'agent',
-    text: `**Batch PMT-9F48C2 submitted.** ACH funds will leave Ops Checking today at 4:00 PT. Vendors will receive payment notice automatically. I'll post a summary to #ap in Slack when each line clears.`,
-  });
+
+  setApproval(batchId, 'submitting');
+
+  try {
+    const res = await fetch('/api/dryrun', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        tool: 'submit_payment_batch',
+        input: { batchId, payload: ctx.payload },
+        mode: ctx.mode,
+        billEnvId: ctx.billEnvId,
+        billProduct: ctx.billProduct,
+        demoDataset: ctx.demoDataset,
+        allowInternal: true,
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(`submit request failed (${res.status})`);
+    }
+    const body = (await res.json()) as {
+      ok: boolean;
+      summary: string;
+      data: { confirmationId?: string; simulated?: boolean } | null;
+    };
+    if (!body.ok) {
+      throw new Error(body.summary || 'submission rejected');
+    }
+
+    const confirmationId = body.data?.confirmationId ?? `PMT-${batchId.slice(-6).toUpperCase()}`;
+    const simulated = body.data?.simulated === true;
+
+    setApproval(batchId, 'approved');
+    addTurn({
+      id: newId('a'),
+      kind: 'agent',
+      text: 'Approved. Submitting the batch to BILL Payments.',
+    });
+    addTurn({
+      id: newId('tl'),
+      kind: 'tools',
+      rows: [
+        {
+          verb: 'POST',
+          path: '/v3/api/PayBill/submit',
+          filter: `batchId=${batchId}`,
+          status: '200',
+          result: `confirmation ${confirmationId}`,
+        },
+      ],
+    });
+    addTurn({
+      id: newId('a'),
+      kind: 'agent',
+      text: simulated
+        ? `**Batch ${confirmationId} submitted (simulated).** No real money moved — this is demo/sandbox mode.`
+        : `**Batch ${confirmationId} submitted.** ACH funds will leave ${ctx.payload.from} today at 4:00 PT. Vendors will receive payment notice automatically. I'll post a summary to #ap in Slack when each line clears.`,
+    });
+  } catch (err: any) {
+    setApproval(batchId, 'pending');
+    addTurn({
+      id: newId('a'),
+      kind: 'agent',
+      text: `Submission failed: ${err?.message ?? 'unknown error'} — you can retry approve or cancel.`,
+    });
+  }
 }
 
 export function handleReject(batchId: string) {
+  const ctx = getSubmitContext(batchId);
   const s = useStore.getState();
-  if (s.mode === 'testing') {
-    s.setApprovalInActiveThread(batchId, 'rejected');
-    s.addTurnToActiveThread({
-      id: newId('a'),
-      kind: 'agent',
-      text: 'Batch cancelled — nothing was submitted to BILL.',
-    });
-    return;
-  }
-  s.setApproval(batchId, 'rejected');
-  s.addTurn({
+  const addTurn = ctx.mode === 'testing' ? s.addTurnToActiveThread : s.addTurn;
+  const setApproval = ctx.mode === 'testing' ? s.setApprovalInActiveThread : s.setApproval;
+
+  setApproval(batchId, 'rejected');
+  addTurn({
     id: newId('a'),
     kind: 'agent',
     text: 'Batch cancelled — nothing was submitted to BILL.',
@@ -191,6 +264,7 @@ export async function runLLM(userText: string) {
       body: JSON.stringify({
         provider: s.tweaks.provider,
         userMessage: userText,
+        demoDataset: s.tweaks.demoDataset,
       }),
     });
     if (!res.ok || !res.body) throw new Error('chat request failed');
@@ -254,6 +328,15 @@ export async function runLLM(userText: string) {
             sub: (ev.sub ?? 'GENERATED').toUpperCase(),
             meta: ev.meta ?? '',
             icon: ev.icon ?? '◫',
+          });
+        } else if (ev.type === 'approval') {
+          const payload = ev.payload as ApprovalPayload;
+          useStore.getState().setApprovalPayload(payload.batchId, payload);
+          useStore.getState().addTurn({
+            id: newId('ap'),
+            kind: 'approval',
+            payload,
+            simulated: ev.simulated === true,
           });
         } else if (ev.type === 'done') {
           useStore.getState().updateTurn(agentId, { text: acc || ev.text || '', streaming: false });
@@ -319,6 +402,7 @@ export async function runLLMTesting(userText: string) {
         mode: 'testing',
         billEnvId: active.billEnvId,
         billProduct: active.billProduct ?? 'ap',
+        demoDataset: s.tweaks.demoDataset,
       }),
     });
     if (!res.ok || !res.body) throw new Error('chat request failed');
@@ -382,6 +466,15 @@ export async function runLLMTesting(userText: string) {
             sub: (ev.sub ?? 'GENERATED').toUpperCase(),
             meta: ev.meta ?? '',
             icon: ev.icon ?? '◫',
+          });
+        } else if (ev.type === 'approval') {
+          const payload = ev.payload as ApprovalPayload;
+          useStore.getState().setApprovalPayloadInActiveThread(payload.batchId, payload);
+          useStore.getState().addTurnToActiveThread({
+            id: newId('ap'),
+            kind: 'approval',
+            payload,
+            simulated: ev.simulated === true,
           });
         } else if (ev.type === 'done') {
           useStore.getState().updateTurnInActiveThread(agentId, { text: acc || ev.text || '', streaming: false });

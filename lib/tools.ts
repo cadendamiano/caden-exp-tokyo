@@ -1,13 +1,24 @@
-import { BILLS, VENDORS, AGING, CATEGORY_SPEND, EXPENSES, EMPLOYEES } from './data';
+import { getDataset, type DatasetKey } from './data';
 import { getBillEnvironment } from './secrets';
 import {
   apList,
   apAgingSummary,
   apCategorySpend,
   apFindDuplicateInvoices,
+  apStagePaymentBatch,
+  apSubmitPaymentBatch,
+  apCreateAutomationRule,
   type ApFilter,
 } from './bill/ap';
-import { seRequest, seListExpenses, seGetEmployee, type SeExpenseFilter } from './bill/se';
+import {
+  seRequest,
+  seListExpenses,
+  seGetEmployee,
+  seApproveExpense,
+  seRejectExpense,
+  type SeExpenseFilter,
+} from './bill/se';
+import type { FlowStep } from './flows';
 
 export type ToolDef = {
   name: string;
@@ -23,9 +34,16 @@ export type ToolContext = {
   mode?: 'demo' | 'testing';
   billEnvId?: string;
   billProduct?: 'ap' | 'se';
+  demoDataset?: DatasetKey;
 };
 
-export const TOOLS: ToolDef[] = [
+type ApprovalPayload = Extract<FlowStep, { kind: 'approval' }>['payload'];
+
+export const DEMO_SANDBOX_ENV_ID = '__demo_sandbox__';
+
+// ─── Tool definitions ─────────────────────────────────────────────────
+
+const READ_TOOLS: ToolDef[] = [
   {
     name: 'list_bills',
     description: 'List accounts-payable bills from the BILL workspace. Optionally filter by status or vendor.',
@@ -113,17 +131,126 @@ export const TOOLS: ToolDef[] = [
   },
 ];
 
+const WRITE_TOOLS: ToolDef[] = [
+  {
+    name: 'stage_payment_batch',
+    description:
+      'Stage a batch for human approval. The UI will render an approval card — do not fabricate one in text. Use billHints to supply amount/vendor for bill IDs not in the local dataset.',
+    parameters: {
+      type: 'object',
+      properties: {
+        billIds: { type: 'array', items: { type: 'string' } },
+        bankAccount: { type: 'string' },
+        method: { type: 'string', enum: ['ACH', 'Check', 'Wire'] },
+        scheduledFor: { type: 'string' },
+        billHints: {
+          type: 'array',
+          description: 'Optional per-bill hints for IDs not in the local fixture. amount required for correct stake classification.',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              amount: { type: 'number' },
+              vendor: { type: 'string' },
+              invoice: { type: 'string' },
+            },
+            required: ['id'],
+          },
+        },
+      },
+      required: ['billIds'],
+    },
+  },
+  // TODO: add 'automation' approval card UX — for now this tool returns inline success.
+  {
+    name: 'create_automation_rule',
+    description: 'Create a BILL automation rule. Returns inline confirmation; no approval card in this iteration.',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        trigger: { type: 'string' },
+        conditions: { type: 'array', items: { type: 'object', properties: {} } },
+        actions: { type: 'array', items: { type: 'object', properties: {} } },
+      },
+      required: ['name', 'trigger'],
+    },
+  },
+  {
+    name: 'approve_expense',
+    description: 'Approve a Bill Spend & Expense item by id.',
+    parameters: {
+      type: 'object',
+      properties: {
+        expenseId: { type: 'string' },
+      },
+      required: ['expenseId'],
+    },
+  },
+  {
+    name: 'reject_expense',
+    description: 'Reject a Bill Spend & Expense item by id, with a reason.',
+    parameters: {
+      type: 'object',
+      properties: {
+        expenseId: { type: 'string' },
+        reason: { type: 'string' },
+      },
+      required: ['expenseId', 'reason'],
+    },
+  },
+];
+
+// Tools the LLM can call.
+export const MODEL_TOOLS: ToolDef[] = [...READ_TOOLS, ...WRITE_TOOLS];
+
+// Internal dispatcher — not exposed to the LLM.
+export const INTERNAL_TOOLS: ToolDef[] = [
+  {
+    name: 'submit_payment_batch',
+    description: 'Submit an approved payment batch. Internal — called only by handleApprove after user confirmation.',
+    parameters: {
+      type: 'object',
+      properties: {
+        batchId: { type: 'string' },
+        payload: { type: 'object', properties: {} },
+      },
+      required: ['batchId'],
+    },
+  },
+];
+
+// Union kept for internal callers / tests.
+export const TOOLS: ToolDef[] = [...MODEL_TOOLS, ...INTERNAL_TOOLS];
+
+const INTERNAL_TOOL_NAMES = new Set(INTERNAL_TOOLS.map(t => t.name));
+
+// ─── Dispatcher ───────────────────────────────────────────────────────
+
 export async function runTool(
   name: string,
   input: any,
-  ctx?: ToolContext
+  ctx?: ToolContext,
+  opts?: { allowInternal?: boolean }
 ): Promise<{ ok: boolean; summary: string; data: unknown }> {
-  const useReal = ctx?.mode === 'testing' && Boolean(ctx?.billEnvId);
+  if (INTERNAL_TOOL_NAMES.has(name) && !opts?.allowInternal) {
+    return {
+      ok: false,
+      summary: `tool "${name}" is internal; call via /api/dryrun with allowInternal`,
+      data: null,
+    };
+  }
+  const useReal =
+    ctx?.mode === 'testing' &&
+    Boolean(ctx?.billEnvId) &&
+    ctx?.billEnvId !== DEMO_SANDBOX_ENV_ID;
   if (useReal) {
     return runRealTool(name, input, ctx!);
   }
-  return runMockTool(name, input);
+  return runMockTool(name, input, ctx?.demoDataset);
 }
+
+// ─── Real-mode dispatcher ─────────────────────────────────────────────
 
 async function runRealTool(
   name: string,
@@ -142,6 +269,44 @@ async function runRealTool(
         data: null,
       };
     }
+
+    // Write tools: delegate to stubs, fall back to mock on simulated.
+    if (name === 'stage_payment_batch') {
+      const stub = await apStagePaymentBatch(env, input);
+      if (stub?.simulated) {
+        return runMockTool(name, input, ctx.demoDataset);
+      }
+      return { ok: true, summary: 'Batch staged', data: stub };
+    }
+    if (name === 'submit_payment_batch') {
+      const stub = await apSubmitPaymentBatch(env, input);
+      if (stub?.simulated) {
+        return runMockTool(name, input, ctx.demoDataset);
+      }
+      return { ok: true, summary: 'Batch submitted', data: stub };
+    }
+    if (name === 'create_automation_rule') {
+      const stub = await apCreateAutomationRule(env, input);
+      if (stub?.simulated) {
+        return runMockTool(name, input, ctx.demoDataset);
+      }
+      return { ok: true, summary: 'Rule created', data: stub };
+    }
+    if (name === 'approve_expense') {
+      const stub = await seApproveExpense(env, input);
+      if (stub?.simulated) {
+        return runMockTool(name, input, ctx.demoDataset);
+      }
+      return { ok: true, summary: 'Expense approved', data: stub };
+    }
+    if (name === 'reject_expense') {
+      const stub = await seRejectExpense(env, input);
+      if (stub?.simulated) {
+        return runMockTool(name, input, ctx.demoDataset);
+      }
+      return { ok: true, summary: 'Expense rejected', data: stub };
+    }
+
     if (ctx.billProduct === 'se') {
       if (name === 'list_expenses') {
         const filters: SeExpenseFilter[] = [];
@@ -179,7 +344,6 @@ async function runRealTool(
       const filters: ApFilter[] = [];
       const status = input?.status;
       if (status && status !== 'all') {
-        // Bill AP paymentStatus: "1" = open/unpaid, "0" = paid, "2" = partially paid, "4" = scheduled
         if (status === 'scheduled') filters.push({ field: 'paymentStatus', op: '=', value: '4' });
         else filters.push({ field: 'paymentStatus', op: '=', value: '1' });
       }
@@ -224,11 +388,15 @@ async function runRealTool(
   }
 }
 
+// ─── Mock dispatcher ──────────────────────────────────────────────────
+
 async function runMockTool(
   name: string,
-  input: any
+  input: any,
+  dataset?: DatasetKey
 ): Promise<{ ok: boolean; summary: string; data: unknown }> {
   try {
+    const { VENDORS, BILLS, AGING, CATEGORY_SPEND, EMPLOYEES, EXPENSES } = getDataset(dataset);
     if (name === 'list_bills') {
       const status = input?.status ?? 'all';
       const vendorId = input?.vendorId;
@@ -254,20 +422,29 @@ async function runMockTool(
       return { ok: true, summary: `${CATEGORY_SPEND.length} categories · $${total.toLocaleString()}`, data: CATEGORY_SPEND };
     }
     if (name === 'find_duplicate_invoices') {
-      const pairs = [
-        {
-          vendor: 'Brightline Marketing Co.',
-          a: { invoice: 'BRT-5488', amount: 2150, date: '2026-04-14' },
-          b: { invoice: 'BRT-5488-A', amount: 2150, date: '2026-04-20' },
-          confidence: 'high',
-        },
-        {
-          vendor: 'Meridian Office Supply',
-          a: { invoice: 'MOS-00441', amount: 842.1, date: '2026-03-10' },
-          b: { invoice: 'MOS-0441', amount: 842.1, date: '2026-03-12' },
-          confidence: 'medium',
-        },
-      ];
+      const pairs = dataset === 'logistics'
+        ? [
+            {
+              vendor: 'Apex Carrier Network',
+              a: { invoice: 'ACN-2026-0381', amount: 14200, date: '2026-04-06' },
+              b: { invoice: 'ACN-2026-381',  amount: 14200, date: '2026-04-18' },
+              confidence: 'high',
+            },
+          ]
+        : [
+            {
+              vendor: 'Brightline Marketing Co.',
+              a: { invoice: 'BRT-5488',   amount: 2150, date: '2026-04-14' },
+              b: { invoice: 'BRT-5488-A', amount: 2150, date: '2026-04-20' },
+              confidence: 'high',
+            },
+            {
+              vendor: 'Meridian Office Supply',
+              a: { invoice: 'MOS-00441', amount: 842.1, date: '2026-03-10' },
+              b: { invoice: 'MOS-0441',  amount: 842.1, date: '2026-03-12' },
+              confidence: 'medium',
+            },
+          ];
       return { ok: true, summary: `${pairs.length} suspect pairs`, data: pairs };
     }
     if (name === 'list_expenses') {
@@ -292,6 +469,115 @@ async function runMockTool(
     if (name === 'render_artifact') {
       return { ok: true, summary: 'artifact opened in UI', data: input };
     }
+
+    // ── Write tools ──
+    if (name === 'stage_payment_batch') {
+      const billIds: string[] = Array.isArray(input?.billIds) ? input.billIds : [];
+      if (billIds.length === 0) {
+        return { ok: false, summary: 'stage_payment_batch requires billIds', data: null };
+      }
+      const hints = new Map<string, any>(
+        (Array.isArray(input?.billHints) ? input.billHints : []).map((h: any) => [String(h.id), h])
+      );
+      const vendorName: Record<string, string> = {};
+      for (const v of VENDORS) vendorName[v.id] = v.name;
+      const lineItems = billIds.map((id: string) => {
+        const bill = BILLS.find(b => b.id === id);
+        if (bill) {
+          return {
+            vendor: vendorName[bill.vendor] ?? bill.vendor,
+            invoice: bill.invoice,
+            amount: bill.amount,
+          };
+        }
+        const hint = hints.get(id);
+        return {
+          vendor: hint?.vendor ?? `Vendor ${id.slice(-4)}`,
+          invoice: hint?.invoice ?? `INV-${id.slice(-6).toUpperCase()}`,
+          amount: Number(hint?.amount ?? 0),
+        };
+      });
+      const total = lineItems.reduce((s, li) => s + li.amount, 0);
+      const stake: ApprovalPayload['stake'] = total > 25000 ? 'large-payment' : 'payment';
+      const batchId = `btch_${Date.now().toString(36).slice(-6)}`;
+      const approvalPayload: ApprovalPayload = {
+        batchId,
+        stake,
+        from: input?.bankAccount ?? 'Ops Checking ••4821',
+        method: input?.method ?? 'ACH',
+        scheduledFor:
+          input?.scheduledFor ?? (stake === 'large-payment' ? 'Pending second approval' : 'Today, 4:00 PM PT'),
+        items: lineItems,
+        total,
+        requiresSecondApprover: stake === 'large-payment',
+      };
+      return {
+        ok: true,
+        summary: `Batch staged · ${lineItems.length} items · $${total.toLocaleString('en-US', { maximumFractionDigits: 0 })} (simulated)`,
+        data: { approvalPayload, simulated: true },
+      };
+    }
+    if (name === 'submit_payment_batch') {
+      const batchId = String(input?.batchId ?? '').trim();
+      if (!batchId) {
+        return { ok: false, summary: 'submit_payment_batch requires batchId', data: null };
+      }
+      const confirmationId = `PMT-${batchId.slice(-6).toUpperCase()}`;
+      return {
+        ok: true,
+        summary: 'Batch submitted (simulated)',
+        data: { confirmationId, simulated: true },
+      };
+    }
+    if (name === 'create_automation_rule') {
+      const ruleId = `rule_${Date.now().toString(36)}`;
+      const nm = input?.name ? ` · ${input.name}` : '';
+      return {
+        ok: true,
+        summary: `Rule created${nm} (simulated)`,
+        data: { ruleId, simulated: true },
+      };
+    }
+    if (name === 'approve_expense') {
+      const expenseId = String(input?.expenseId ?? '').trim();
+      if (!expenseId) {
+        return { ok: false, summary: 'approve_expense requires expenseId', data: null };
+      }
+      const exp = EXPENSES.find(e => e.id === expenseId);
+      if (!exp) {
+        return {
+          ok: true,
+          summary: `Expense ${expenseId} approved (simulated · unknown id)`,
+          data: { expenseId, simulated: true },
+        };
+      }
+      return {
+        ok: true,
+        summary: `Expense ${exp.id} (${exp.category}) approved (simulated)`,
+        data: { expenseId: exp.id, employee: exp.employee, category: exp.category, simulated: true },
+      };
+    }
+    if (name === 'reject_expense') {
+      const expenseId = String(input?.expenseId ?? '').trim();
+      const reason = String(input?.reason ?? '').trim();
+      if (!expenseId) {
+        return { ok: false, summary: 'reject_expense requires expenseId', data: null };
+      }
+      const exp = EXPENSES.find(e => e.id === expenseId);
+      if (!exp) {
+        return {
+          ok: true,
+          summary: `Expense ${expenseId} rejected (simulated · unknown id)`,
+          data: { expenseId, reason, simulated: true },
+        };
+      }
+      return {
+        ok: true,
+        summary: `Expense ${exp.id} rejected (simulated): ${reason || 'no reason given'}`,
+        data: { expenseId: exp.id, employee: exp.employee, reason, simulated: true },
+      };
+    }
+
     return { ok: false, summary: `unknown tool: ${name}`, data: null };
   } catch (e: any) {
     return { ok: false, summary: `error: ${e?.message ?? 'unknown'}`, data: null };
@@ -304,7 +590,8 @@ Style:
 - Be concise, professional, and precise. Short paragraphs. Markdown **bold** and \`inline code\` are supported.
 - When you need data, call tools rather than guessing. You can call multiple tools per turn.
 - When the user asks to visualize or open an interactive view (AP list, spend chart, Net-15 rule, CRM flow), call \`render_artifact\` with the right kind. Kinds: ap-table, spend-chart, rule-net15, crm-flow.
-- Never claim a payment has been executed. Always tell the user they'll need to approve batches in the UI. The UI will render an approval card when appropriate — you don't need to fabricate one.
+- To stage a payment, call \`stage_payment_batch\` with the bill IDs — the UI will render an approval card with a typed-confirmation gate. Do not fabricate approvals. Wait for the user's approve/reject before describing an outcome.
+- Write actions available: \`stage_payment_batch\`, \`create_automation_rule\`, \`approve_expense\`, \`reject_expense\`. Submission happens only after user approval.
 
 Finish every turn with a short natural-language summary of what you learned or did.`;
 
@@ -314,6 +601,7 @@ Style:
 - Concise, precise. Short paragraphs. Markdown **bold** and \`inline code\` are supported.
 - Call tools for any data question. You can call multiple tools per turn.
 - If a tool returns an error, surface the error message plainly so the user can diagnose.
-- Never claim a payment was executed. Read-only in this mode.
+- Write actions run as simulated writes against fixture data when the real endpoint isn't wired. Tool results include \`simulated: true\` in that case — always surface which mode you're in.
+- If you stage bills whose IDs aren't in the local dataset, pass \`billHints[]\` with at least \`{id, amount}\` so the approval card totals are correct.
 
 Finish every turn with a short natural-language summary of what you learned or did.`;

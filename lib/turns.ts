@@ -19,6 +19,7 @@ export type Turn =
       id: string;
       kind: 'approval';
       payload: Extract<FlowStep, { kind: 'approval' }>['payload'];
+      simulated?: boolean;
     }
   | { id: string; kind: 'suggest'; items: string[] };
 

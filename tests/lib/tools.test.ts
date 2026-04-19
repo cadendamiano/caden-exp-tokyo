@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { TOOLS, runTool } from '@/lib/tools';
+import { TOOLS, MODEL_TOOLS, INTERNAL_TOOLS, runTool } from '@/lib/tools';
 import { BILLS, VENDORS, AGING, CATEGORY_SPEND, EXPENSES, EMPLOYEES } from '@/lib/data';
 import { __clearBillSessionCacheForTests } from '@/lib/bill/auth';
 import { __clearSeTokenCacheForTests } from '@/lib/bill/se';
@@ -39,8 +39,10 @@ vi.mock('@/lib/secrets', async () => {
 });
 
 describe('TOOLS definitions', () => {
-  it('exports exactly 8 tools', () => {
-    expect(TOOLS).toHaveLength(8);
+  it('exports 13 tools total (12 model + 1 internal)', () => {
+    expect(TOOLS).toHaveLength(13);
+    expect(MODEL_TOOLS).toHaveLength(12);
+    expect(INTERNAL_TOOLS).toHaveLength(1);
   });
 
   it('every tool has a name, description, and parameters', () => {
@@ -64,6 +66,16 @@ describe('TOOLS definitions', () => {
     expect(names).toContain('list_expenses');
     expect(names).toContain('get_employee');
     expect(names).toContain('render_artifact');
+    expect(names).toContain('stage_payment_batch');
+    expect(names).toContain('submit_payment_batch');
+    expect(names).toContain('create_automation_rule');
+    expect(names).toContain('approve_expense');
+    expect(names).toContain('reject_expense');
+  });
+
+  it('MODEL_TOOLS does not expose internal submit_payment_batch', () => {
+    const names = MODEL_TOOLS.map(t => t.name);
+    expect(names).not.toContain('submit_payment_batch');
   });
 
   it('render_artifact requires kind and title', () => {
@@ -427,5 +439,131 @@ describe('runTool — mock S&E (list_expenses, get_employee)', () => {
   it('get_employee returns ok=false when id is missing', async () => {
     const result = await runTool('get_employee', {});
     expect(result.ok).toBe(false);
+  });
+});
+
+describe('runTool — internal-tool guard', () => {
+  it('refuses submit_payment_batch without allowInternal', async () => {
+    const result = await runTool('submit_payment_batch', { batchId: 'btch_x' });
+    expect(result.ok).toBe(false);
+    expect(result.summary).toMatch(/internal/i);
+  });
+
+  it('allows submit_payment_batch when allowInternal is true', async () => {
+    const result = await runTool(
+      'submit_payment_batch',
+      { batchId: 'btch_abc123' },
+      undefined,
+      { allowInternal: true }
+    );
+    expect(result.ok).toBe(true);
+    const data = result.data as any;
+    expect(data.confirmationId).toMatch(/^PMT-[A-Z0-9]{6}$/);
+    expect(data.simulated).toBe(true);
+  });
+});
+
+describe('runTool — stage_payment_batch', () => {
+  it('requires billIds', async () => {
+    const result = await runTool('stage_payment_batch', {});
+    expect(result.ok).toBe(false);
+    expect(result.summary).toMatch(/billIds/);
+  });
+
+  it('returns approvalPayload with stake=payment below $25k', async () => {
+    // Pick a small bill from fixtures to keep total small
+    const smallBill = BILLS.slice().sort((a, b) => a.amount - b.amount)[0];
+    const result = await runTool('stage_payment_batch', { billIds: [smallBill.id] });
+    expect(result.ok).toBe(true);
+    const data = result.data as any;
+    expect(data.simulated).toBe(true);
+    expect(data.approvalPayload.stake).toBe('payment');
+    expect(data.approvalPayload.total).toBe(smallBill.amount);
+    expect(data.approvalPayload.items).toHaveLength(1);
+  });
+
+  it('promotes stake to large-payment when total exceeds $25k via billHints', async () => {
+    const result = await runTool('stage_payment_batch', {
+      billIds: ['bll_unknown_xyz'],
+      billHints: [{ id: 'bll_unknown_xyz', amount: 30000, vendor: 'Unknown LLP', invoice: 'INV-X' }],
+    });
+    expect(result.ok).toBe(true);
+    const data = result.data as any;
+    expect(data.approvalPayload.stake).toBe('large-payment');
+    expect(data.approvalPayload.requiresSecondApprover).toBe(true);
+    expect(data.approvalPayload.items[0].amount).toBe(30000);
+    expect(data.approvalPayload.items[0].vendor).toBe('Unknown LLP');
+  });
+
+  it('stake stays payment at boundary of $25k total', async () => {
+    const result = await runTool('stage_payment_batch', {
+      billIds: ['bll_boundary'],
+      billHints: [{ id: 'bll_boundary', amount: 25000 }],
+    });
+    expect(result.ok).toBe(true);
+    const data = result.data as any;
+    expect(data.approvalPayload.stake).toBe('payment');
+  });
+
+  it('falls back to hint-derived fields when bill id is not in the dataset', async () => {
+    const result = await runTool('stage_payment_batch', {
+      billIds: ['bll_zzz999'],
+      billHints: [{ id: 'bll_zzz999', amount: 100 }],
+    });
+    expect(result.ok).toBe(true);
+    const data = result.data as any;
+    expect(data.approvalPayload.items).toHaveLength(1);
+    expect(data.approvalPayload.items[0].amount).toBe(100);
+    // Falls back to hint vendor/invoice format even without explicit vendor
+    expect(typeof data.approvalPayload.items[0].invoice).toBe('string');
+    expect(typeof data.approvalPayload.items[0].vendor).toBe('string');
+  });
+});
+
+describe('runTool — approve_expense / reject_expense', () => {
+  it('approve_expense is tolerant of unknown expense id', async () => {
+    const result = await runTool('approve_expense', { expenseId: 'exp_unknown_xyz' });
+    expect(result.ok).toBe(true);
+    expect(result.summary).toMatch(/simulated · unknown id/);
+    const data = result.data as any;
+    expect(data.simulated).toBe(true);
+  });
+
+  it('approve_expense resolves a known expense', async () => {
+    const exp = EXPENSES[0];
+    const result = await runTool('approve_expense', { expenseId: exp.id });
+    expect(result.ok).toBe(true);
+    expect(result.summary).toMatch(/\(simulated\)/);
+    const data = result.data as any;
+    expect(data.expenseId).toBe(exp.id);
+    expect(data.simulated).toBe(true);
+  });
+
+  it('reject_expense is tolerant of unknown expense id', async () => {
+    const result = await runTool('reject_expense', {
+      expenseId: 'exp_unknown_xyz',
+      reason: 'over budget',
+    });
+    expect(result.ok).toBe(true);
+    expect(result.summary).toMatch(/simulated · unknown id/);
+  });
+
+  it('reject_expense requires expenseId', async () => {
+    const result = await runTool('reject_expense', { reason: 'missing' });
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe('runTool — create_automation_rule', () => {
+  it('creates a simulated rule with an id', async () => {
+    const result = await runTool('create_automation_rule', {
+      name: 'Net-15 auto-flag',
+      trigger: 'bill.created',
+    });
+    expect(result.ok).toBe(true);
+    expect(result.summary).toMatch(/Net-15 auto-flag/);
+    const data = result.data as any;
+    expect(typeof data.ruleId).toBe('string');
+    expect(data.simulated).toBe(true);
   });
 });

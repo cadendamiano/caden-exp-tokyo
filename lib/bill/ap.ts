@@ -172,6 +172,32 @@ function levenshtein(a: string, b: string): number {
   return prev[n];
 }
 
+// ─── Write stubs ──────────────────────────────────────────────────────
+// Returned `{ simulated: true }` flips the dispatcher to the mock handler.
+// When real AP write endpoints are wired, these can return the live response
+// (without `simulated: true`) and the dispatcher will pass it through.
+
+export async function apStagePaymentBatch(
+  _env: BillEnvironment,
+  _input: unknown
+): Promise<{ simulated: true; note: string }> {
+  return { simulated: true, note: 'real write endpoint not yet wired' };
+}
+
+export async function apSubmitPaymentBatch(
+  _env: BillEnvironment,
+  _input: unknown
+): Promise<{ simulated: true; note: string }> {
+  return { simulated: true, note: 'real write endpoint not yet wired' };
+}
+
+export async function apCreateAutomationRule(
+  _env: BillEnvironment,
+  _input: unknown
+): Promise<{ simulated: true; note: string }> {
+  return { simulated: true, note: 'real write endpoint not yet wired' };
+}
+
 export async function apFindDuplicateInvoices(
   env: BillEnvironment,
   days = 60

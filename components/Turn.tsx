@@ -6,10 +6,11 @@ import { Icon } from './primitives/Icon';
 import { Markdown } from './primitives/Markdown';
 import { ArtifactThumb } from './ArtifactThumb';
 import type { Turn as TurnType } from '@/lib/turns';
+import type { ApprovalState } from '@/lib/store';
 
 type Props = {
   turn: TurnType;
-  approvalState: 'approved' | 'rejected' | null;
+  approvalState: ApprovalState | null;
   onApprove: (batchId: string) => void;
   onReject: (batchId: string) => void;
   activeArtifact: string | null;
@@ -81,6 +82,7 @@ export function Turn({
           <ApprovalCard
             payload={turn.payload}
             state={approvalState}
+            simulated={turn.simulated ?? false}
             onApprove={onApprove}
             onReject={onReject}
           />

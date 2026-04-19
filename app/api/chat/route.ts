@@ -1,8 +1,12 @@
 import { NextRequest } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI, Type } from '@google/genai';
-import { TOOLS, runTool, SYSTEM_PROMPT, TESTING_SYSTEM_PROMPT, type ToolContext } from '@/lib/tools';
+import { MODEL_TOOLS, runTool, SYSTEM_PROMPT, TESTING_SYSTEM_PROMPT, type ToolContext } from '@/lib/tools';
+import type { DatasetKey } from '@/lib/data';
+import type { FlowStep } from '@/lib/flows';
 import { getAnthropicKey, getGeminiKey } from '@/lib/secrets';
+
+type ApprovalPayload = Extract<FlowStep, { kind: 'approval' }>['payload'];
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,6 +16,7 @@ type Event =
   | { type: 'tool-call'; id: string; name: string; input: any }
   | { type: 'tool-result'; id: string; name: string; input: any; ok: boolean; summary: string }
   | { type: 'artifact'; kind: string; title?: string; sub?: string; meta?: string; label?: string; icon?: string }
+  | { type: 'approval'; payload: ApprovalPayload; simulated: boolean }
   | { type: 'done' }
   | { type: 'error'; message: string };
 
@@ -26,12 +31,14 @@ export async function POST(req: NextRequest) {
     mode?: 'demo' | 'testing';
     billEnvId?: string;
     billProduct?: 'ap' | 'se';
+    demoDataset?: DatasetKey;
   };
   const { provider, userMessage } = body;
   const ctx: ToolContext = {
     mode: body.mode ?? 'demo',
     billEnvId: body.billEnvId,
     billProduct: body.billProduct,
+    demoDataset: body.demoDataset,
   };
   const systemPrompt = ctx.mode === 'testing' ? TESTING_SYSTEM_PROMPT : SYSTEM_PROMPT;
 
@@ -74,7 +81,7 @@ async function runAnthropic(
   if (!apiKey) throw new Error('Anthropic API key not set. Configure it in Settings (or ANTHROPIC_API_KEY in .env.local).');
 
   const client = new Anthropic({ apiKey });
-  const tools = TOOLS.map(t => ({
+  const tools = MODEL_TOOLS.map(t => ({
     name: t.name,
     description: t.description,
     input_schema: t.parameters as any,
@@ -128,6 +135,10 @@ async function runAnthropic(
           label: inp.title,
         });
       }
+      if (tu.name === 'stage_payment_batch' && res.data && (res.data as any).approvalPayload) {
+        const d = res.data as { approvalPayload: ApprovalPayload; simulated?: boolean };
+        send({ type: 'approval', payload: d.approvalPayload, simulated: d.simulated === true });
+      }
       toolResults.push({
         type: 'tool_result',
         tool_use_id: tu.id,
@@ -154,7 +165,7 @@ async function runGemini(
 
   const geminiTools = [
     {
-      functionDeclarations: TOOLS.map(t => ({
+      functionDeclarations: MODEL_TOOLS.map(t => ({
         name: t.name,
         description: t.description,
         parameters: jsonSchemaToGemini(t.parameters),
@@ -212,6 +223,10 @@ async function runGemini(
           meta: inp.meta,
           label: inp.title,
         });
+      }
+      if (tc.name === 'stage_payment_batch' && res.data && (res.data as any).approvalPayload) {
+        const d = res.data as { approvalPayload: ApprovalPayload; simulated?: boolean };
+        send({ type: 'approval', payload: d.approvalPayload, simulated: d.simulated === true });
       }
       toolParts.push({
         functionResponse: {

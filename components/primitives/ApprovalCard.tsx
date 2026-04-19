@@ -3,13 +3,15 @@
 import { useState } from 'react';
 import { fmtMoney } from '@/lib/format';
 import type { FlowStep } from '@/lib/flows';
+import type { ApprovalState } from '@/lib/store';
 
 type ApprovalPayload = Extract<FlowStep, { kind: 'approval' }>['payload'];
 type Stake = ApprovalPayload['stake'];
 
 type Props = {
   payload: ApprovalPayload;
-  state?: 'approved' | 'rejected' | null;
+  state?: ApprovalState | null;
+  simulated?: boolean;
   onApprove: (batchId: string) => void;
   onReject: (batchId: string) => void;
 };
@@ -51,18 +53,24 @@ function LineItems({ items }: { items: ApprovalPayload['items'] }) {
   );
 }
 
-function headLabel(stake: Stake | undefined, approved: boolean, rejected: boolean, batchId: string) {
-  if (approved) return <><span style={{ color: 'var(--pos)' }}>✓</span>Approved · {batchId}</>;
-  if (rejected) return <><span style={{ color: 'var(--neg)' }}>×</span>Cancelled · {batchId}</>;
+function headLabel(
+  stake: Stake | undefined,
+  state: ApprovalState | null | undefined,
+  batchId: string
+) {
+  if (state === 'approved') return <><span style={{ color: 'var(--pos)' }}>✓</span>Approved · {batchId}</>;
+  if (state === 'rejected') return <><span style={{ color: 'var(--neg)' }}>×</span>Cancelled · {batchId}</>;
+  if (state === 'submitting') return <><span className="pulse" />Submitting · {batchId}</>;
   if (stake === 'large-payment') {
     return <><span className="pulse" style={{ background: 'var(--warn)' }} />Awaiting approval · second approver required</>;
   }
   return <><span className="pulse" />Awaiting approval · payment batch</>;
 }
 
-export function ApprovalCard({ payload, state, onApprove, onReject }: Props) {
+export function ApprovalCard({ payload, state, simulated = false, onApprove, onReject }: Props) {
   const approved = state === 'approved';
   const rejected = state === 'rejected';
+  const submitting = state === 'submitting';
   const stake: Stake = (payload as any).stake ?? 'payment';
 
   // Typed confirmation state for payment / large-payment stakes
@@ -73,12 +81,29 @@ export function ApprovalCard({ payload, state, onApprove, onReject }: Props) {
   // Second-approver request state
   const [requestSent, setRequestSent] = useState(false);
 
+  const approveLabel = submitting ? 'Submitting…' : 'Approve & submit';
+
   return (
     <div className="approval">
       <div className="approval-head">
-        {headLabel(stake, approved, rejected, payload.batchId)}
+        {headLabel(stake, state ?? null, payload.batchId)}
         {stake === 'large-payment' && !approved && !rejected && (
           <span className="approval-second-badge">⚠ Requires second approver</span>
+        )}
+        {simulated && !approved && !rejected && (
+          <span
+            className="approval-simulated-badge"
+            style={{
+              marginLeft: 'auto',
+              fontFamily: 'var(--mono)',
+              fontSize: 10.5,
+              color: 'var(--ink-4)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+            }}
+          >
+            simulated
+          </span>
         )}
       </div>
 
@@ -118,6 +143,7 @@ export function ApprovalCard({ payload, state, onApprove, onReject }: Props) {
                 onChange={e => setConfirmInput(e.target.value)}
                 autoComplete="off"
                 spellCheck={false}
+                disabled={submitting}
               />
             </div>
           )}
@@ -126,12 +152,16 @@ export function ApprovalCard({ payload, state, onApprove, onReject }: Props) {
             <div className="approval-actions">
               <button
                 className="btn btn-primary"
-                disabled={!confirmMatches}
-                onClick={() => { if (confirmMatches) onApprove(payload.batchId); }}
+                disabled={!confirmMatches || submitting}
+                onClick={() => { if (confirmMatches && !submitting) onApprove(payload.batchId); }}
               >
-                Approve &amp; submit <span className="kbd">⌘↵</span>
+                {approveLabel} <span className="kbd">⌘↵</span>
               </button>
-              <button className="btn btn-ghost" onClick={() => onReject(payload.batchId)}>
+              <button
+                className="btn btn-ghost"
+                onClick={() => onReject(payload.batchId)}
+                disabled={submitting}
+              >
                 Cancel batch
               </button>
               <div style={{ flex: 1 }} />
@@ -141,9 +171,34 @@ export function ApprovalCard({ payload, state, onApprove, onReject }: Props) {
             </div>
           )}
 
-          {stake === 'large-payment' && (
+          {stake === 'large-payment' && simulated && (
+            <div className="approval-actions">
+              <button
+                className="btn btn-primary"
+                disabled={!confirmMatches || submitting}
+                onClick={() => { if (confirmMatches && !submitting) onApprove(payload.batchId); }}
+              >
+                {approveLabel} (simulated)
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={() => onReject(payload.batchId)}
+                disabled={submitting}
+              >
+                Cancel batch
+              </button>
+              <div style={{ flex: 1 }} />
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--ink-4)' }}>
+                audit: req_{payload.batchId}
+              </span>
+            </div>
+          )}
+
+          {stake === 'large-payment' && !simulated && (
             <div className="approval-actions">
               {requestSent ? (
+                // Second-approver path: intentionally no onApprove call from the client —
+                // the Controller sign-off would dispatch submission on the server side.
                 <div className="approval-request-sent">
                   ✓ Approval request sent to Maria Chen (Controller) · awaiting sign-off
                 </div>
@@ -151,12 +206,16 @@ export function ApprovalCard({ payload, state, onApprove, onReject }: Props) {
                 <>
                   <button
                     className="btn btn-primary"
-                    disabled={!confirmMatches}
-                    onClick={() => { if (confirmMatches) setRequestSent(true); }}
+                    disabled={!confirmMatches || submitting}
+                    onClick={() => { if (confirmMatches && !submitting) setRequestSent(true); }}
                   >
                     Request approval from Controller
                   </button>
-                  <button className="btn btn-ghost" onClick={() => onReject(payload.batchId)}>
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => onReject(payload.batchId)}
+                    disabled={submitting}
+                  >
                     Cancel batch
                   </button>
                   <div style={{ flex: 1 }} />
