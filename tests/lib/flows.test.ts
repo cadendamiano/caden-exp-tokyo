@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { matchFlow, FLOWS, LOGISTICS_FLOWS } from '@/lib/flows';
+import { matchFlow, FLOWS, LOGISTICS_FLOWS, type Flow } from '@/lib/flows';
+
+const FLOWS_BY_ID = FLOWS as Record<string, Flow>;
+const LOGISTICS_FLOWS_BY_ID = LOGISTICS_FLOWS as Record<string, Flow>;
 
 describe('matchFlow', () => {
   it('matches pay_batch when message mentions paying overdue invoices', () => {
@@ -79,13 +82,13 @@ describe('FLOWS', () => {
 
   it('contains all expected flows', () => {
     for (const id of flowIds) {
-      expect(FLOWS[id]).toBeDefined();
+      expect(FLOWS_BY_ID[id]).toBeDefined();
     }
   });
 
   it('every flow has an id, title, and steps array', () => {
     for (const id of flowIds) {
-      const flow = FLOWS[id];
+      const flow = FLOWS_BY_ID[id];
       expect(typeof flow.id).toBe('string');
       expect(typeof flow.title).toBe('string');
       expect(Array.isArray(flow.steps)).toBe(true);
@@ -95,7 +98,7 @@ describe('FLOWS', () => {
 
   it('every step has a kind', () => {
     for (const id of flowIds) {
-      for (const step of FLOWS[id].steps) {
+      for (const step of FLOWS_BY_ID[id].steps) {
         expect(typeof step.kind).toBe('string');
       }
     }
@@ -187,13 +190,13 @@ describe('LOGISTICS_FLOWS', () => {
 
   it('contains all 7 expected flow ids', () => {
     for (const id of flowIds) {
-      expect(LOGISTICS_FLOWS[id]).toBeDefined();
+      expect(LOGISTICS_FLOWS_BY_ID[id]).toBeDefined();
     }
   });
 
   it('every flow has an id, title, and steps array', () => {
     for (const id of flowIds) {
-      const flow = LOGISTICS_FLOWS[id];
+      const flow = LOGISTICS_FLOWS_BY_ID[id];
       expect(typeof flow.id).toBe('string');
       expect(typeof flow.title).toBe('string');
       expect(Array.isArray(flow.steps)).toBe(true);

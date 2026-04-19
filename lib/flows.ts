@@ -48,7 +48,7 @@ export type Flow = {
   artifact?: { id: string; kind: ArtifactKind; label: string; filter?: string };
 };
 
-export const FLOWS: Record<string, Flow> = {
+export const FLOWS = {
   ap_overdue: {
     id: 'ap_overdue',
     title: 'Overdue AP · by urgency',
@@ -242,9 +242,11 @@ Open the artifact to review each pair side-by-side. I won't void anything withou
       { kind: 'suggest', items: ['Open review queue', 'Void the high-confidence match', 'Tune matcher', 'Save as scheduled sweep'] },
     ],
   },
-};
+} satisfies Record<string, Flow>;
 
-export const LOGISTICS_FLOWS: Record<string, Flow> = {
+export type FlowId = keyof typeof FLOWS;
+
+export const LOGISTICS_FLOWS = {
   ap_overdue: {
     id: 'ap_overdue',
     title: 'Overdue AP · Crestview Freight',
@@ -438,7 +440,7 @@ Open the artifact to review side-by-side. I won't void anything without approval
       { kind: 'suggest', items: ['Open review queue', 'Void the duplicate', 'Tune matcher', 'Save as scheduled sweep'] },
     ],
   },
-};
+} satisfies Record<string, Flow>;
 
 export function matchFlow(text: string, dataset: DatasetKey = 'default'): string | null {
   const low = text.toLowerCase();

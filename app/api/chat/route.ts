@@ -1,11 +1,12 @@
 import { NextRequest } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI, Type } from '@google/genai';
-import { MODEL_TOOLS, runTool, SYSTEM_PROMPT, TESTING_SYSTEM_PROMPT, type ToolContext } from '@/lib/tools';
+import { runTool, SYSTEM_PROMPT, TESTING_SYSTEM_PROMPT, type ToolContext, type ToolDef } from '@/lib/tools';
 import type { DatasetKey } from '@/lib/data';
-import type { FlowStep } from '@/lib/flows';
+import type { ArtifactKind, FlowStep } from '@/lib/flows';
 import { getAnthropicKey, getGeminiKey } from '@/lib/secrets';
 import { providerOf } from '@/lib/models';
+import { buildModelTools, buildRequirementsBlock, coerceArtifactKind } from '@/lib/chatSchema';
 
 type ApprovalPayload = Extract<FlowStep, { kind: 'approval' }>['payload'];
 
@@ -33,6 +34,9 @@ export async function POST(req: NextRequest) {
     billEnvId?: string;
     billProduct?: 'ap' | 'se';
     demoDataset?: DatasetKey;
+    forcedKind?: ArtifactKind;
+    requirements?: string[];
+    commandName?: string;
   };
   const { model, userMessage } = body;
   const provider = providerOf(model);
@@ -42,7 +46,13 @@ export async function POST(req: NextRequest) {
     billProduct: body.billProduct,
     demoDataset: body.demoDataset,
   };
-  const systemPrompt = ctx.mode === 'testing' ? TESTING_SYSTEM_PROMPT : SYSTEM_PROMPT;
+  const baseSystem = ctx.mode === 'testing' ? TESTING_SYSTEM_PROMPT : SYSTEM_PROMPT;
+  const systemPrompt =
+    body.forcedKind && body.commandName
+      ? `${baseSystem}\n\n${buildRequirementsBlock(body.commandName, body.forcedKind, body.requirements ?? [])}`
+      : baseSystem;
+  const tools = buildModelTools(body.forcedKind);
+  const forcedKind = body.forcedKind;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -50,9 +60,9 @@ export async function POST(req: NextRequest) {
       const send = (ev: Event) => controller.enqueue(encoder.encode(sseEncode(ev)));
       try {
         if (provider === 'gemini') {
-          await runGemini(model, userMessage, send, ctx, systemPrompt);
+          await runGemini(model, userMessage, send, ctx, systemPrompt, tools, forcedKind);
         } else {
-          await runAnthropic(model, userMessage, send, ctx, systemPrompt);
+          await runAnthropic(model, userMessage, send, ctx, systemPrompt, tools, forcedKind);
         }
       } catch (e: any) {
         send({ type: 'error', message: e?.message ?? 'unknown error' });
@@ -78,13 +88,15 @@ async function runAnthropic(
   userMessage: string,
   send: (ev: Event) => void,
   ctx: ToolContext,
-  systemPrompt: string
+  systemPrompt: string,
+  modelTools: ToolDef[],
+  forcedKind: ArtifactKind | undefined
 ) {
   const apiKey = await getAnthropicKey();
   if (!apiKey) throw new Error('Anthropic API key not set. Configure it in Settings (or ANTHROPIC_API_KEY in .env.local).');
 
   const client = new Anthropic({ apiKey });
-  const tools = MODEL_TOOLS.map(t => ({
+  const tools = modelTools.map(t => ({
     name: t.name,
     description: t.description,
     input_schema: t.parameters as any,
@@ -129,9 +141,10 @@ async function runAnthropic(
       send({ type: 'tool-result', id: tu.id, name: tu.name, input: tu.input, ok: res.ok, summary: res.summary });
       if (tu.name === 'render_artifact') {
         const inp = tu.input as any;
+        const kind = coerceArtifactKind(inp.kind, forcedKind);
         send({
           type: 'artifact',
-          kind: inp.kind,
+          kind,
           title: inp.title,
           sub: inp.sub,
           meta: inp.meta,
@@ -160,7 +173,9 @@ async function runGemini(
   userMessage: string,
   send: (ev: Event) => void,
   ctx: ToolContext,
-  systemPrompt: string
+  systemPrompt: string,
+  modelTools: ToolDef[],
+  forcedKind: ArtifactKind | undefined
 ) {
   const apiKey = await getGeminiKey();
   if (!apiKey) throw new Error('Gemini API key not set. Configure it in Settings (or GEMINI_API_KEY in .env.local).');
@@ -169,7 +184,7 @@ async function runGemini(
 
   const geminiTools = [
     {
-      functionDeclarations: MODEL_TOOLS.map(t => ({
+      functionDeclarations: modelTools.map(t => ({
         name: t.name,
         description: t.description,
         parameters: jsonSchemaToGemini(t.parameters),
@@ -219,9 +234,10 @@ async function runGemini(
       send({ type: 'tool-result', id: tc.id, name: tc.name, input: tc.input, ok: res.ok, summary: res.summary });
       if (tc.name === 'render_artifact') {
         const inp = tc.input as any;
+        const kind = coerceArtifactKind(inp.kind, forcedKind);
         send({
           type: 'artifact',
-          kind: inp.kind,
+          kind,
           title: inp.title,
           sub: inp.sub,
           meta: inp.meta,

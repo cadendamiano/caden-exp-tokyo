@@ -1,12 +1,16 @@
 'use client';
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { DEMO_PROMPTS, LOGISTICS_DEMO_PROMPTS } from '@/lib/data';
 import { useStore } from '@/lib/store';
 import { runFlow, runLLM, runLLMTesting } from '@/lib/runtime';
-import { matchFlow } from '@/lib/flows';
 import { MODELS, providerOf } from '@/lib/models';
 import { ModelPicker } from './ModelPicker';
+import { matchSlashPrefix, parseSlash, type SlashCommand } from '@/lib/slashCommands';
+import { resolveComposerSubmit } from '@/lib/resolveComposerSubmit';
+import { SlashMenu } from './SlashMenu';
+
+const SLASH_PREFIX_RE = /^\/([a-z0-9]*)$/i;
 
 export function Composer() {
   const composer = useStore(s => s.composer);
@@ -18,7 +22,13 @@ export function Composer() {
   const settingsStatus = useStore(s => s.settingsStatus);
   const setSettingsStatus = useStore(s => s.setSettingsStatus);
   const setTweak = useStore(s => s.setTweak);
+  const activeTestingThreadId = useStore(s => s.activeTestingThreadId);
   const ref = useRef<HTMLTextAreaElement>(null);
+
+  const [forcedCmd, setForcedCmd] = useState<SlashCommand | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuQuery, setMenuQuery] = useState('');
+  const [menuIndex, setMenuIndex] = useState(0);
 
   useEffect(() => {
     if (!streaming) ref.current?.focus();
@@ -54,23 +64,121 @@ export function Composer() {
     if (fallback) setTweak('modelId', fallback.id);
   }, [settingsStatus, modelId, setTweak]);
 
-  const onSubmit = () => {
-    const v = composer.trim();
-    if (!v || streaming) return;
-    setComposer('');
-    if (mode === 'testing') {
-      runLLMTesting(v);
+  // Clear forced command when mode changes.
+  useEffect(() => {
+    setForcedCmd(null);
+    setMenuOpen(false);
+  }, [mode]);
+
+  // Clear forced command when active testing thread changes.
+  useEffect(() => {
+    setForcedCmd(null);
+    setMenuOpen(false);
+  }, [activeTestingThreadId]);
+
+  const openMenuFor = (query: string) => {
+    setMenuQuery(query);
+    setMenuIndex(0);
+    setMenuOpen(true);
+  };
+
+  const onChange = (value: string) => {
+    setComposer(value);
+
+    if (forcedCmd) {
+      // Once a command is locked in, textarea value is the body only.
       return;
     }
-    const matched = matchFlow(v, demoDataset);
-    if (matched) {
-      runFlow(matched);
+
+    // No-space prefix while typing the command name → menu is a filter.
+    const m = SLASH_PREFIX_RE.exec(value);
+    if (m) {
+      openMenuFor(m[1]);
+      return;
+    }
+
+    // Space after a recognized slash → lock in the command.
+    const parsed = parseSlash(value);
+    if (parsed && / /.test(value)) {
+      setForcedCmd(parsed.cmd);
+      setMenuOpen(false);
+      setComposer(parsed.body);
+      return;
+    }
+
+    setMenuOpen(false);
+  };
+
+  const selectCommand = (cmd: SlashCommand) => {
+    setForcedCmd(cmd);
+    setMenuOpen(false);
+    setComposer('');
+    ref.current?.focus();
+  };
+
+  const clearForced = () => {
+    setForcedCmd(null);
+  };
+
+  const onSubmit = () => {
+    const action = resolveComposerSubmit({
+      body: composer,
+      streaming,
+      forcedCmd,
+      mode,
+      demoDataset,
+    });
+
+    if (action.kind === 'ignore') return;
+
+    setComposer('');
+    setForcedCmd(null);
+    setMenuOpen(false);
+
+    if (action.kind === 'flow') {
+      runFlow(action.flowId);
+      return;
+    }
+    if (mode === 'testing') {
+      runLLMTesting(action.body, action.opts);
     } else {
-      runLLM(v);
+      runLLM(action.body, action.opts);
     }
   };
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (menuOpen) {
+      const matches = matchSlashPrefix(menuQuery);
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (matches.length > 0) setMenuIndex(i => (i + 1) % matches.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (matches.length > 0) setMenuIndex(i => (i - 1 + matches.length) % matches.length);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMenuOpen(false);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        if (matches.length > 0) {
+          e.preventDefault();
+          selectCommand(matches[menuIndex] ?? matches[0]);
+          return;
+        }
+      }
+    }
+
+    if (e.key === 'Backspace' && forcedCmd && e.currentTarget.selectionStart === 0 && e.currentTarget.selectionEnd === 0) {
+      e.preventDefault();
+      clearForced();
+      return;
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       onSubmit();
@@ -104,12 +212,36 @@ export function Composer() {
         </div>
       )}
       <div className="composer-shell">
+        {menuOpen && (
+          <SlashMenu
+            query={menuQuery}
+            activeIndex={menuIndex}
+            onSelect={selectCommand}
+            onHover={setMenuIndex}
+          />
+        )}
+        {forcedCmd && (
+          <div className="composer-forced">
+            <span className="composer-forced-chip">
+              /{forcedCmd.name}
+              <button
+                type="button"
+                aria-label={`Clear /${forcedCmd.name}`}
+                onClick={clearForced}
+                className="composer-forced-x"
+              >
+                ×
+              </button>
+            </span>
+            <span className="composer-forced-hint">{forcedCmd.hint}</span>
+          </div>
+        )}
         <textarea
           ref={ref}
           value={composer}
-          onChange={(e) => setComposer(e.target.value)}
+          onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKey}
-          placeholder={placeholder}
+          placeholder={forcedCmd ? `describe the ${forcedCmd.name} — body only; empty is ok` : placeholder}
           rows={1}
           disabled={streaming}
           style={{ opacity: streaming ? 0.55 : 1 }}
