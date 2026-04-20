@@ -11,15 +11,15 @@ type CodeLine = { text: string; kind?: 'comment' | 'keyword' | 'string' | 'plain
 
 function renderLines(lines: CodeLine[]) {
   return lines.map((line, i) => {
-    const text = line.text;
     const kind = line.kind;
     let color = 'var(--ink-3)';
     if (kind === 'comment') color = 'var(--ink-4)';
     else if (kind === 'keyword') color = 'oklch(0.78 0.10 195)';
     else if (kind === 'string') color = 'oklch(0.78 0.10 95)';
     return (
-      <div key={i} style={{ color, whiteSpace: 'pre' }}>
-        {text}
+      <div key={i} className="code-line">
+        <span className="code-ln">{i + 1}</span>
+        <span className="code-ln-text" style={{ color }}>{line.text || '\u00A0'}</span>
       </div>
     );
   });
