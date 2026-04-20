@@ -83,34 +83,50 @@ input, textarea, select{ font-family: inherit; color: inherit; }
 /* ---------- Top bar ---------- */
 .topbar{
   grid-column: 1 / -1;
-  display: flex; align-items: center; gap: 14px;
+  display: flex; align-items: center; gap: 12px;
   padding: 0 14px;
   border-bottom: 1px solid var(--line);
-  background: var(--surface);
+  background: #edf0ed;
 }
-.brand{
-  display: flex; align-items: center; gap: 9px;
-  font-family: var(--mono); font-weight: 600; font-size: 12.5px; letter-spacing: 0.02em;
+
+.topbar-crumbs{
+  display: flex; align-items: center; gap: 8px;
+  min-width: 0;
 }
-.brand-mark{
-  width: 22px; height: 22px; border-radius: 5px;
-  background: var(--ink); color: var(--bg);
-  display: grid; place-items: center;
-  font-family: var(--mono); font-weight: 700; font-size: 11px;
+.topbar-product{
+  font-family: var(--sans); font-weight: 600; font-size: 13px;
+  color: #212421; letter-spacing: 0;
+  white-space: nowrap;
 }
-.brand-mark span{ color: var(--teal); }
-.brand-divider{ color: var(--ink-4); font-weight: 400; }
-.brand-sub{ color: var(--ink-3); font-weight: 500; }
+.topbar-sep{
+  font-family: var(--sans); font-size: 13px; color: #adb0ad;
+  user-select: none;
+}
+.topbar-chip{
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 26px; padding: 0 8px; border-radius: 6px;
+  background: #e5e8e5; color: #4d4f4d;
+  font-family: var(--sans); font-size: 11.5px;
+  white-space: nowrap;
+}
+.topbar-entity-dot{
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--teal);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--teal) 22%, transparent);
+}
+.topbar-env{
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 20px; padding: 0 8px; border-radius: 4px;
+  background: #e5e8e5; color: #808280;
+  font-family: var(--sans); font-weight: 500; font-size: 11px;
+  text-transform: lowercase; letter-spacing: 0;
+}
+.topbar-env.testing{
+  color: var(--warn);
+  background: var(--warn-soft);
+}
 
 .topbar-spacer{ flex: 1; }
-
-.workspace-pill{
-  display: flex; align-items: center; gap: 8px;
-  padding: 4px 10px 4px 6px; border: 1px solid var(--line); border-radius: 999px;
-  font-family: var(--mono); font-size: 11.5px; color: var(--ink-2);
-  background: var(--surface); box-shadow: var(--shadow-sm);
-}
-.workspace-dot{ width:14px; height:14px; border-radius:4px; background: linear-gradient(135deg, var(--teal), var(--teal-ink)); }
 
 .topbar-meta{ font-family: var(--mono); font-size: 11px; color: var(--ink-3); display:flex; gap: 14px; align-items: center; }
 .kbd{ font-family: var(--mono); font-size: 10.5px; padding: 2px 5px; border:1px solid var(--line); border-bottom-width:2px; border-radius: 4px; color: var(--ink-2); background: var(--surface); }
@@ -376,24 +392,47 @@ input, textarea, select{ font-family: inherit; color: inherit; }
   position: relative;
   height: 170px;
   background:
-    linear-gradient(180deg, color-mix(in oklab, var(--teal-soft) 60%, transparent), transparent 60%),
-    radial-gradient(ellipse at top right, color-mix(in oklab, var(--teal) 10%, transparent), transparent 55%),
+    linear-gradient(180deg, color-mix(in oklab, var(--teal-soft) 60%, transparent) 0%, transparent 60%),
     var(--surface-2);
   border-bottom: 1px solid var(--line-2);
   display: grid; place-items: center;
   overflow: hidden;
 }
-.artifact-card-hero::before{
-  content: '';
-  position: absolute; inset: 0;
-  background-image:
-    linear-gradient(var(--line-2) 1px, transparent 1px),
-    linear-gradient(90deg, var(--line-2) 1px, transparent 1px);
-  background-size: 22px 22px;
-  opacity: 0.35;
-  mask-image: radial-gradient(ellipse at center, black 35%, transparent 75%);
-}
 .artifact-card-hero > svg{ position: relative; z-index: 1; }
+
+/* rule-net15 GIVEN/WHEN/THEN chip stack — top-aligned 31px from hero top */
+.rule-chip-stack{
+  align-self: start;
+  padding-top: 48px;
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+  position: relative; z-index: 1;
+}
+.rule-chip-row{
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 0;
+}
+.rule-chip-label{
+  background: var(--teal-soft);
+  color: var(--ink-2);
+  font-family: var(--mono); font-weight: 700;
+  font-size: 10px; letter-spacing: 0.1em;
+  padding: 3px 6px; border-radius: 4px;
+  width: 55px; text-align: center; line-height: 1;
+  box-sizing: border-box;
+}
+.rule-chip-op{
+  background: var(--surface-2);
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  padding: 3px 6px; border-radius: 4px;
+  line-height: 1;
+}
+.rule-chip-value{
+  background: var(--ink-3);
+  height: 21px; width: 139px; border-radius: 4px;
+  flex-shrink: 0;
+}
 
 .artifact-card-kind{
   position: absolute; top: 10px; left: 10px;
@@ -438,13 +477,13 @@ input, textarea, select{ font-family: inherit; color: inherit; }
   display: flex; align-items: center; gap: 10px;
   padding: 10px 14px 12px;
   border-top: 1px solid var(--line-2);
-  background: linear-gradient(180deg, transparent, color-mix(in oklab, var(--surface-2) 60%, transparent));
+  background: color-mix(in oklab, var(--surface-2) 50%, transparent);
 }
 .artifact-card-foot .source{
   font-family: var(--mono); font-size: 10.5px; color: var(--ink-4);
   display: inline-flex; align-items: center; gap: 6px;
 }
-.artifact-card-foot .source .src-dot{ width: 5px; height: 5px; border-radius: 50%; background: var(--pos); }
+.artifact-card-foot .source .src-dot{ width: 5px; height: 5px; border-radius: 50%; background: var(--teal); }
 .artifact-card-foot .spacer{ flex: 1; }
 .artifact-card-foot .cta{
   display: inline-flex; align-items: center; gap: 6px;
@@ -854,9 +893,25 @@ input, textarea, select{ font-family: inherit; color: inherit; }
 .code-block{
   font-family: var(--mono); font-size: 11.5px; line-height: 1.6;
   background: #0F1419; color: #E6E4DC;
-  border-radius: var(--radius); padding: 14px 16px;
-  overflow-x: auto;
+  border-radius: 0; padding: 0; margin: 0;
+  overflow: auto;
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
 }
+.code-line{
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  align-items: baseline;
+  white-space: pre;
+}
+.code-ln{
+  color: color-mix(in oklab, #E6E4DC 26%, transparent);
+  text-align: right;
+  padding-right: 16px;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+.code-ln-text{ white-space: pre; padding-right: 16px; }
 .code-block .k{ color: oklch(0.78 0.10 195); }
 .code-block .s{ color: oklch(0.78 0.10 95); }
 .code-block .c{ color: var(--ink-4); }
@@ -1006,22 +1061,6 @@ input, textarea, select{ font-family: inherit; color: inherit; }
   background: var(--ink); color: var(--bg); border-color: var(--ink);
 }
 
-.topbar-mode-badge{
-  font-family: var(--mono); font-size: 10px; text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: 2px 7px; border-radius: 999px;
-  border: 1px solid var(--line); background: var(--surface-2);
-  color: var(--ink-3);
-}
-.topbar-mode-badge.testing{
-  color: var(--warn); border-color: color-mix(in oklab, var(--warn) 35%, var(--line));
-  background: var(--warn-soft);
-}
-
-.composer-testing-note{
-  font-family: var(--mono); font-size: 10.5px; color: var(--ink-4);
-  padding: 4px 2px;
-}
 
 .testing-empty{
   display: flex; align-items: center; justify-content: center;
@@ -1055,7 +1094,7 @@ input, textarea, select{ font-family: inherit; color: inherit; }
   .artifact-pane{
     position: fixed;
     top: 44px; right: 0; bottom: 0;
-    width: min(640px, 90vw);
+    width: 80vw;
     z-index: 40;
     border-left: 1px solid var(--line);
     box-shadow: -10px 0 30px rgba(15,20,25,0.12);
@@ -1201,12 +1240,20 @@ input, textarea, select{ font-family: inherit; color: inherit; }
 }
 
 /* ---------- Code view ---------- */
+.artifact-body:has(> .code-view){
+  padding: 0;
+  display: flex; flex-direction: column;
+}
 .code-view{
-  display: flex; flex-direction: column; gap: 10px;
+  display: flex; flex-direction: column; gap: 0;
+  flex: 1; min-height: 0;
 }
 .code-view-meta{
   display: flex; align-items: center; gap: 10px;
   font-family: var(--mono); font-size: 10.5px; color: var(--ink-4);
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+  flex: none;
 }
 .code-view-version{
   display: inline-flex; align-items: center; gap: 5px;
@@ -1230,8 +1277,8 @@ input, textarea, select{ font-family: inherit; color: inherit; }
   font-family: var(--mono); font-size: 11px;
   color: var(--warn); padding: 8px 12px;
   background: var(--warn-soft);
-  border: 1px solid color-mix(in oklab, var(--warn) 25%, var(--line));
-  border-radius: var(--radius-sm);
+  border-bottom: 1px solid color-mix(in oklab, var(--warn) 25%, var(--line));
+  flex: none;
 }
 
 /* ---------- Approval: typed confirmation ---------- */

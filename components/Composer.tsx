@@ -192,7 +192,7 @@ export function Composer() {
 
   return (
     <div className="composer">
-      {mode === 'demo' ? (
+      {mode === 'demo' && (
         <div className="composer-chips">
           {(demoDataset === 'logistics' ? LOGISTICS_DEMO_PROMPTS : DEMO_PROMPTS).slice(0, 5).map(p => (
             <button
@@ -203,12 +203,6 @@ export function Composer() {
               {p.label}
             </button>
           ))}
-        </div>
-      ) : (
-        <div className="composer-chips">
-          <span className="composer-testing-note">
-            real sandbox · uses configured Bill env
-          </span>
         </div>
       )}
       <div className="composer-shell">

@@ -179,9 +179,7 @@ export function Turn({
                 <span className="src-dot" />source: BILL workspace
               </span>
               <span className="spacer" />
-              <span className="cta">
-                {isActive ? 'open' : 'click to open'} <Icon.Arrow />
-              </span>
+              <span className="cta">View <Icon.Arrow /></span>
             </div>
           </div>
         </div>

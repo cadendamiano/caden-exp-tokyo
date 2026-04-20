@@ -6,21 +6,28 @@ type Props = { onOpenTweaks: () => void };
 
 export function TopBar({ onOpenTweaks }: Props) {
   const mode = useStore(s => s.mode);
+  const demoDataset = useStore(s => s.tweaks.demoDataset);
+  const childCompany = demoDataset === 'logistics'
+    ? 'Crestview Freight Solutions'
+    : 'Meridian Operations';
+
   return (
     <div className="topbar">
-      <div className="brand">
-        <div className="brand-mark">B<span>·</span></div>
-        <span>BILL Coworker</span>
-        <span className="brand-divider">/</span>
-        <span className={'topbar-mode-badge' + (mode === 'testing' ? ' testing' : '')}>
+      <div className="topbar-crumbs">
+        <span className="topbar-product">BILL Coworker</span>
+        <span className="topbar-sep">/</span>
+        <span className="topbar-chip">ACME Holdings</span>
+        <span className="topbar-sep">/</span>
+        <span className="topbar-chip topbar-chip-entity">
+          <span className="topbar-entity-dot" />
+          {childCompany}
+        </span>
+        <span className="topbar-sep">/</span>
+        <span className={'topbar-env' + (mode === 'testing' ? ' testing' : '')}>
           {mode}
         </span>
       </div>
       <div className="topbar-spacer" />
-      <div className="workspace-pill">
-        <span className="workspace-dot" />
-        <span>meridian-ops · ACME Holdings</span>
-      </div>
       <div className="topbar-meta">
         <span>Riya Shah · Controller</span>
         <button className="kbd" onClick={onOpenTweaks} title="Open tweaks">⌘K</button>

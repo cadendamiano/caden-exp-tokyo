@@ -24,14 +24,21 @@ export function ArtifactThumb({ kind }: { kind: string }) {
     );
   }
   if (kind === 'art_rule_net15') {
+    const rows = [
+      { label: 'GIVEN', op: '\u2192' },
+      { label: 'WHEN',  op: '\u2192' },
+      { label: 'THEN',  op: '=' },
+    ];
     return (
-      <svg viewBox="0 0 110 70" width="200" height="120">
-        <rect x="10" y="14" width="34" height="14" rx="3" fill="var(--teal-soft)" stroke="var(--teal)" strokeWidth="1" />
-        <rect x="10" y="42" width="34" height="14" rx="3" fill="var(--surface-2)" stroke="var(--line)" strokeWidth="1" />
-        <path d="M44 21 L66 21 M44 49 L66 49 M66 21 L66 49" stroke="var(--ink-4)" strokeWidth="1" fill="none" />
-        <rect x="66" y="28" width="34" height="14" rx="3" fill="var(--ink)" />
-        <circle cx="73" cy="35" r="2" fill="var(--teal)" />
-      </svg>
+      <div className="rule-chip-stack">
+        {rows.map(({ label, op }) => (
+          <div key={label} className="rule-chip-row">
+            <span className="rule-chip-label">{label}</span>
+            <span className="rule-chip-op">{op}</span>
+            <span className="rule-chip-value" />
+          </div>
+        ))}
+      </div>
     );
   }
   if (kind === 'art_crm_flow') {
