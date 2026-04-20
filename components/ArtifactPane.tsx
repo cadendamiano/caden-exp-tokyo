@@ -7,6 +7,7 @@ import { APTableArtifact } from './artifacts/APTableArtifact';
 import { SpendChartArtifact } from './artifacts/SpendChartArtifact';
 import { Net15RuleArtifact } from './artifacts/Net15RuleArtifact';
 import { CRMFlowArtifact } from './artifacts/CRMFlowArtifact';
+import { DocumentArtifact } from './artifacts/DocumentArtifact';
 import { ArtifactPreview } from './ArtifactPreview';
 import { ArtifactCode } from './ArtifactCode';
 import type { ArtifactKind } from '@/lib/flows';
@@ -168,6 +169,7 @@ export function ArtifactPane() {
                 {view === 'logic' && cur.kind === 'rule-net15' && <Net15RuleArtifact artifact={cur} />}
                 {view === 'logic' && cur.kind === 'spend-chart' && <SpendChartArtifact />}
                 {view === 'logic' && cur.kind === 'crm-flow' && <CRMFlowArtifact artifact={cur} />}
+                {view === 'logic' && cur.kind === 'document' && <DocumentArtifact />}
               </div>
             </>
           ) : (
@@ -190,7 +192,7 @@ function EmptyArtifact() {
           open here side-by-side.
         </div>
         <div style={{ marginTop: 12, color: 'var(--ink-3)' }}>
-          Tables · Charts · Rules · Flows · Code
+          Tables · Charts · Rules · Flows · Docs · Code
         </div>
       </div>
     </div>

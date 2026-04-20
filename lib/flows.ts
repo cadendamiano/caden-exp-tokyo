@@ -1,6 +1,6 @@
 import type { DatasetKey } from './data';
 
-export type ArtifactKind = 'ap-table' | 'spend-chart' | 'rule-net15' | 'crm-flow';
+export type ArtifactKind = 'ap-table' | 'spend-chart' | 'rule-net15' | 'crm-flow' | 'document';
 
 export type ToolRowSpec = {
   verb: 'GET' | 'POST' | 'EXEC';
@@ -242,6 +242,34 @@ Open the artifact to review each pair side-by-side. I won't void anything withou
       { kind: 'suggest', items: ['Open review queue', 'Void the high-confidence match', 'Tune matcher', 'Save as scheduled sweep'] },
     ],
   },
+
+  doc_q1_report: {
+    id: 'doc_q1_report',
+    title: 'CFO Q1 spend one-pager',
+    steps: [
+      { kind: 'user', text: 'Generate a CFO Q1 spend one-pager' },
+      { kind: 'agent-stream', delay: 240, text:
+`Pulling Q1 spend, vendor breakdown, and aging summary. Building a structured report.` },
+      { kind: 'tools', delay: 800, rows: [
+        { verb: 'GET',  path: '/v3/api/list/Bill',    filter: "paidDate:[2026-01-01..2026-03-31]", status: '200', result: '87 records · 154ms' },
+        { verb: 'GET',  path: '/v3/api/list/Vendor',  filter: 'isActive=true', status: '200', result: '41 records · 88ms' },
+        { verb: 'EXEC', path: 'coworker.aggregate',   filter: 'groupBy=category,sum(amount),aging', status: 'ok', result: '6 buckets + 4 aging tiers' },
+      ] },
+      { kind: 'libs', delay: 400, items: [
+        { pkg: '@bill/artifact-runtime', ver: '0.4.1' },
+        { pkg: '@bill/doc-renderer', ver: '1.0.0' },
+      ] },
+      { kind: 'building', delay: 700, label: 'Q1 AP Report', sub: 'composing sections' },
+      { kind: 'artifact-card', delay: 1400, artifactId: 'art_doc_q1',
+        title: 'Q1 AP Report · CFO Summary', sub: 'DOCUMENT · DRAFT',
+        meta: '3 sections · 6 KPIs · $112.3k total spend',
+        icon: '◧' },
+      { kind: 'agent-stream', delay: 500, text:
+`Report's ready — click the card to open it in the right pane. It covers Executive Summary, Vendor Breakdown (top 5), and AP Aging buckets. All figures are from Q1 paid bills.` },
+      { kind: 'suggest', items: ['Export as PDF', 'Add YoY comparison', 'Share with controller', 'Regenerate with different date range'] },
+    ],
+    artifact: { id: 'art_doc_q1', kind: 'document', label: 'Q1 AP Report · CFO Summary' },
+  },
 } satisfies Record<string, Flow>;
 
 export type FlowId = keyof typeof FLOWS;
@@ -440,6 +468,34 @@ Open the artifact to review side-by-side. I won't void anything without approval
       { kind: 'suggest', items: ['Open review queue', 'Void the duplicate', 'Tune matcher', 'Save as scheduled sweep'] },
     ],
   },
+
+  doc_q1_report: {
+    id: 'doc_q1_report',
+    title: 'CFO Q1 spend one-pager',
+    steps: [
+      { kind: 'user', text: 'Generate a CFO Q1 spend one-pager' },
+      { kind: 'agent-stream', delay: 240, text:
+`Pulling Q1 spend, vendor breakdown, and aging summary. Building a structured report.` },
+      { kind: 'tools', delay: 800, rows: [
+        { verb: 'GET',  path: '/v3/api/list/Bill',    filter: "paidDate:[2026-01-01..2026-03-31]", status: '200', result: '112 records · 184ms' },
+        { verb: 'GET',  path: '/v3/api/list/Vendor',  filter: 'isActive=true', status: '200', result: '18 records · 92ms' },
+        { verb: 'EXEC', path: 'coworker.aggregate',   filter: 'groupBy=category,sum(amount),aging', status: 'ok', result: '6 buckets + 4 aging tiers' },
+      ] },
+      { kind: 'libs', delay: 400, items: [
+        { pkg: '@bill/artifact-runtime', ver: '0.4.1' },
+        { pkg: '@bill/doc-renderer', ver: '1.0.0' },
+      ] },
+      { kind: 'building', delay: 700, label: 'Q1 AP Report', sub: 'composing sections' },
+      { kind: 'artifact-card', delay: 1400, artifactId: 'art_doc_q1',
+        title: 'Q1 AP Report · CFO Summary', sub: 'DOCUMENT · DRAFT',
+        meta: '3 sections · 6 KPIs · $406k total spend',
+        icon: '◧' },
+      { kind: 'agent-stream', delay: 500, text:
+`Report's ready — click the card to open it in the right pane. It covers Executive Summary, Vendor Breakdown (top 5), and AP Aging buckets. All figures are from Q1 paid bills.` },
+      { kind: 'suggest', items: ['Export as PDF', 'Add YoY comparison', 'Share with controller', 'Regenerate with different date range'] },
+    ],
+    artifact: { id: 'art_doc_q1', kind: 'document', label: 'Q1 AP Report · CFO Summary' },
+  },
 } satisfies Record<string, Flow>;
 
 export function matchFlow(text: string, dataset: DatasetKey = 'default'): string | null {
@@ -455,5 +511,6 @@ export function matchFlow(text: string, dataset: DatasetKey = 'default'): string
   if (low.includes('chart') || low.includes('visualize') || low.includes('spend')) return 'chart_spend';
   if (low.includes('crm') || low.includes('hubspot') || low.includes('deal')) return 'crm_sync';
   if (low.includes('dup') || low.includes('sweep')) return 'dupe_sweep';
+  if (low.includes('doc') || low.includes('report') || low.includes('one-pager') || low.includes('cfo')) return 'doc_q1_report';
   return null;
 }
