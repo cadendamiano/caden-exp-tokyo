@@ -192,11 +192,18 @@ export function Turn({
       <div className="msg agent fade-in">
         <span className="msg-gutter agent" style={{ color: 'var(--ink-4)' }}>↳</span>
         <div className="msg-body" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {turn.items.map(s => (
-            <button key={s} className="composer-chip" onClick={() => onSuggestion(s)}>
-              {s}
-            </button>
-          ))}
+          {turn.items.map(s => {
+            const isRecommend = s.startsWith('Recommend ');
+            return (
+              <button
+                key={s}
+                className={`composer-chip${isRecommend ? ' chip-recommend' : ''}`}
+                onClick={() => onSuggestion(s)}
+              >
+                {s}
+              </button>
+            );
+          })}
         </div>
       </div>
     );

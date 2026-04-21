@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useStore, getActiveThread } from '@/lib/store';
-import { getDataset, type DatasetKey } from '@/lib/data';
-import { fmtMoney, fmtMoneyShort } from '@/lib/format';
+import { getDataset, type DatasetKey, type ProjectionPoint } from '@/lib/data';
+import { fmtMoney, fmtMoneyShort, fmtDate } from '@/lib/format';
 import type { ArtifactKind } from '@/lib/flows';
 import type { Artifact } from '@/lib/store';
+import { LineChart, type LineChartMarker } from './primitives/LineChart';
+import { runSweepSimForDataset } from '@/lib/simulateSweep';
 
 type Props = {
   artifact: Artifact;
@@ -13,10 +15,17 @@ type Props = {
 
 type PreviewRow = Record<string, string | number>;
 
+type PreviewChart = {
+  series: ProjectionPoint[];
+  threshold: number;
+  markers: LineChartMarker[];
+};
+
 type PreviewResult = {
   rows: PreviewRow[];
   summary: string;
   asOf: string;
+  chart?: PreviewChart;
 };
 
 async function fetchPreview(
@@ -136,20 +145,29 @@ function buildMockPreview(kind: ArtifactKind, asOf: string, dataset: DatasetKey)
     return { rows, summary, asOf };
   }
   if (kind === 'sweep-rule') {
-    const { liquidityProjection, liquidityThreshold } = data;
-    const breachDays = liquidityProjection.filter(p => p.balance < liquidityThreshold);
-    const rows = breachDays.length > 0
-      ? breachDays.slice(0, 5).map(p => ({
-          Day: p.day,
-          'Balance before': fmtMoney(p.balance),
-          Transfer: '+$50,000 (reserve → ops)',
-          'Balance after': fmtMoney(p.balance + 50000),
+    const sim = runSweepSimForDataset(data);
+    const { liquidityThreshold } = data;
+    const rows: PreviewRow[] = sim.sweeps.length > 0
+      ? sim.sweeps.map(ev => ({
+          Day: fmtDate(ev.day),
+          'Balance before': fmtMoney(ev.balanceBefore),
+          Transfer: `+${fmtMoneyShort(ev.transfer)} (reserve → ops)`,
+          'Balance after': fmtMoney(ev.balanceAfter),
         }))
       : [{ Day: '—', 'Balance before': '—', Transfer: 'no trigger in window', 'Balance after': '—' }];
-    const summary = breachDays.length > 0
-      ? `Would have triggered ${Math.min(1, breachDays.length)} sweep${breachDays.length === 1 ? '' : ' (rate-limited to 1/day)'}  in last 60d`
-      : 'Would not have triggered in last 60d · rule is armed for future dips';
-    return { rows, summary, asOf };
+    const summary = sim.sweeps.length > 0
+      ? `Next 60d: ${sim.sweeps.length} sweep${sim.sweeps.length === 1 ? '' : 's'} projected · ${fmtMoneyShort(sim.sweepTotal)} auto-funded · min ${fmtMoneyShort(sim.minBalance)} on ${fmtDate(sim.minDay)}`
+      : `Next 60d: rule armed · min ${fmtMoneyShort(sim.minBalance)} on ${fmtDate(sim.minDay)} (above floor by ${fmtMoneyShort(Math.max(0, sim.minBalance - liquidityThreshold))})`;
+    return {
+      rows,
+      summary,
+      asOf,
+      chart: {
+        series: sim.series,
+        threshold: liquidityThreshold,
+        markers: sim.sweeps.map(s => ({ day: s.day, label: `+${fmtMoneyShort(s.transfer)}` })),
+      },
+    };
   }
   return { rows: [], summary: 'No preview available', asOf };
 }
@@ -251,6 +269,18 @@ export function ArtifactPreview({ artifact }: Props) {
         <span className="preview-summary">{result.summary}</span>
         <span className="preview-as-of">as of {result.asOf}</span>
       </div>
+
+      {result.chart && (
+        <div className="preview-chart-wrap">
+          <LineChart
+            data={result.chart.series}
+            threshold={result.chart.threshold}
+            markers={result.chart.markers}
+            height={180}
+            accent="var(--teal)"
+          />
+        </div>
+      )}
 
       <div className="preview-table-wrap">
         <div className="preview-table">

@@ -88,6 +88,8 @@ export const BILLS: Bill[] = [
   { id: 'bll_4193', vendor: 'vnd_12', invoice: 'PB-RNW-04',      amount:  4210.00, due: '2026-05-09', status: 'open',     poRef: '—' },
   { id: 'bll_4194', vendor: 'vnd_01', invoice: 'INV-2026-04612', amount:  3900.00, due: '2026-04-20', status: 'due-soon', poRef: 'PO-44-196' },
   { id: 'bll_4195', vendor: 'vnd_06', invoice: 'BRT-5488',       amount:  2150.00, due: '2026-04-14', status: 'overdue',  poRef: '—' },
+  { id: 'bll_4196', vendor: 'vnd_01', invoice: 'INV-2026-04923', amount: 32000.00, due: '2026-05-18', status: 'scheduled',poRef: 'PO-44-245' },
+  { id: 'bll_4197', vendor: 'vnd_12', invoice: 'PB-POL-Q2',      amount: 20000.00, due: '2026-05-26', status: 'scheduled',poRef: 'PO-44-250' },
 ];
 
 export const AGING: AgingBucket[] = [
@@ -144,7 +146,7 @@ export const CONNECTORS: { name: string; status: 'ok' | 'warn'; meta: string }[]
 
 export const BANK_ACCOUNTS: BankAccount[] = [
   { id: 'acct_ops',     nickname: 'Ops Checking',       institution: 'Chase Business',  last4: '4821', balance: 142000,  role: 'operating' },
-  { id: 'acct_reserve', nickname: 'BILL Cash Account',  institution: 'BILL Financial',  last4: '7732', balance: 1240000, role: 'reserve', apy: 0.03 },
+  { id: 'acct_reserve', nickname: 'Chase Reserve Savings', institution: 'Chase Business', last4: '7732', balance: 1240000, role: 'reserve', apy: 0.03 },
   { id: 'acct_payroll', nickname: 'Payroll Account',    institution: 'Chase Business',  last4: '9103', balance: 287500,  role: 'payroll' },
 ];
 
@@ -334,8 +336,8 @@ export const LOGISTICS_EXPENSES: Expense[] = [
 ];
 
 export const LOGISTICS_BANK_ACCOUNTS: BankAccount[] = [
-  { id: 'acct_ops',     nickname: 'Operating Checking', institution: 'Bank of America', last4: '3317', balance: 218000, role: 'operating' },
-  { id: 'acct_reserve', nickname: 'Reserve Savings',    institution: 'BILL Financial',  last4: '8841', balance: 890000, role: 'reserve', apy: 0.03 },
+  { id: 'acct_ops',     nickname: 'BILL Cash Reserve Account',  institution: 'BILL Financial',  last4: '3317', balance: 218000, role: 'operating' },
+  { id: 'acct_reserve', nickname: 'Chase Checking',     institution: 'Chase Business',  last4: '8841', balance: 890000, role: 'reserve', apy: 0.03 },
   { id: 'acct_payroll', nickname: 'Payroll Account',    institution: 'Bank of America', last4: '6604', balance: 312000, role: 'payroll' },
 ];
 

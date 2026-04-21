@@ -638,6 +638,14 @@ input, textarea, select{ font-family: inherit; color: inherit; }
   color: var(--ink-3); cursor: pointer; background: var(--surface);
 }
 .composer-chip:hover{ color: var(--ink); border-color: var(--ink-4); }
+.composer-chip.chip-recommend{
+  color: var(--ink); border-color: var(--ink-3);
+  background: var(--surface-raised, var(--surface));
+  font-weight: 600;
+}
+.composer-chip.chip-recommend::before{
+  content: "✦ "; color: var(--accent, var(--ink-3));
+}
 .composer-spacer{ flex: 1; }
 .composer-mode{
   font-family: var(--mono); font-size: 10.5px; color: var(--ink-4);
@@ -1242,6 +1250,10 @@ input, textarea, select{ font-family: inherit; color: inherit; }
 .preview-as-of{
   font-family: var(--mono); font-size: 10.5px; color: var(--ink-4); white-space: nowrap;
 }
+.preview-chart-wrap{
+  /* chart-card already provides border + padding; cancel its bottom margin so preview-view gap controls spacing */
+}
+.preview-chart-wrap .chart-card{ margin-bottom: 0; }
 .preview-table-wrap{
   border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
   background: var(--surface);
