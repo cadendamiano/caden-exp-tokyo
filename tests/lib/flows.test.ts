@@ -65,6 +65,26 @@ describe('matchFlow', () => {
     expect(matchFlow('run a sweep for dupes')).toBe('dupe_sweep');
   });
 
+  it('matches runway_projection when message mentions runway', () => {
+    expect(matchFlow("what's our runway look like?")).toBe('runway_projection');
+  });
+
+  it('matches runway_projection when message mentions cash runway', () => {
+    expect(matchFlow('show me cash runway')).toBe('runway_projection');
+  });
+
+  it('matches runway_projection when message mentions treasury', () => {
+    expect(matchFlow('treasury projection')).toBe('runway_projection');
+  });
+
+  it('matches runway_drivers when message asks what is driving the dip', () => {
+    expect(matchFlow("what's driving the dip?")).toBe('runway_drivers');
+  });
+
+  it('matches runway_drivers when message mentions "driver"', () => {
+    expect(matchFlow('show me the drivers')).toBe('runway_drivers');
+  });
+
   it('returns null for unrecognised messages', () => {
     expect(matchFlow('hello')).toBeNull();
     expect(matchFlow('what is the weather today')).toBeNull();
@@ -78,7 +98,7 @@ describe('matchFlow', () => {
 });
 
 describe('FLOWS', () => {
-  const flowIds = ['ap_overdue', 'pay_batch', 'automate_net15', 'chart_spend', 'crm_sync', 'dupe_sweep'];
+  const flowIds = ['ap_overdue', 'pay_batch', 'pay_large', 'automate_net15', 'chart_spend', 'crm_sync', 'dupe_sweep', 'runway_projection', 'runway_drivers', 'sweep_rule_draft'];
 
   it('contains all expected flows', () => {
     for (const id of flowIds) {
@@ -186,9 +206,9 @@ describe('matchFlow — pay_large', () => {
 });
 
 describe('LOGISTICS_FLOWS', () => {
-  const flowIds = ['ap_overdue', 'pay_batch', 'automate_net15', 'chart_spend', 'crm_sync', 'pay_large', 'dupe_sweep'];
+  const flowIds = ['ap_overdue', 'pay_batch', 'automate_net15', 'chart_spend', 'crm_sync', 'pay_large', 'dupe_sweep', 'runway_projection', 'runway_drivers', 'sweep_rule_draft'];
 
-  it('contains all 7 expected flow ids', () => {
+  it('contains all expected flow ids', () => {
     for (const id of flowIds) {
       expect(LOGISTICS_FLOWS_BY_ID[id]).toBeDefined();
     }
@@ -208,6 +228,33 @@ describe('LOGISTICS_FLOWS', () => {
     const step = LOGISTICS_FLOWS.pay_large.steps.find(s => s.kind === 'approval')!;
     expect((step as any).payload.requiresSecondApprover).toBe(true);
     expect((step as any).payload.total).toBeGreaterThan(25000);
+  });
+});
+
+describe('liquidity flows', () => {
+  it('runway_projection artifact is kind liquidity-burndown with filter projection', () => {
+    const a = FLOWS.runway_projection.artifact;
+    expect(a?.kind).toBe('liquidity-burndown');
+    expect(a?.filter).toBe('projection');
+  });
+
+  it('runway_drivers contains an artifact-enrich step that flips the filter', () => {
+    const enrich = FLOWS.runway_drivers.steps.find(s => s.kind === 'artifact-enrich');
+    expect(enrich).toBeDefined();
+    expect((enrich as any).artifactId).toBe('art_runway_60d');
+    expect((enrich as any).patch.filter).toBe('projection+drivers');
+  });
+
+  it('sweep_rule_draft artifact is kind sweep-rule', () => {
+    const a = FLOWS.sweep_rule_draft.artifact;
+    expect(a?.kind).toBe('sweep-rule');
+    expect(a?.id).toBe('art_sweep_rule');
+  });
+
+  it('logistics runway_projection uses the $75k threshold (not $50k)', () => {
+    const tools = LOGISTICS_FLOWS.runway_projection.steps.find(s => s.kind === 'tools') as any;
+    const projectStep = tools?.rows.find((it: any) => it.path === 'project_cash_runway');
+    expect(projectStep.filter).toMatch(/75000/);
   });
 });
 

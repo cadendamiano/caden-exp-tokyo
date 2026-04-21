@@ -62,17 +62,22 @@ function kindToTool(kind: ArtifactKind): string | null {
   if (kind === 'ap-table') return 'get_aging_summary';
   if (kind === 'spend-chart') return 'get_category_spend';
   if (kind === 'rule-net15') return 'find_duplicate_invoices';
+  if (kind === 'liquidity-burndown') return 'get_liquidity_projection';
+  if (kind === 'sweep-rule') return 'get_liquidity_projection';
   return null;
 }
 
 function kindToInput(kind: ArtifactKind): Record<string, unknown> {
   if (kind === 'spend-chart') return { period: 'Q1 2026' };
   if (kind === 'rule-net15') return { days: 30 };
+  if (kind === 'liquidity-burndown') return { days: 60 };
+  if (kind === 'sweep-rule') return { days: 60 };
   return {};
 }
 
 function buildMockPreview(kind: ArtifactKind, asOf: string, dataset: DatasetKey): PreviewResult {
-  const { AGING, BILLS, VENDORS, CATEGORY_SPEND } = getDataset(dataset);
+  const data = getDataset(dataset);
+  const { AGING, BILLS, VENDORS, CATEGORY_SPEND } = data;
   if (kind === 'ap-table') {
     const rows = AGING.map(b => ({ Bucket: b.bucket, Amount: fmtMoney(b.amount) }));
     const total = AGING.reduce((s, a) => s + a.amount, 0);
@@ -106,6 +111,44 @@ function buildMockPreview(kind: ArtifactKind, asOf: string, dataset: DatasetKey)
     const summary = dataset === 'logistics'
       ? 'Backfill test: 17/20 matched · 3 unmatched'
       : 'Backfill test: 18/20 matched · 2 unmatched';
+    return { rows, summary, asOf };
+  }
+  if (kind === 'liquidity-burndown') {
+    const { liquidityProjection, liquidityThreshold } = data;
+    let minIdx = 0;
+    for (let i = 1; i < liquidityProjection.length; i++) {
+      if (liquidityProjection[i].balance < liquidityProjection[minIdx].balance) minIdx = i;
+    }
+    const min = liquidityProjection[minIdx];
+    const rows = liquidityProjection
+      .filter((_, i) => i % 5 === 0 || i === minIdx || i === liquidityProjection.length - 1)
+      .map(p => ({
+        Day: p.day,
+        Balance: fmtMoney(p.balance),
+        'Vs floor': p.balance < liquidityThreshold
+          ? `↓ ${fmtMoneyShort(liquidityThreshold - p.balance)} under`
+          : `↑ ${fmtMoneyShort(p.balance - liquidityThreshold)} over`,
+      }));
+    const breaches = liquidityProjection.filter(p => p.balance < liquidityThreshold).length;
+    const summary = breaches > 0
+      ? `${breaches}/${liquidityProjection.length} days below floor · min ${fmtMoneyShort(min.balance)} on ${min.day}`
+      : `${liquidityProjection.length} days projected · min ${fmtMoneyShort(min.balance)} on ${min.day} (above floor)`;
+    return { rows, summary, asOf };
+  }
+  if (kind === 'sweep-rule') {
+    const { liquidityProjection, liquidityThreshold } = data;
+    const breachDays = liquidityProjection.filter(p => p.balance < liquidityThreshold);
+    const rows = breachDays.length > 0
+      ? breachDays.slice(0, 5).map(p => ({
+          Day: p.day,
+          'Balance before': fmtMoney(p.balance),
+          Transfer: '+$50,000 (reserve → ops)',
+          'Balance after': fmtMoney(p.balance + 50000),
+        }))
+      : [{ Day: '—', 'Balance before': '—', Transfer: 'no trigger in window', 'Balance after': '—' }];
+    const summary = breachDays.length > 0
+      ? `Would have triggered ${Math.min(1, breachDays.length)} sweep${breachDays.length === 1 ? '' : ' (rate-limited to 1/day)'}  in last 60d`
+      : 'Would not have triggered in last 60d · rule is armed for future dips';
     return { rows, summary, asOf };
   }
   return { rows: [], summary: 'No preview available', asOf };
@@ -145,6 +188,14 @@ function buildRealPreview(kind: ArtifactKind, data: unknown, summary: string, as
       Confidence: p.confidence,
     }));
     return { rows, summary: `${pairs.length} suspect pair${pairs.length !== 1 ? 's' : ''} found`, asOf };
+  }
+  if (kind === 'liquidity-burndown' || kind === 'sweep-rule') {
+    // real tool isn't wired yet — just return a small placeholder row
+    return {
+      rows: [{ Day: '—', Balance: '—', Note: 'Real liquidity projection requires BILL Cash Flow API (not yet wired)' }],
+      summary,
+      asOf,
+    };
   }
   return { rows: [], summary, asOf };
 }

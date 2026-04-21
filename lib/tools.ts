@@ -1,4 +1,5 @@
 import { getDataset, type DatasetKey } from './data';
+import { fmtMoneyShort } from './format';
 import { getBillEnvironment } from './secrets';
 import {
   apList,
@@ -90,6 +91,17 @@ const READ_TOOLS: ToolDef[] = [
     },
   },
   {
+    name: 'get_liquidity_projection',
+    description: 'Project operating-account cash balance forward using scheduled AP, payroll, and AR.',
+    parameters: {
+      type: 'object',
+      properties: {
+        days: { type: 'number', description: 'Projection horizon in days (default 60, max 120).' },
+        threshold: { type: 'number', description: 'Low-balance floor in dollars (default from dataset).' },
+      },
+    },
+  },
+  {
     name: 'list_expenses',
     description: 'List expense reports or card transactions from Bill Spend & Expense. Optionally filter by employee or status.',
     parameters: {
@@ -120,7 +132,7 @@ const READ_TOOLS: ToolDef[] = [
       properties: {
         kind: {
           type: 'string',
-          enum: ['ap-table', 'spend-chart', 'rule-net15', 'crm-flow'],
+          enum: ['ap-table', 'spend-chart', 'rule-net15', 'crm-flow', 'document', 'liquidity-burndown', 'sweep-rule'],
         },
         title: { type: 'string' },
         sub: { type: 'string', description: 'Short uppercase subtitle, e.g. "TABLE · INTERACTIVE"' },
@@ -414,6 +426,9 @@ async function runRealTool(
       const pairs = await apFindDuplicateInvoices(env, Number(input?.days ?? 60));
       return { ok: true, summary: `${pairs.length} suspect pairs`, data: pairs };
     }
+    if (name === 'get_liquidity_projection') {
+      return { ok: false, summary: 'not yet wired to Bill sandbox', data: null };
+    }
     return { ok: false, summary: `unknown tool: ${name}`, data: null };
   } catch (e: any) {
     return { ok: false, summary: `error: ${e?.message ?? 'unknown'}`, data: null };
@@ -428,7 +443,8 @@ async function runMockTool(
   dataset?: DatasetKey
 ): Promise<{ ok: boolean; summary: string; data: unknown }> {
   try {
-    const { VENDORS, BILLS, AGING, CATEGORY_SPEND, EMPLOYEES, EXPENSES } = getDataset(dataset);
+    const data = getDataset(dataset);
+    const { VENDORS, BILLS, AGING, CATEGORY_SPEND, EMPLOYEES, EXPENSES } = data;
     if (name === 'list_bills') {
       const status = input?.status ?? 'all';
       const vendorId = input?.vendorId;
@@ -452,6 +468,24 @@ async function runMockTool(
     if (name === 'get_category_spend') {
       const total = CATEGORY_SPEND.reduce((s, c) => s + c.amount, 0);
       return { ok: true, summary: `${CATEGORY_SPEND.length} categories · $${total.toLocaleString()}`, data: CATEGORY_SPEND };
+    }
+    if (name === 'get_liquidity_projection') {
+      const days = Math.min(Number(input?.days ?? 60), 120);
+      const threshold = Number(input?.threshold ?? data.liquidityThreshold);
+      const series = data.liquidityProjection.slice(0, days + 1);
+      const minPoint = series.reduce((m, p) => (p.balance < m.balance ? p : m), series[0]);
+      return {
+        ok: true,
+        summary: `min ${fmtMoneyShort(minPoint.balance)} on ${minPoint.day} · ${series.length} points`,
+        data: {
+          series,
+          drivers: data.liquidityDrivers,
+          accounts: data.bankAccounts,
+          threshold,
+          minDay: minPoint.day,
+          minBalance: minPoint.balance,
+        },
+      };
     }
     if (name === 'find_duplicate_invoices') {
       const pairs = dataset === 'logistics'
@@ -640,6 +674,7 @@ export const SYSTEM_PROMPT = `You are BILL Coworker, an agentic coworker for fin
 Style:
 - Be concise, professional, and precise. Short paragraphs. Markdown **bold** and \`inline code\` are supported.
 - When you need data, call tools rather than guessing. You can call multiple tools per turn.
+- When the user asks to visualize or open an interactive view (AP list, spend chart, Net-15 rule, CRM flow, cash runway, sweep rule, report/document), call \`render_artifact\` with the right kind. Kinds: ap-table, spend-chart, rule-net15, crm-flow, document, liquidity-burndown, sweep-rule.
 - To stage a payment, call \`stage_payment_batch\` with the bill IDs — the UI will render an approval card with a typed-confirmation gate. Do not fabricate approvals. Wait for the user's approve/reject before describing an outcome.
 - Write actions available: \`stage_payment_batch\`, \`create_automation_rule\`, \`approve_expense\`, \`reject_expense\`. Submission happens only after user approval.
 ${DYNAMIC_ARTIFACT_GUIDANCE}

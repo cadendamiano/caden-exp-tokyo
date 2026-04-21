@@ -4,6 +4,7 @@ import { SLASH_COMMANDS } from '@/lib/slashCommands';
 
 const dataviz = SLASH_COMMANDS.find(c => c.name === 'dataviz')!;
 const ap = SLASH_COMMANDS.find(c => c.name === 'ap')!;
+const liquidity = SLASH_COMMANDS.find(c => c.name === 'liquidity')!;
 
 describe('resolveComposerSubmit', () => {
   it('ignores submit when streaming', () => {
@@ -138,5 +139,29 @@ describe('resolveComposerSubmit', () => {
     });
     if (action.kind !== 'llm') throw new Error('expected llm');
     expect(action.body).toBe('show me a treemap of top vendors by spend');
+  });
+
+  it('/liquidity in demo mode → runs sweep_rule_draft flow', () => {
+    const action = resolveComposerSubmit({
+      body: '',
+      streaming: false,
+      forcedCmd: liquidity,
+      mode: 'demo',
+      demoDataset: 'default',
+    });
+    expect(action).toEqual({ kind: 'flow', flowId: 'sweep_rule_draft' });
+  });
+
+  it('/liquidity in testing mode → LLM with forced sweep-rule kind', () => {
+    const action = resolveComposerSubmit({
+      body: '',
+      streaming: false,
+      forcedCmd: liquidity,
+      mode: 'testing',
+      demoDataset: 'default',
+    });
+    if (action.kind !== 'llm') throw new Error('expected llm');
+    expect(action.opts?.forcedKind).toBe('sweep-rule');
+    expect(action.opts?.commandName).toBe('liquidity');
   });
 });

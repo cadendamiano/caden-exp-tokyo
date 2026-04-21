@@ -138,6 +138,26 @@ function executeStep(flow: Flow, step: FlowStep, mult: number) {
     // can find it via getSubmitContext.
     return;
   }
+  if (step.kind === 'artifact-enrich') {
+    s.setArtifacts(prev => {
+      const exists = prev.find(a => a.id === step.artifactId);
+      if (exists) {
+        return prev.map(a => a.id === step.artifactId
+          ? { ...a, ...step.patch, version: a.version + 1, editedBy: 'Coworker', editedAt: Date.now() }
+          : a);
+      }
+      return [...prev, {
+        id: step.artifactId,
+        kind: 'liquidity-burndown' as ArtifactKind,
+        label: step.patch.label ?? step.artifactId,
+        filter: step.patch.filter,
+        status: 'draft' as const,
+        version: 1,
+        createdBy: 'Coworker',
+      }];
+    });
+    return;
+  }
   if (step.kind === 'approval') {
     s.addTurn({ id: newId('ap'), kind: 'approval', payload: step.payload });
     s.setApprovalPayload(step.payload.batchId, step.payload);

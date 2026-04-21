@@ -1,6 +1,6 @@
 import type { DatasetKey } from './data';
 
-export type ArtifactKind = 'ap-table' | 'spend-chart' | 'rule-net15' | 'crm-flow' | 'html';
+export type ArtifactKind = 'ap-table' | 'spend-chart' | 'rule-net15' | 'crm-flow' | 'html' | 'document' | 'liquidity-burndown' | 'sweep-rule';
 
 export type ToolRowSpec = {
   verb: 'GET' | 'POST' | 'EXEC';
@@ -39,7 +39,13 @@ export type FlowStep =
         requiresSecondApprover?: boolean;
       };
     }
-  | { kind: 'suggest'; delay?: number; items: string[] };
+  | { kind: 'suggest'; delay?: number; items: string[] }
+  | {
+      kind: 'artifact-enrich';
+      delay?: number;
+      artifactId: string;
+      patch: { filter?: string; label?: string };
+    };
 
 export type Flow = {
   id: string;
@@ -242,6 +248,121 @@ Open the artifact to review each pair side-by-side. I won't void anything withou
       { kind: 'suggest', items: ['Open review queue', 'Void the high-confidence match', 'Tune matcher', 'Save as scheduled sweep'] },
     ],
   },
+
+  runway_projection: {
+    id: 'runway_projection',
+    title: 'Cash runway projection',
+    steps: [
+      { kind: 'user', text: "What's our cash runway look like?" },
+      { kind: 'agent-stream', delay: 240, text:
+`Pulling current bank balances and upcoming AP to project Ops Checking forward 60 days.` },
+      { kind: 'tools', delay: 900, rows: [
+        { verb: 'GET',  path: '/v3/api/list/BankAccount', filter: "role IN ('operating','reserve','payroll')", status: '200', result: '3 accounts · 68ms' },
+        { verb: 'POST', path: '/v3/api/list/Bill',        filter: "dueDate<='2026-06-19'",                      status: '200', result: '27 bills · 112ms' },
+        { verb: 'EXEC', path: 'project_cash_runway',      filter: 'days=60, threshold=50000',                   status: '200', result: 'min $48.2k May 24 · 84ms' },
+      ] },
+      { kind: 'agent-stream', delay: 500, text:
+`Ops Checking projects from **$142k** today down to a minimum of **$48.2k on May 24** — briefly dipping below your $50k floor before recovering in early June.
+
+The chart shows the full 60-day curve. Want me to break down what's driving the dip?` },
+      { kind: 'libs', delay: 300, items: [
+        { pkg: '@bill/artifact-runtime', ver: '0.4.1' },
+        { pkg: '@bill/treasury-projections', ver: '0.2.0' },
+      ] },
+      { kind: 'building', delay: 600, label: 'Cash runway · 60d', sub: 'rendering projection' },
+      { kind: 'artifact-card', delay: 1200, artifactId: 'art_runway_60d',
+        title: 'Cash runway · 60 days',
+        sub: 'PROJECTION',
+        meta: '**Runway 34d** · Ops Checking $142k → **$48.2k on May 24**',
+        icon: '∿' },
+      { kind: 'suggest', items: ["What's driving the dip?", 'Extend to 90 days', 'Show all accounts', 'Draft a sweep rule'] },
+    ],
+    artifact: { id: 'art_runway_60d', kind: 'liquidity-burndown', label: 'Cash runway · 60d', filter: 'projection' },
+  },
+
+  runway_drivers: {
+    id: 'runway_drivers',
+    title: 'Runway drivers breakdown',
+    steps: [
+      { kind: 'user', text: "What's driving the dip?" },
+      { kind: 'agent-stream', delay: 200, text:
+`Ranking the top outflows and inflows that shape the curve.` },
+      { kind: 'tools', delay: 600, rows: [
+        { verb: 'EXEC', path: 'rank_runway_drivers', filter: 'top=5, window=60d', status: '200', result: '5 events ranked · 42ms' },
+      ] },
+      { kind: 'agent-stream', delay: 500, text:
+`The three biggest hits:
+
+1. **AWS Infrastructure (Q2)** — **-$42k** on May 2. This is the single largest payment and drops you from $123k to $81k.
+2. **SaaS renewal batch** — **-$32.8k** on May 24. This is the one that pushes you below the $50k floor.
+3. **Bluestone Marketing retainer** — **-$24.8k** on Apr 28.
+
+Two AR receipts partially offset: **Techflow Corp +$38k** (May 1) and **Beacon Health +$28k** (May 22).
+
+The projection now shows drivers annotated on the chart. Want me to draft a sweep rule to auto-fund Ops Checking when it gets close to the floor?` },
+      { kind: 'artifact-enrich', delay: 300, artifactId: 'art_runway_60d',
+        patch: { filter: 'projection+drivers', label: 'Cash runway · 60d · drivers' } },
+      { kind: 'suggest', items: ['/liquidity — draft sweep rule', 'Defer the SaaS batch by 7 days', 'What if AWS is Net 60?', 'Show payroll separately'] },
+    ],
+  },
+
+  sweep_rule_draft: {
+    id: 'sweep_rule_draft',
+    title: 'Sweep rule draft',
+    steps: [
+      { kind: 'user', text: '/liquidity — draft sweep rule for Ops Checking' },
+      { kind: 'agent-stream', delay: 240, text:
+`Based on the projection, Ops Checking dips to **$48.2k** on May 24 — **$1.8k below your $50k floor**. I'll draft a sweep rule that auto-funds from BILL Cash Reserve before the shortfall hits.` },
+      { kind: 'tools', delay: 700, rows: [
+        { verb: 'GET',  path: '/v3/api/list/BankAccount', filter: "id IN ('acct_ops','acct_reserve')", status: '200', result: '2 accounts' },
+        { verb: 'EXEC', path: 'draft_sweep_rule',         filter: 'source=acct_reserve, dest=acct_ops, floor=50000', status: '200', result: 'rule drafted' },
+      ] },
+      { kind: 'agent-stream', delay: 500, text:
+`Here's the draft sweep rule. It would have triggered on **May 24**, pulling $75k from BILL Cash Reserve (current balance: $1.24M) to Ops Checking — preventing the floor breach entirely.
+
+Review the rule in the artifact pane. You'll need to preview the dry-run before activating.` },
+      { kind: 'libs', delay: 300, items: [
+        { pkg: '@bill/artifact-runtime', ver: '0.4.1' },
+        { pkg: '@bill/treasury-rules', ver: '0.1.0' },
+      ] },
+      { kind: 'building', delay: 600, label: 'Sweep rule · Ops → Reserve', sub: 'drafting rule with safety gates' },
+      { kind: 'artifact-card', delay: 1200, artifactId: 'art_sweep_rule',
+        title: 'Sweep rule — Ops Checking auto-fund',
+        sub: 'RULE DRAFT · SWEEP',
+        meta: 'When Ops < **$50k** → pull **$75k** from BILL Cash · safety: 1/day rate limit, reserve floor $200k',
+        icon: '⇄' },
+      { kind: 'suggest', items: ['Preview dry run', 'Change threshold to $75k', 'Add Slack alert on trigger', 'Activate'] },
+    ],
+    artifact: { id: 'art_sweep_rule', kind: 'sweep-rule', label: 'Sweep rule · Ops auto-fund' },
+  },
+
+  doc_q1_report: {
+    id: 'doc_q1_report',
+    title: 'CFO Q1 spend one-pager',
+    steps: [
+      { kind: 'user', text: 'Generate a CFO Q1 spend one-pager' },
+      { kind: 'agent-stream', delay: 240, text:
+`Pulling Q1 spend, vendor breakdown, and aging summary. Building a structured report.` },
+      { kind: 'tools', delay: 800, rows: [
+        { verb: 'GET',  path: '/v3/api/list/Bill',    filter: "paidDate:[2026-01-01..2026-03-31]", status: '200', result: '87 records · 154ms' },
+        { verb: 'GET',  path: '/v3/api/list/Vendor',  filter: 'isActive=true', status: '200', result: '41 records · 88ms' },
+        { verb: 'EXEC', path: 'coworker.aggregate',   filter: 'groupBy=category,sum(amount),aging', status: 'ok', result: '6 buckets + 4 aging tiers' },
+      ] },
+      { kind: 'libs', delay: 400, items: [
+        { pkg: '@bill/artifact-runtime', ver: '0.4.1' },
+        { pkg: '@bill/doc-renderer', ver: '1.0.0' },
+      ] },
+      { kind: 'building', delay: 700, label: 'Q1 AP Report', sub: 'composing sections' },
+      { kind: 'artifact-card', delay: 1400, artifactId: 'art_doc_q1',
+        title: 'Q1 AP Report · CFO Summary', sub: 'DOCUMENT · DRAFT',
+        meta: '3 sections · 6 KPIs · $112.3k total spend',
+        icon: '◧' },
+      { kind: 'agent-stream', delay: 500, text:
+`Report's ready — click the card to open it in the right pane. It covers Executive Summary, Vendor Breakdown (top 5), and AP Aging buckets. All figures are from Q1 paid bills.` },
+      { kind: 'suggest', items: ['Export as PDF', 'Add YoY comparison', 'Share with controller', 'Regenerate with different date range'] },
+    ],
+    artifact: { id: 'art_doc_q1', kind: 'document', label: 'Q1 AP Report · CFO Summary' },
+  },
 } satisfies Record<string, Flow>;
 
 export type FlowId = keyof typeof FLOWS;
@@ -440,6 +561,121 @@ Open the artifact to review side-by-side. I won't void anything without approval
       { kind: 'suggest', items: ['Open review queue', 'Void the duplicate', 'Tune matcher', 'Save as scheduled sweep'] },
     ],
   },
+
+  runway_projection: {
+    id: 'runway_projection',
+    title: 'Cash runway projection · Crestview',
+    steps: [
+      { kind: 'user', text: "What's our cash runway?" },
+      { kind: 'agent-stream', delay: 240, text:
+`Pulling Operating Checking, Reserve Savings, and Payroll balances, plus upcoming carrier + fleet AP to project Operating forward 60 days.` },
+      { kind: 'tools', delay: 900, rows: [
+        { verb: 'GET',  path: '/v3/api/list/BankAccount', filter: "role IN ('operating','reserve','payroll')", status: '200', result: '3 accounts · 72ms' },
+        { verb: 'POST', path: '/v3/api/list/Bill',        filter: "dueDate<='2026-06-19'",                      status: '200', result: '34 bills · 128ms' },
+        { verb: 'EXEC', path: 'project_cash_runway',      filter: 'days=60, threshold=75000',                   status: '200', result: 'min $84k May 20 · 91ms' },
+      ] },
+      { kind: 'agent-stream', delay: 500, text:
+`Operating Checking projects from **$218k** today to a minimum of **$84k on May 20** — above your $75k floor, but only by $9k. This is a close call.
+
+The chart shows the full 60-day curve. Want me to break down what's driving the compression?` },
+      { kind: 'libs', delay: 300, items: [
+        { pkg: '@bill/artifact-runtime', ver: '0.4.1' },
+        { pkg: '@bill/treasury-projections', ver: '0.2.0' },
+      ] },
+      { kind: 'building', delay: 600, label: 'Cash runway · 60d', sub: 'rendering projection' },
+      { kind: 'artifact-card', delay: 1200, artifactId: 'art_runway_60d',
+        title: 'Cash runway · 60 days',
+        sub: 'PROJECTION',
+        meta: '**Runway tight** · Operating $218k → **$84k on May 20** (above $75k floor by $9k)',
+        icon: '∿' },
+      { kind: 'suggest', items: ["What's driving the dip?", 'Extend to 90 days', 'Show all accounts', 'Draft a sweep rule'] },
+    ],
+    artifact: { id: 'art_runway_60d', kind: 'liquidity-burndown', label: 'Cash runway · 60d', filter: 'projection' },
+  },
+
+  runway_drivers: {
+    id: 'runway_drivers',
+    title: 'Runway drivers breakdown · Crestview',
+    steps: [
+      { kind: 'user', text: "What's driving the dip?" },
+      { kind: 'agent-stream', delay: 200, text:
+`Ranking the top outflows and inflows that shape the curve.` },
+      { kind: 'tools', delay: 600, rows: [
+        { verb: 'EXEC', path: 'rank_runway_drivers', filter: 'top=5, window=60d', status: '200', result: '5 events ranked · 44ms' },
+      ] },
+      { kind: 'agent-stream', delay: 500, text:
+`The three biggest hits:
+
+1. **SkyLink Carriers invoice** — **-$42k** on May 7. Your single largest outflow this window.
+2. **Payroll top-up (102 FTE)** — **-$34k** on May 15. This combined with the fleet lease is what compresses the balance down toward $75k.
+3. **Fleet lease — 12 units** — **-$24.6k** on May 12.
+
+One AR receipt partially offsets: **Beacon Health +$38k** (May 1). **MidWest Fuel (-$18.2k on May 10)** is the ongoing recurring drag.
+
+The projection now shows drivers annotated on the chart. Want me to draft a sweep rule to auto-fund Operating Checking when it gets close to the floor?` },
+      { kind: 'artifact-enrich', delay: 300, artifactId: 'art_runway_60d',
+        patch: { filter: 'projection+drivers', label: 'Cash runway · 60d · drivers' } },
+      { kind: 'suggest', items: ['/liquidity — draft sweep rule', 'Defer the fleet lease by 10 days', 'What if SkyLink is Net 30?', 'Show payroll separately'] },
+    ],
+  },
+
+  sweep_rule_draft: {
+    id: 'sweep_rule_draft',
+    title: 'Sweep rule draft · Crestview',
+    steps: [
+      { kind: 'user', text: '/liquidity — draft sweep rule for Operating Checking' },
+      { kind: 'agent-stream', delay: 240, text:
+`Based on the projection, Operating Checking dips to **$84k** on May 20 — only **$9k above your $75k floor**. One missed AR or a surprise carrier bill puts you under. I'll draft a sweep rule that auto-funds from Reserve Savings before the shortfall hits.` },
+      { kind: 'tools', delay: 700, rows: [
+        { verb: 'GET',  path: '/v3/api/list/BankAccount', filter: "id IN ('acct_ops','acct_reserve')", status: '200', result: '2 accounts' },
+        { verb: 'EXEC', path: 'draft_sweep_rule',         filter: 'source=acct_reserve, dest=acct_ops, floor=75000', status: '200', result: 'rule drafted' },
+      ] },
+      { kind: 'agent-stream', delay: 500, text:
+`Here's the draft sweep rule. It would pull $100k from Reserve Savings (current balance: $890k) to Operating Checking if the balance falls below $75k — giving you a cushion without parking idle cash.
+
+Review the rule in the artifact pane. You'll need to preview the dry-run before activating.` },
+      { kind: 'libs', delay: 300, items: [
+        { pkg: '@bill/artifact-runtime', ver: '0.4.1' },
+        { pkg: '@bill/treasury-rules', ver: '0.1.0' },
+      ] },
+      { kind: 'building', delay: 600, label: 'Sweep rule · Operating → Reserve', sub: 'drafting rule with safety gates' },
+      { kind: 'artifact-card', delay: 1200, artifactId: 'art_sweep_rule',
+        title: 'Sweep rule — Operating Checking auto-fund',
+        sub: 'RULE DRAFT · SWEEP',
+        meta: 'When Operating < **$75k** → pull **$100k** from Reserve Savings · safety: 1/day rate limit, reserve floor $200k',
+        icon: '⇄' },
+      { kind: 'suggest', items: ['Preview dry run', 'Change threshold to $100k', 'Add Slack alert on trigger', 'Activate'] },
+    ],
+    artifact: { id: 'art_sweep_rule', kind: 'sweep-rule', label: 'Sweep rule · Operating auto-fund' },
+  },
+
+  doc_q1_report: {
+    id: 'doc_q1_report',
+    title: 'CFO Q1 spend one-pager',
+    steps: [
+      { kind: 'user', text: 'Generate a CFO Q1 spend one-pager' },
+      { kind: 'agent-stream', delay: 240, text:
+`Pulling Q1 spend, vendor breakdown, and aging summary. Building a structured report.` },
+      { kind: 'tools', delay: 800, rows: [
+        { verb: 'GET',  path: '/v3/api/list/Bill',    filter: "paidDate:[2026-01-01..2026-03-31]", status: '200', result: '112 records · 184ms' },
+        { verb: 'GET',  path: '/v3/api/list/Vendor',  filter: 'isActive=true', status: '200', result: '18 records · 92ms' },
+        { verb: 'EXEC', path: 'coworker.aggregate',   filter: 'groupBy=category,sum(amount),aging', status: 'ok', result: '6 buckets + 4 aging tiers' },
+      ] },
+      { kind: 'libs', delay: 400, items: [
+        { pkg: '@bill/artifact-runtime', ver: '0.4.1' },
+        { pkg: '@bill/doc-renderer', ver: '1.0.0' },
+      ] },
+      { kind: 'building', delay: 700, label: 'Q1 AP Report', sub: 'composing sections' },
+      { kind: 'artifact-card', delay: 1400, artifactId: 'art_doc_q1',
+        title: 'Q1 AP Report · CFO Summary', sub: 'DOCUMENT · DRAFT',
+        meta: '3 sections · 6 KPIs · $406k total spend',
+        icon: '◧' },
+      { kind: 'agent-stream', delay: 500, text:
+`Report's ready — click the card to open it in the right pane. It covers Executive Summary, Vendor Breakdown (top 5), and AP Aging buckets. All figures are from Q1 paid bills.` },
+      { kind: 'suggest', items: ['Export as PDF', 'Add YoY comparison', 'Share with controller', 'Regenerate with different date range'] },
+    ],
+    artifact: { id: 'art_doc_q1', kind: 'document', label: 'Q1 AP Report · CFO Summary' },
+  },
 } satisfies Record<string, Flow>;
 
 export function matchFlow(text: string, dataset: DatasetKey = 'default'): string | null {
@@ -451,9 +687,12 @@ export function matchFlow(text: string, dataset: DatasetKey = 'default'): string
   }
   if (low.includes('pay') && (low.includes('3') || low.includes('ach') || low.includes('overdue'))) return 'pay_batch';
   if (low.includes('overdue') || (low.includes('show') && low.includes('ap'))) return 'ap_overdue';
+  if (low.includes('runway') || low.includes('burndown') || low.includes('treasury') || low.includes('cash position') || low.includes('cash runway')) return 'runway_projection';
+  if (low.includes('driver') || low.includes('driving') || low.includes('causing') || (low.includes('why') && (low.includes('dip') || low.includes('drop') || low.includes('zero')))) return 'runway_drivers';
   if (low.includes('net 15') || low.includes('automation') || low.includes('rule')) return 'automate_net15';
   if (low.includes('chart') || low.includes('visualize') || low.includes('spend')) return 'chart_spend';
   if (low.includes('crm') || low.includes('hubspot') || low.includes('deal')) return 'crm_sync';
   if (low.includes('dup') || low.includes('sweep')) return 'dupe_sweep';
+  if (low.includes('doc') || low.includes('report') || low.includes('one-pager') || low.includes('cfo')) return 'doc_q1_report';
   return null;
 }

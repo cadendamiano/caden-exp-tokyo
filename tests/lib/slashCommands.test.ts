@@ -48,12 +48,26 @@ describe('parseSlash', () => {
     expect(result).not.toBeNull();
     expect(result!.cmd.name).toBe('crm');
   });
+
+  it('parses /doc with body', () => {
+    const result = parseSlash('/doc Generate a Q1 CFO report');
+    expect(result).not.toBeNull();
+    expect(result!.cmd.name).toBe('doc');
+    expect(result!.body).toBe('Generate a Q1 CFO report');
+  });
+
+  it('resolves /report alias to doc command', () => {
+    const result = parseSlash('/report Q1 spend summary');
+    expect(result).not.toBeNull();
+    expect(result!.cmd.name).toBe('doc');
+  });
 });
 
 describe('matchSlashPrefix', () => {
-  it('includes dataviz when prefix is "d"', () => {
+  it('includes dataviz and doc when prefix is "d"', () => {
     const matches = matchSlashPrefix('d');
     expect(matches.some(c => c.name === 'dataviz')).toBe(true);
+    expect(matches.some(c => c.name === 'doc')).toBe(true);
   });
 
   it('returns no matches for an unknown prefix', () => {
@@ -89,9 +103,18 @@ describe('SLASH_COMMANDS invariants', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it('covers all four canonical ArtifactKind values', () => {
-    const kinds = SLASH_COMMANDS.map(c => c.kind).sort();
-    expect(kinds).toEqual(['ap-table', 'crm-flow', 'rule-net15', 'spend-chart']);
+  it('covers all six user-facing ArtifactKinds', () => {
+    const kinds = [...new Set(SLASH_COMMANDS.map(c => c.kind))].sort();
+    expect(kinds).toEqual(['ap-table', 'crm-flow', 'document', 'rule-net15', 'spend-chart', 'sweep-rule']);
+  });
+
+  it('includes /liquidity mapped to sweep-rule and sweep_rule_draft', () => {
+    const cmd = SLASH_COMMANDS.find(c => c.name === 'liquidity');
+    expect(cmd).toBeDefined();
+    expect(cmd!.kind).toBe('sweep-rule');
+    expect(cmd!.demoFlowId).toBe('sweep_rule_draft');
+    expect(cmd!.aliases).toContain('runway');
+    expect(cmd!.aliases).toContain('treasury');
   });
 });
 

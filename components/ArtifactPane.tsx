@@ -8,6 +8,9 @@ import { SpendChartArtifact } from './artifacts/SpendChartArtifact';
 import { Net15RuleArtifact } from './artifacts/Net15RuleArtifact';
 import { CRMFlowArtifact } from './artifacts/CRMFlowArtifact';
 import { HtmlArtifact } from './artifacts/HtmlArtifact';
+import { LiquidityBurndownArtifact } from './artifacts/LiquidityBurndownArtifact';
+import { SweepRuleArtifact } from './artifacts/SweepRuleArtifact';
+import { DocumentArtifact } from './artifacts/DocumentArtifact';
 import { ArtifactPreview } from './ArtifactPreview';
 import { ArtifactCode } from './ArtifactCode';
 import type { ArtifactKind } from '@/lib/flows';
@@ -19,6 +22,8 @@ function glyphFor(kind: ArtifactKind) {
   if (kind === 'rule-net15') return <Icon.Rule />;
   if (kind === 'crm-flow') return <Icon.Flow />;
   if (kind === 'html') return <Icon.Chart />;
+  if (kind === 'liquidity-burndown') return <Icon.Chart />;
+  if (kind === 'sweep-rule') return <Icon.Rule />;
   return <Icon.Doc />;
 }
 
@@ -140,7 +145,7 @@ export function ArtifactPane() {
                       className={'artifact-view-tab' + (view === v ? ' active' : '')}
                       onClick={() => setView(v)}
                     >
-                      {v === 'logic' ? 'Logic' : v === 'preview' ? 'Pro forma ledger' : 'Code'}
+                      {v === 'logic' ? 'Logic' : v === 'preview' ? (cur.kind === 'rule-net15' ? 'Pro forma ledger' : 'Ledger') : 'Code'}
                     </button>
                   ))}
                 </div>
@@ -171,6 +176,9 @@ export function ArtifactPane() {
                 {view === 'logic' && cur.kind === 'spend-chart' && <SpendChartArtifact />}
                 {view === 'logic' && cur.kind === 'crm-flow' && <CRMFlowArtifact artifact={cur} />}
                 {view === 'logic' && cur.kind === 'html' && <HtmlArtifact artifact={cur} />}
+                {view === 'logic' && cur.kind === 'liquidity-burndown' && <LiquidityBurndownArtifact artifact={cur} />}
+                {view === 'logic' && cur.kind === 'sweep-rule' && <SweepRuleArtifact artifact={cur} />}
+                {view === 'logic' && cur.kind === 'document' && <DocumentArtifact />}
               </div>
             </>
           ) : (
@@ -193,7 +201,7 @@ function EmptyArtifact() {
           open here side-by-side.
         </div>
         <div style={{ marginTop: 12, color: 'var(--ink-3)' }}>
-          Tables · Charts · Rules · Flows · Code
+          Tables · Charts · Rules · Flows · Docs · Code
         </div>
       </div>
     </div>
