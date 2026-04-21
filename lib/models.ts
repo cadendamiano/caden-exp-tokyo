@@ -19,3 +19,7 @@ export function getModel(id: ModelId): ModelEntry | undefined {
 export function providerOf(id: ModelId): Provider {
   return getModel(id)?.provider ?? 'anthropic';
 }
+
+export function firstModelForProvider(provider: Provider): ModelId | undefined {
+  return MODELS.find(m => m.provider === provider)?.id;
+}

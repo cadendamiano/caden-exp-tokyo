@@ -141,6 +141,35 @@ const READ_TOOLS: ToolDef[] = [
       required: ['kind', 'title'],
     },
   },
+  {
+    name: 'render_html_artifact',
+    description:
+      'Open a custom HTML/CSS/JS artifact in the UI. Use this whenever the user asks for a visualization or layout that does not match one of the fixed kinds (ap-table, spend-chart, rule-net15, crm-flow) — for example a line graph, treemap, heatmap, sankey, sunburst, scatter, custom table, KPI dashboard, or any freeform layout. The artifact renders inside a sandboxed iframe with ECharts v5, D3 v7, and Chart.js v4 available globally.',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Display title for the artifact tab.' },
+        sub: { type: 'string', description: 'Short uppercase subtitle, e.g. "CHART · TREEMAP".' },
+        meta: { type: 'string', description: 'Short summary with markdown bold supported.' },
+        html: {
+          type: 'string',
+          description: 'Body HTML. A root element with id="root" is provided; you may also write into it or add your own containers.',
+        },
+        css: { type: 'string', description: 'Optional extra CSS applied inside the sandbox.' },
+        script: {
+          type: 'string',
+          description:
+            'JS that runs after ECharts, D3, and Chart.js are loaded. Access the piped dataset via `window.__DATA`. Mount into `#root`.',
+        },
+        dataJson: {
+          type: 'string',
+          description:
+            'JSON-serialized dataset to pipe in. Typically the data field from a prior read tool call (list_bills, get_category_spend, etc.), stringified. Exposed to the script as window.__DATA.',
+        },
+      },
+      required: ['title', 'html'],
+    },
+  },
 ];
 
 const WRITE_TOOLS: ToolDef[] = [
@@ -272,6 +301,9 @@ async function runRealTool(
   try {
     if (name === 'render_artifact') {
       return { ok: true, summary: 'artifact opened in UI', data: input };
+    }
+    if (name === 'render_html_artifact') {
+      return { ok: true, summary: 'html artifact opened in UI', data: input };
     }
     const env = await getBillEnvironment(ctx.billEnvId!);
     if (!env) {
@@ -503,6 +535,9 @@ async function runMockTool(
     if (name === 'render_artifact') {
       return { ok: true, summary: 'artifact opened in UI', data: input };
     }
+    if (name === 'render_html_artifact') {
+      return { ok: true, summary: 'html artifact opened in UI', data: input };
+    }
 
     // ── Write tools ──
     if (name === 'stage_payment_batch') {
@@ -618,6 +653,22 @@ async function runMockTool(
   }
 }
 
+const DYNAMIC_ARTIFACT_GUIDANCE = `
+Rendering artifacts:
+- For the four curated kinds (AP bills table, Q1 spend donut+bar, Net-15 automation rule, CRM flow), call \`render_artifact\` with kind ap-table, spend-chart, rule-net15, or crm-flow.
+- For ANYTHING else — line graphs, treemaps, heatmaps, sunburst, sankey, scatter, radar, custom dashboards, KPI cards, custom tables, annotated layouts, or anything the user describes that does not exactly match one of those four — call \`render_html_artifact\`. Do NOT try to fit a bespoke request into the fixed kinds.
+- \`render_html_artifact\` renders inside a sandboxed iframe with three libraries preloaded as globals: \`echarts\` (v5), \`d3\` (v7), and \`Chart\` (Chart.js v4). Prefer ECharts for treemap / sunburst / sankey / heatmap / complex multi-series charts. D3 is available for bespoke work; Chart.js for quick line/bar/pie.
+- Data flow: first call the appropriate read tool (e.g. \`get_category_spend\`, \`list_bills\`, \`get_aging_summary\`, \`list_expenses\`). Then pass the JSON-stringified \`data\` field as \`dataJson\`. Reference it in the script as \`window.__DATA\`.
+- The iframe provides \`<div id="root"></div>\`. Mount charts into that element (or a child you create). Keep \`html\` minimal — most content should be produced by the script. Inline any extra CSS via the \`css\` field.
+- Do NOT include \`<script>\` tags inside \`html\` — the sandbox already wires ECharts/D3/Chart.js and runs your \`script\` after they load.
+- Example script pattern:
+    var root = document.getElementById('root');
+    var el = document.createElement('div');
+    el.style.height = '360px';
+    root.appendChild(el);
+    var chart = echarts.init(el);
+    chart.setOption({ series: [{ type: 'treemap', data: window.__DATA }] });`;
+
 export const SYSTEM_PROMPT = `You are BILL Coworker, an agentic coworker for finance teams using the BILL.com API. You help non-technical finance folks explore accounts payable, propose payments (always behind a human approval gate), build automations, and generate visual artifacts from their BILL data.
 
 Style:
@@ -626,6 +677,7 @@ Style:
 - When the user asks to visualize or open an interactive view (AP list, spend chart, Net-15 rule, CRM flow, cash runway, sweep rule, report/document), call \`render_artifact\` with the right kind. Kinds: ap-table, spend-chart, rule-net15, crm-flow, document, liquidity-burndown, sweep-rule.
 - To stage a payment, call \`stage_payment_batch\` with the bill IDs — the UI will render an approval card with a typed-confirmation gate. Do not fabricate approvals. Wait for the user's approve/reject before describing an outcome.
 - Write actions available: \`stage_payment_batch\`, \`create_automation_rule\`, \`approve_expense\`, \`reject_expense\`. Submission happens only after user approval.
+${DYNAMIC_ARTIFACT_GUIDANCE}
 
 Finish every turn with a short natural-language summary of what you learned or did.`;
 
@@ -637,5 +689,6 @@ Style:
 - If a tool returns an error, surface the error message plainly so the user can diagnose.
 - Write actions run as simulated writes against fixture data when the real endpoint isn't wired. Tool results include \`simulated: true\` in that case — always surface which mode you're in.
 - If you stage bills whose IDs aren't in the local dataset, pass \`billHints[]\` with at least \`{id, amount}\` so the approval card totals are correct.
+${DYNAMIC_ARTIFACT_GUIDANCE}
 
 Finish every turn with a short natural-language summary of what you learned or did.`;

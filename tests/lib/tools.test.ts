@@ -39,9 +39,9 @@ vi.mock('@/lib/secrets', async () => {
 });
 
 describe('TOOLS definitions', () => {
-  it('exports 14 tools total (13 model + 1 internal)', () => {
-    expect(TOOLS).toHaveLength(14);
-    expect(MODEL_TOOLS).toHaveLength(13);
+  it('exports 15 tools total (14 model + 1 internal)', () => {
+    expect(TOOLS).toHaveLength(15);
+    expect(MODEL_TOOLS).toHaveLength(14);
     expect(INTERNAL_TOOLS).toHaveLength(1);
   });
 
@@ -67,6 +67,7 @@ describe('TOOLS definitions', () => {
     expect(names).toContain('list_expenses');
     expect(names).toContain('get_employee');
     expect(names).toContain('render_artifact');
+    expect(names).toContain('render_html_artifact');
     expect(names).toContain('stage_payment_batch');
     expect(names).toContain('submit_payment_batch');
     expect(names).toContain('create_automation_rule');

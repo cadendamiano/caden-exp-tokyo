@@ -17,7 +17,19 @@ type Event =
   | { type: 'text'; text: string }
   | { type: 'tool-call'; id: string; name: string; input: any }
   | { type: 'tool-result'; id: string; name: string; input: any; ok: boolean; summary: string }
-  | { type: 'artifact'; kind: string; title?: string; sub?: string; meta?: string; label?: string; icon?: string }
+  | {
+      type: 'artifact';
+      kind: string;
+      title?: string;
+      sub?: string;
+      meta?: string;
+      label?: string;
+      icon?: string;
+      html?: string;
+      css?: string;
+      script?: string;
+      dataJson?: string;
+    }
   | { type: 'approval'; payload: ApprovalPayload; simulated: boolean }
   | { type: 'done' }
   | { type: 'error'; message: string };
@@ -25,6 +37,8 @@ type Event =
 export function sseEncode(ev: Event) {
   return `data: ${JSON.stringify(ev)}\n\n`;
 }
+
+export type ChatHistoryTurn = { role: 'user' | 'assistant'; text: string };
 
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as {
@@ -37,8 +51,10 @@ export async function POST(req: NextRequest) {
     forcedKind?: ArtifactKind;
     requirements?: string[];
     commandName?: string;
+    history?: ChatHistoryTurn[];
   };
   const { model, userMessage } = body;
+  const history = Array.isArray(body.history) ? body.history.slice(-10) : [];
   const provider = providerOf(model);
   const ctx: ToolContext = {
     mode: body.mode ?? 'demo',
@@ -60,9 +76,9 @@ export async function POST(req: NextRequest) {
       const send = (ev: Event) => controller.enqueue(encoder.encode(sseEncode(ev)));
       try {
         if (provider === 'gemini') {
-          await runGemini(model, userMessage, send, ctx, systemPrompt, tools, forcedKind);
+          await runGemini(model, userMessage, send, ctx, systemPrompt, tools, forcedKind, history);
         } else {
-          await runAnthropic(model, userMessage, send, ctx, systemPrompt, tools, forcedKind);
+          await runAnthropic(model, userMessage, send, ctx, systemPrompt, tools, forcedKind, history);
         }
       } catch (e: any) {
         send({ type: 'error', message: e?.message ?? 'unknown error' });
@@ -90,7 +106,8 @@ async function runAnthropic(
   ctx: ToolContext,
   systemPrompt: string,
   modelTools: ToolDef[],
-  forcedKind: ArtifactKind | undefined
+  forcedKind: ArtifactKind | undefined,
+  history: ChatHistoryTurn[]
 ) {
   const apiKey = await getAnthropicKey();
   if (!apiKey) throw new Error('Anthropic API key not set. Configure it in Settings (or ANTHROPIC_API_KEY in .env.local).');
@@ -103,6 +120,10 @@ async function runAnthropic(
   }));
 
   const messages: Anthropic.Messages.MessageParam[] = [
+    ...history.map(h => ({
+      role: h.role,
+      content: h.text,
+    })) as Anthropic.Messages.MessageParam[],
     { role: 'user', content: userMessage },
   ];
 
@@ -151,6 +172,21 @@ async function runAnthropic(
           label: inp.title,
         });
       }
+      if (tu.name === 'render_html_artifact') {
+        const inp = tu.input as any;
+        send({
+          type: 'artifact',
+          kind: 'html',
+          title: inp.title,
+          sub: inp.sub,
+          meta: inp.meta,
+          label: inp.title,
+          html: inp.html,
+          css: inp.css,
+          script: inp.script,
+          dataJson: inp.dataJson,
+        });
+      }
       if (tu.name === 'stage_payment_batch' && res.data && (res.data as any).approvalPayload) {
         const d = res.data as { approvalPayload: ApprovalPayload; simulated?: boolean };
         send({ type: 'approval', payload: d.approvalPayload, simulated: d.simulated === true });
@@ -175,7 +211,8 @@ async function runGemini(
   ctx: ToolContext,
   systemPrompt: string,
   modelTools: ToolDef[],
-  forcedKind: ArtifactKind | undefined
+  forcedKind: ArtifactKind | undefined,
+  history: ChatHistoryTurn[]
 ) {
   const apiKey = await getGeminiKey();
   if (!apiKey) throw new Error('Gemini API key not set. Configure it in Settings (or GEMINI_API_KEY in .env.local).');
@@ -192,7 +229,13 @@ async function runGemini(
     },
   ];
 
-  const contents: any[] = [{ role: 'user', parts: [{ text: userMessage }] }];
+  const contents: any[] = [
+    ...history.map(h => ({
+      role: h.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: h.text }],
+    })),
+    { role: 'user', parts: [{ text: userMessage }] },
+  ];
 
   for (let turn = 0; turn < 4; turn++) {
     const stream = await ai.models.generateContentStream({
@@ -242,6 +285,21 @@ async function runGemini(
           sub: inp.sub,
           meta: inp.meta,
           label: inp.title,
+        });
+      }
+      if (tc.name === 'render_html_artifact') {
+        const inp = tc.input as any;
+        send({
+          type: 'artifact',
+          kind: 'html',
+          title: inp.title,
+          sub: inp.sub,
+          meta: inp.meta,
+          label: inp.title,
+          html: inp.html,
+          css: inp.css,
+          script: inp.script,
+          dataJson: inp.dataJson,
         });
       }
       if (tc.name === 'stage_payment_batch' && res.data && (res.data as any).approvalPayload) {

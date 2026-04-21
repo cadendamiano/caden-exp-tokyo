@@ -26,10 +26,17 @@ export function buildRequirementsBlock(
   requirements: string[]
 ): string {
   const lines = requirements.map(r => `- ${r}`).join('\n');
-  return `The user invoked /${commandName}. You MUST call render_artifact exactly once this turn with kind="${forcedKind}". Before (or alongside) that call, produce a structured plan that covers EVERY requirement below. Use the read tools (list_bills, get_category_spend, list_vendors, get_aging_summary, find_duplicate_invoices) to ground concrete values.
+  const dvExtra = commandName === 'dataviz'
+    ? `
+
+Dataviz routing:
+- If the user asked for a standard spend donut+bar (Q1 spend by category), call render_artifact with kind="spend-chart".
+- If the user asked for a non-standard visualization (line, treemap, heatmap, sunburst, sankey, scatter, radar, custom dashboard, or anything else), call \`render_html_artifact\` instead. Pipe the read-tool output as \`dataJson\`; write a short script that uses ECharts/D3/Chart.js to render into #root. Do not try to squeeze it into spend-chart.`
+    : '';
+  return `The user invoked /${commandName}. You MUST open exactly one artifact this turn — either via render_artifact (kind="${forcedKind}") or via render_html_artifact for requests that don't fit the curated kind. Before (or alongside) that call, produce a structured plan that covers EVERY requirement below. Use the read tools (list_bills, get_category_spend, list_vendors, get_aging_summary, find_duplicate_invoices) to ground concrete values.
 
 Requirements:
-${lines}`;
+${lines}${dvExtra}`;
 }
 
 export function coerceArtifactKind(
@@ -37,6 +44,8 @@ export function coerceArtifactKind(
   forcedKind: ArtifactKind | undefined
 ): string {
   if (!forcedKind) return String(modelKind);
+  // 'html' is a legitimate escape hatch via render_html_artifact — never coerce it away.
+  if (modelKind === 'html') return 'html';
   if (modelKind !== forcedKind) {
     console.warn(
       `[chat] model emitted artifact kind=${String(modelKind)} but forced kind=${forcedKind}; coercing`

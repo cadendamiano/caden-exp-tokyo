@@ -5,7 +5,14 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Turn } from './turns';
 import type { ArtifactKind, FlowStep } from './flows';
 import type { DatasetKey } from './data';
-import { DEFAULT_MODEL_ID, MODELS, type ModelId, type Provider } from './models';
+import {
+  DEFAULT_MODEL_ID,
+  MODELS,
+  firstModelForProvider,
+  providerOf,
+  type ModelId,
+  type Provider,
+} from './models';
 
 export type Mode = 'demo' | 'testing';
 export type BillProduct = 'ap' | 'se';
@@ -41,6 +48,11 @@ export type Artifact = {
   editedBy?: string;
   editedAt?: number;
   dryRunAcknowledged?: boolean;
+  html?: string;
+  css?: string;
+  script?: string;
+  dataJson?: string;
+  title?: string;
 };
 
 export type Thread = {
@@ -156,7 +168,22 @@ export const useStore = create<State>()(
       activeTestingThreadId: null,
 
       setTweak: (k, v) => set(s => ({ tweaks: { ...s.tweaks, [k]: v } })),
-      setSettingsStatus: (settingsStatus) => set({ settingsStatus }),
+      setSettingsStatus: (settingsStatus) =>
+        set(s => {
+          // If current model's provider has no key but the other provider does,
+          // auto-switch to a working model so submits don't fail with "key not set".
+          if (!settingsStatus) return { settingsStatus };
+          const current = providerOf(s.tweaks.modelId);
+          if (settingsStatus[current]) return { settingsStatus };
+          const other: Provider = current === 'anthropic' ? 'gemini' : 'anthropic';
+          if (!settingsStatus[other]) return { settingsStatus };
+          const fallback = firstModelForProvider(other);
+          if (!fallback) return { settingsStatus };
+          return {
+            settingsStatus,
+            tweaks: { ...s.tweaks, modelId: fallback },
+          };
+        }),
       setComposer: (composer) => set({ composer }),
       setStreaming: (streaming) => set({ streaming }),
       addTurn: (t) => set(s => ({ turns: [...s.turns, t] })),
