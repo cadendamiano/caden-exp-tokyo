@@ -139,7 +139,7 @@ export function ArtifactPane() {
                       className={'artifact-view-tab' + (view === v ? ' active' : '')}
                       onClick={() => setView(v)}
                     >
-                      {v === 'logic' ? 'Logic' : v === 'preview' ? 'Pro forma ledger' : 'Code'}
+                      {v === 'logic' ? 'Logic' : v === 'preview' ? (cur.kind === 'rule-net15' ? 'Pro forma ledger' : 'Ledger') : 'Code'}
                     </button>
                   ))}
                 </div>
