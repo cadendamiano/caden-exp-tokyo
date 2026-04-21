@@ -4,7 +4,6 @@ import { useRef, useEffect, useState } from 'react';
 import { DEMO_PROMPTS, LOGISTICS_DEMO_PROMPTS } from '@/lib/data';
 import { useStore } from '@/lib/store';
 import { runFlow, runLLM, runLLMTesting } from '@/lib/runtime';
-import { MODELS, providerOf } from '@/lib/models';
 import { ModelPicker } from './ModelPicker';
 import { matchSlashPrefix, parseSlash, type SlashCommand } from '@/lib/slashCommands';
 import { resolveComposerSubmit } from '@/lib/resolveComposerSubmit';
@@ -53,16 +52,6 @@ export function Composer() {
     })();
     return () => { cancelled = true; };
   }, [settingsStatus, setSettingsStatus]);
-
-  useEffect(() => {
-    if (!settingsStatus) return;
-    const currentProvider = providerOf(modelId);
-    if (settingsStatus[currentProvider]) return;
-    const otherProvider = currentProvider === 'anthropic' ? 'gemini' : 'anthropic';
-    if (!settingsStatus[otherProvider]) return;
-    const fallback = MODELS.find(m => m.provider === otherProvider);
-    if (fallback) setTweak('modelId', fallback.id);
-  }, [settingsStatus, modelId, setTweak]);
 
   // Clear forced command when mode changes.
   useEffect(() => {

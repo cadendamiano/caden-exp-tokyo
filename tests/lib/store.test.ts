@@ -78,6 +78,40 @@ describe('setTweak', () => {
   });
 });
 
+describe('setSettingsStatus auto-fallback', () => {
+  it('switches Anthropic → Gemini when only Gemini is keyed', () => {
+    useStore.setState({ ...CLEAN_STATE, tweaks: { ...CLEAN_STATE.tweaks, modelId: 'claude-sonnet-4-5' } });
+    useStore.getState().setSettingsStatus({ anthropic: false, gemini: true });
+    expect(useStore.getState().tweaks.modelId).toBe('gemini-2.5-pro');
+    expect(useStore.getState().settingsStatus).toEqual({ anthropic: false, gemini: true });
+  });
+
+  it('switches Gemini → Anthropic when only Anthropic is keyed', () => {
+    useStore.setState({ ...CLEAN_STATE, tweaks: { ...CLEAN_STATE.tweaks, modelId: 'gemini-2.5-pro' } });
+    useStore.getState().setSettingsStatus({ anthropic: true, gemini: false });
+    expect(useStore.getState().tweaks.modelId).toBe('claude-opus-4-5');
+  });
+
+  it('leaves the model alone when the current provider is keyed', () => {
+    useStore.setState({ ...CLEAN_STATE, tweaks: { ...CLEAN_STATE.tweaks, modelId: 'claude-sonnet-4-5' } });
+    useStore.getState().setSettingsStatus({ anthropic: true, gemini: true });
+    expect(useStore.getState().tweaks.modelId).toBe('claude-sonnet-4-5');
+  });
+
+  it('leaves the model alone when neither provider is keyed', () => {
+    useStore.setState({ ...CLEAN_STATE, tweaks: { ...CLEAN_STATE.tweaks, modelId: 'claude-sonnet-4-5' } });
+    useStore.getState().setSettingsStatus({ anthropic: false, gemini: false });
+    expect(useStore.getState().tweaks.modelId).toBe('claude-sonnet-4-5');
+  });
+
+  it('leaves the model alone when status is cleared to null', () => {
+    useStore.setState({ ...CLEAN_STATE, tweaks: { ...CLEAN_STATE.tweaks, modelId: 'claude-sonnet-4-5' } });
+    useStore.getState().setSettingsStatus(null);
+    expect(useStore.getState().tweaks.modelId).toBe('claude-sonnet-4-5');
+    expect(useStore.getState().settingsStatus).toBeNull();
+  });
+});
+
 describe('setComposer', () => {
   it('updates composer text', () => {
     useStore.getState().setComposer('hello world');

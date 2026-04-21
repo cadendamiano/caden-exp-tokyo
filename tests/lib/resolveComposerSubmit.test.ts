@@ -103,4 +103,40 @@ describe('resolveComposerSubmit', () => {
     expect(action.body).toBe('what is the meaning of this');
     expect(action.opts).toBeUndefined();
   });
+
+  it('/dataviz in demo mode with treemap ask → routes to LLM with forced opts', () => {
+    const action = resolveComposerSubmit({
+      body: 'show Q1 spend as a treemap',
+      streaming: false,
+      forcedCmd: dataviz,
+      mode: 'demo',
+      demoDataset: 'default',
+    });
+    if (action.kind !== 'llm') throw new Error('expected llm');
+    expect(action.body).toBe('show Q1 spend as a treemap');
+    expect(action.opts?.commandName).toBe('dataviz');
+  });
+
+  it('/dataviz in demo mode with no custom-viz hints → still runs canned flow', () => {
+    const action = resolveComposerSubmit({
+      body: 'Q1 spend by category',
+      streaming: false,
+      forcedCmd: dataviz,
+      mode: 'demo',
+      demoDataset: 'default',
+    });
+    expect(action).toEqual({ kind: 'flow', flowId: dataviz.demoFlowId });
+  });
+
+  it('demo mode free text with "treemap" → LLM (custom viz, skips flow match)', () => {
+    const action = resolveComposerSubmit({
+      body: 'show me a treemap of top vendors by spend',
+      streaming: false,
+      forcedCmd: null,
+      mode: 'demo',
+      demoDataset: 'default',
+    });
+    if (action.kind !== 'llm') throw new Error('expected llm');
+    expect(action.body).toBe('show me a treemap of top vendors by spend');
+  });
 });

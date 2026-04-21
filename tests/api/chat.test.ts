@@ -41,6 +41,28 @@ describe('sseEncode', () => {
     expect(result.endsWith('\n\n')).toBe(true);
   });
 
+  it('serialises an html-artifact event preserving html/script/dataJson', () => {
+    const result = sseEncode({
+      type: 'artifact' as const,
+      kind: 'html',
+      title: 'Q1 treemap',
+      sub: 'CHART · TREEMAP',
+      meta: '6 buckets · $112k',
+      label: 'Q1 treemap',
+      html: '<div id="viz"></div>',
+      css: '#viz { height: 320px; }',
+      script: 'echarts.init(document.getElementById("viz")).setOption({});',
+      dataJson: '[{"cat":"Professional","amount":40500}]',
+    });
+    const parsed = JSON.parse(result.slice(6).trim());
+    expect(parsed.type).toBe('artifact');
+    expect(parsed.kind).toBe('html');
+    expect(parsed.html).toBe('<div id="viz"></div>');
+    expect(parsed.css).toBe('#viz { height: 320px; }');
+    expect(parsed.script).toContain('echarts.init');
+    expect(parsed.dataJson).toBe('[{"cat":"Professional","amount":40500}]');
+  });
+
   it('serialises an approval event with payload and simulated flag', () => {
     const result = sseEncode({
       type: 'approval' as const,
@@ -131,6 +153,22 @@ describe('jsonSchemaToGemini', () => {
 });
 
 // ─── POST handler ─────────────────────────────────────────────────────────────
+
+// Hermetic: ignore any on-disk .secrets.local.json so tests don't depend on the
+// developer's local keys.
+vi.mock('@/lib/secrets', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/secrets')>('@/lib/secrets');
+  return {
+    ...actual,
+    readSecrets: vi.fn(async () => ({
+      anthropicApiKey: undefined,
+      geminiApiKey: undefined,
+      billEnvironments: [],
+    })),
+    getAnthropicKey: vi.fn(async () => process.env.ANTHROPIC_API_KEY),
+    getGeminiKey: vi.fn(async () => process.env.GEMINI_API_KEY),
+  };
+});
 
 describe('POST handler', () => {
   beforeEach(() => {

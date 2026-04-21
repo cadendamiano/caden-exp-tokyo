@@ -25,6 +25,37 @@ function renderLines(lines: CodeLine[]) {
   });
 }
 
+function codeForArtifact(artifact: Artifact): CodeLine[] {
+  if (artifact.kind === 'html') {
+    const sections: CodeLine[] = [
+      { text: '# BILL Coworker · Custom HTML artifact', kind: 'comment' },
+      { text: `# Title: ${artifact.title ?? artifact.label ?? 'Untitled'}`, kind: 'comment' },
+      { text: '' },
+    ];
+    if (artifact.html) {
+      sections.push({ text: '# --- html ---', kind: 'comment' });
+      for (const line of (artifact.html ?? '').split('\n')) sections.push({ text: line, kind: 'plain' });
+      sections.push({ text: '' });
+    }
+    if (artifact.css) {
+      sections.push({ text: '# --- css ---', kind: 'comment' });
+      for (const line of (artifact.css ?? '').split('\n')) sections.push({ text: line, kind: 'plain' });
+      sections.push({ text: '' });
+    }
+    if (artifact.script) {
+      sections.push({ text: '# --- script (runs in sandboxed iframe; ECharts/D3/Chart.js global) ---', kind: 'comment' });
+      for (const line of (artifact.script ?? '').split('\n')) sections.push({ text: line, kind: 'plain' });
+    }
+    if (artifact.dataJson) {
+      sections.push({ text: '' });
+      sections.push({ text: '# --- window.__DATA ---', kind: 'comment' });
+      for (const line of (artifact.dataJson ?? '').split('\n')) sections.push({ text: line, kind: 'string' });
+    }
+    return sections;
+  }
+  return codeForKind(artifact.kind);
+}
+
 function codeForKind(kind: ArtifactKind): CodeLine[] {
   if (kind === 'rule-net15') {
     return [
@@ -146,7 +177,7 @@ function timeAgo(ts: number | undefined): string {
 }
 
 export function ArtifactCode({ artifact }: Props) {
-  const lines = codeForKind(artifact.kind);
+  const lines = codeForArtifact(artifact);
   const editInfo = artifact.editedBy
     ? ` · ${artifact.editedBy} edited ${timeAgo(artifact.editedAt)}`
     : '';

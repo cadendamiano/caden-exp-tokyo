@@ -4,6 +4,30 @@ import { FLOWS, LOGISTICS_FLOWS, type ArtifactKind, type Flow, type FlowStep } f
 import { newId, type Turn } from './turns';
 import { useStore, getActiveThread, type ApprovalPayload } from './store';
 
+type HistoryTurn = { role: 'user' | 'assistant'; text: string };
+
+function formatErrorText(message: string): string {
+  const low = message.toLowerCase();
+  if (low.includes('api key not set') || low.includes('api key') && low.includes('not')) {
+    return `⚠ **${message}**\n\nOpen **Settings** (gear icon in the left rail) and paste a key — or switch models via the picker next to the Send button.`;
+  }
+  return `⚠ **Error:** ${message}`;
+}
+
+function buildHistory(turns: Turn[], maxTurns = 10): HistoryTurn[] {
+  const out: HistoryTurn[] = [];
+  for (const t of turns) {
+    if (t.kind === 'user') out.push({ role: 'user', text: t.text });
+    else if (t.kind === 'agent') {
+      // Skip the welcome turn and empty-streaming placeholders.
+      if ((t as any).welcome) continue;
+      const text = t.text?.trim();
+      if (text) out.push({ role: 'assistant', text });
+    }
+  }
+  return out.slice(-maxTurns);
+}
+
 export type ForcedArtifact = {
   forcedKind: ArtifactKind;
   requirements: string[];
@@ -258,6 +282,8 @@ export async function runLLM(userText: string, opts?: ForcedArtifact) {
   const displayText = opts
     ? `/${opts.commandName}${userText ? ' ' + userText : ''}`
     : userText;
+  // Capture history BEFORE we push the new user turn, so it isn't duplicated.
+  const history = buildHistory(s.turns);
   s.addTurn({ id: newId('u'), kind: 'user', text: displayText });
   s.setStreaming(true);
 
@@ -275,6 +301,7 @@ export async function runLLM(userText: string, opts?: ForcedArtifact) {
         model: s.tweaks.modelId,
         userMessage: userText,
         demoDataset: s.tweaks.demoDataset,
+        history,
         ...(opts ? {
           forcedKind: opts.forcedKind,
           requirements: opts.requirements,
@@ -324,7 +351,9 @@ export async function runLLM(userText: string, opts?: ForcedArtifact) {
             } as Partial<Turn>);
           }
         } else if (ev.type === 'artifact') {
-          const artId = `art_${ev.kind.replace('-', '_')}`;
+          const artId = ev.kind === 'html'
+            ? `art_html_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
+            : `art_${ev.kind.replace('-', '_')}`;
           useStore.getState().setArtifacts(prev =>
             prev.find(p => p.id === artId) ? prev : [...prev, {
               id: artId,
@@ -333,8 +362,14 @@ export async function runLLM(userText: string, opts?: ForcedArtifact) {
               status: 'draft' as const,
               version: 1,
               createdBy: 'Coworker',
+              ...(ev.title ? { title: ev.title } : {}),
+              ...(ev.html ? { html: ev.html } : {}),
+              ...(ev.css ? { css: ev.css } : {}),
+              ...(ev.script ? { script: ev.script } : {}),
+              ...(ev.dataJson ? { dataJson: ev.dataJson } : {}),
             }]
           );
+          useStore.getState().setActiveArtifact(artId);
           useStore.getState().addTurn({
             id: newId('ac'),
             kind: 'artifact-card',
@@ -357,7 +392,7 @@ export async function runLLM(userText: string, opts?: ForcedArtifact) {
           useStore.getState().updateTurn(agentId, { text: acc || ev.text || '', streaming: false });
         } else if (ev.type === 'error') {
           useStore.getState().updateTurn(agentId, {
-            text: (acc ? acc + '\n\n' : '') + `_error: ${ev.message}_`,
+            text: (acc ? acc + '\n\n' : '') + formatErrorText(ev.message),
             streaming: false,
           });
         }
@@ -402,6 +437,7 @@ export async function runLLMTesting(userText: string, opts?: ForcedArtifact) {
     return;
   }
 
+  const history = buildHistory(active.turns ?? []);
   s.addTurnToActiveThread({ id: newId('u'), kind: 'user', text: displayText });
   s.setStreaming(true);
 
@@ -422,6 +458,7 @@ export async function runLLMTesting(userText: string, opts?: ForcedArtifact) {
         billEnvId: active.billEnvId,
         billProduct: active.billProduct ?? 'ap',
         demoDataset: s.tweaks.demoDataset,
+        history,
         ...(opts ? {
           forcedKind: opts.forcedKind,
           requirements: opts.requirements,
@@ -471,7 +508,9 @@ export async function runLLMTesting(userText: string, opts?: ForcedArtifact) {
             } as Partial<Turn>);
           }
         } else if (ev.type === 'artifact') {
-          const artId = `art_${ev.kind.replace('-', '_')}`;
+          const artId = ev.kind === 'html'
+            ? `art_html_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
+            : `art_${ev.kind.replace('-', '_')}`;
           useStore.getState().setArtifactsInActiveThread(prev =>
             prev.find(p => p.id === artId) ? prev : [...prev, {
               id: artId,
@@ -480,8 +519,14 @@ export async function runLLMTesting(userText: string, opts?: ForcedArtifact) {
               status: 'draft' as const,
               version: 1,
               createdBy: 'Coworker',
+              ...(ev.title ? { title: ev.title } : {}),
+              ...(ev.html ? { html: ev.html } : {}),
+              ...(ev.css ? { css: ev.css } : {}),
+              ...(ev.script ? { script: ev.script } : {}),
+              ...(ev.dataJson ? { dataJson: ev.dataJson } : {}),
             }]
           );
+          useStore.getState().setActiveArtifact(artId);
           useStore.getState().addTurnToActiveThread({
             id: newId('ac'),
             kind: 'artifact-card',
@@ -504,7 +549,7 @@ export async function runLLMTesting(userText: string, opts?: ForcedArtifact) {
           useStore.getState().updateTurnInActiveThread(agentId, { text: acc || ev.text || '', streaming: false });
         } else if (ev.type === 'error') {
           useStore.getState().updateTurnInActiveThread(agentId, {
-            text: (acc ? acc + '\n\n' : '') + `_error: ${ev.message}_`,
+            text: (acc ? acc + '\n\n' : '') + formatErrorText(ev.message),
             streaming: false,
           });
         }
