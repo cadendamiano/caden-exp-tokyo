@@ -39,9 +39,9 @@ vi.mock('@/lib/secrets', async () => {
 });
 
 describe('TOOLS definitions', () => {
-  it('exports 13 tools total (12 model + 1 internal)', () => {
-    expect(TOOLS).toHaveLength(13);
-    expect(MODEL_TOOLS).toHaveLength(12);
+  it('exports 14 tools total (13 model + 1 internal)', () => {
+    expect(TOOLS).toHaveLength(14);
+    expect(MODEL_TOOLS).toHaveLength(13);
     expect(INTERNAL_TOOLS).toHaveLength(1);
   });
 
@@ -63,6 +63,7 @@ describe('TOOLS definitions', () => {
     expect(names).toContain('get_aging_summary');
     expect(names).toContain('get_category_spend');
     expect(names).toContain('find_duplicate_invoices');
+    expect(names).toContain('get_liquidity_projection');
     expect(names).toContain('list_expenses');
     expect(names).toContain('get_employee');
     expect(names).toContain('render_artifact');
@@ -84,14 +85,17 @@ describe('TOOLS definitions', () => {
     expect(tool.parameters.required).toContain('title');
   });
 
-  it('render_artifact kind enum has exactly 4 values', () => {
+  it('render_artifact kind enum has exactly 7 values', () => {
     const tool = TOOLS.find(t => t.name === 'render_artifact')!;
     const kindEnum = tool.parameters.properties.kind.enum as string[];
-    expect(kindEnum).toHaveLength(4);
+    expect(kindEnum).toHaveLength(7);
     expect(kindEnum).toContain('ap-table');
     expect(kindEnum).toContain('spend-chart');
     expect(kindEnum).toContain('rule-net15');
     expect(kindEnum).toContain('crm-flow');
+    expect(kindEnum).toContain('document');
+    expect(kindEnum).toContain('liquidity-burndown');
+    expect(kindEnum).toContain('sweep-rule');
   });
 
   it('list_bills status enum includes all valid statuses', () => {
@@ -238,6 +242,36 @@ describe('runTool — find_duplicate_invoices', () => {
   it('summary mentions suspect pairs', async () => {
     const result = await runTool('find_duplicate_invoices', {});
     expect(result.summary).toMatch(/\d+ suspect pairs/);
+  });
+});
+
+describe('runTool — get_liquidity_projection', () => {
+  it('returns a series, threshold, and min point in mock mode', async () => {
+    const result = await runTool('get_liquidity_projection', {});
+    expect(result.ok).toBe(true);
+    const data = result.data as any;
+    expect(Array.isArray(data.series)).toBe(true);
+    expect(data.series.length).toBeGreaterThan(0);
+    expect(Array.isArray(data.drivers)).toBe(true);
+    expect(typeof data.threshold).toBe('number');
+    expect(typeof data.minDay).toBe('string');
+    expect(typeof data.minBalance).toBe('number');
+    // Min is genuinely the minimum of the series
+    const minFromSeries = Math.min(...data.series.map((p: any) => p.balance));
+    expect(data.minBalance).toBe(minFromSeries);
+  });
+
+  it('honors a custom days parameter', async () => {
+    const result = await runTool('get_liquidity_projection', { days: 10 });
+    expect(result.ok).toBe(true);
+    const data = result.data as any;
+    expect(data.series.length).toBe(11);  // days + 1 (inclusive endpoints)
+  });
+
+  it('summary mentions min balance and day', async () => {
+    const result = await runTool('get_liquidity_projection', {});
+    expect(result.summary).toMatch(/min \$/);
+    expect(result.summary).toMatch(/points/);
   });
 });
 

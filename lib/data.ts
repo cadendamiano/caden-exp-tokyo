@@ -39,6 +39,25 @@ export type Employee = {
   role: string;
 };
 
+export type BankAccount = {
+  id: string;
+  nickname: string;
+  institution: string;
+  last4: string;
+  balance: number;
+  role: 'operating' | 'reserve' | 'payroll';
+  apy?: number;
+};
+
+export type ProjectionPoint = { day: string; balance: number };
+
+export type LiquidityDriver = {
+  date: string;
+  label: string;
+  amount: number;
+  kind: 'inflow' | 'outflow';
+};
+
 export const VENDORS: Vendor[] = [
   { id: 'vnd_01', name: 'Acme Cloud Services', handle: 'acme-cloud', terms: 'Net 30', category: 'Software' },
   { id: 'vnd_02', name: 'Northwind Logistics', handle: 'northwind', terms: 'Net 15', category: 'Shipping' },
@@ -123,6 +142,87 @@ export const CONNECTORS: { name: string; status: 'ok' | 'warn'; meta: string }[]
   { name: 'NetSuite GL',   status: 'warn', meta: 'token expires 4d' },
 ];
 
+export const BANK_ACCOUNTS: BankAccount[] = [
+  { id: 'acct_ops',     nickname: 'Ops Checking',       institution: 'Chase Business',  last4: '4821', balance: 142000,  role: 'operating' },
+  { id: 'acct_reserve', nickname: 'BILL Cash Account',  institution: 'BILL Financial',  last4: '7732', balance: 1240000, role: 'reserve', apy: 0.03 },
+  { id: 'acct_payroll', nickname: 'Payroll Account',    institution: 'Chase Business',  last4: '9103', balance: 287500,  role: 'payroll' },
+];
+
+export const LIQUIDITY_THRESHOLD = 50000;
+
+// 61 contiguous daily points: Apr 20 → Jun 19. Min = $48,200 on 2026-05-24 (below $50K floor by $1,800).
+export const LIQUIDITY_PROJECTION: ProjectionPoint[] = [
+  { day: '2026-04-20', balance: 142000 },
+  { day: '2026-04-21', balance: 142000 },
+  { day: '2026-04-22', balance: 142000 },
+  { day: '2026-04-23', balance: 142000 },
+  { day: '2026-04-24', balance: 109800 },
+  { day: '2026-04-25', balance: 109800 },
+  { day: '2026-04-26', balance: 109800 },
+  { day: '2026-04-27', balance: 109800 },
+  { day: '2026-04-28', balance: 85000  },
+  { day: '2026-04-29', balance: 85000  },
+  { day: '2026-04-30', balance: 85000  },
+  { day: '2026-05-01', balance: 123000 },
+  { day: '2026-05-02', balance: 81000  },
+  { day: '2026-05-03', balance: 81000  },
+  { day: '2026-05-04', balance: 81000  },
+  { day: '2026-05-05', balance: 81000  },
+  { day: '2026-05-06', balance: 81000  },
+  { day: '2026-05-07', balance: 81000  },
+  { day: '2026-05-08', balance: 69000  },
+  { day: '2026-05-09', balance: 69000  },
+  { day: '2026-05-10', balance: 69000  },
+  { day: '2026-05-11', balance: 69000  },
+  { day: '2026-05-12', balance: 69000  },
+  { day: '2026-05-13', balance: 69000  },
+  { day: '2026-05-14', balance: 69000  },
+  { day: '2026-05-15', balance: 53000  },
+  { day: '2026-05-16', balance: 53000  },
+  { day: '2026-05-17', balance: 53000  },
+  { day: '2026-05-18', balance: 53000  },
+  { day: '2026-05-19', balance: 53000  },
+  { day: '2026-05-20', balance: 53000  },
+  { day: '2026-05-21', balance: 53000  },
+  { day: '2026-05-22', balance: 81000  },
+  { day: '2026-05-23', balance: 81000  },
+  { day: '2026-05-24', balance: 48200  },
+  { day: '2026-05-25', balance: 48200  },
+  { day: '2026-05-26', balance: 48200  },
+  { day: '2026-05-27', balance: 48200  },
+  { day: '2026-05-28', balance: 48200  },
+  { day: '2026-05-29', balance: 48200  },
+  { day: '2026-05-30', balance: 48200  },
+  { day: '2026-05-31', balance: 48200  },
+  { day: '2026-06-01', balance: 48200  },
+  { day: '2026-06-02', balance: 48200  },
+  { day: '2026-06-03', balance: 72200  },
+  { day: '2026-06-04', balance: 72200  },
+  { day: '2026-06-05', balance: 72200  },
+  { day: '2026-06-06', balance: 72200  },
+  { day: '2026-06-07', balance: 72200  },
+  { day: '2026-06-08', balance: 72200  },
+  { day: '2026-06-09', balance: 72200  },
+  { day: '2026-06-10', balance: 64200  },
+  { day: '2026-06-11', balance: 64200  },
+  { day: '2026-06-12', balance: 64200  },
+  { day: '2026-06-13', balance: 64200  },
+  { day: '2026-06-14', balance: 64200  },
+  { day: '2026-06-15', balance: 76200  },
+  { day: '2026-06-16', balance: 76200  },
+  { day: '2026-06-17', balance: 74000  },
+  { day: '2026-06-18', balance: 74000  },
+  { day: '2026-06-19', balance: 74000  },
+];
+
+export const LIQUIDITY_DRIVERS: LiquidityDriver[] = [
+  { date: '2026-05-02', label: 'AWS Infrastructure (Q2)',         amount: -42000, kind: 'outflow' },
+  { date: '2026-05-24', label: 'SaaS renewal batch',              amount: -32800, kind: 'outflow' },
+  { date: '2026-04-28', label: 'Bluestone Marketing (retainer)',  amount: -24800, kind: 'outflow' },
+  { date: '2026-05-01', label: 'AR — Techflow Corp',              amount:  38000, kind: 'inflow'  },
+  { date: '2026-05-22', label: 'AR — Beacon Health',              amount:  28000, kind: 'inflow'  },
+];
+
 export const DEMO_PROMPTS = [
   { label: '/ap show overdue',     prompt: 'Show me all overdue AP across every vendor, grouped by urgency.' },
   { label: '/pay large · 2nd approver', prompt: 'Pay the Q1 professional services invoices from Crestline Legal and Fulton & Hart.' },
@@ -131,6 +231,7 @@ export const DEMO_PROMPTS = [
   { label: '/chart vendor-spend',   prompt: 'Visualize Q1 spend by vendor category.' },
   { label: '/crm sync paid→deal',   prompt: 'When a payment clears in BILL, update the matching HubSpot deal to "Paid" and sync the amount.' },
   { label: '/dupe sweep',           prompt: 'Scan the last 60 days of AP for likely duplicate invoices and list them.' },
+  { label: 'Cash runway',           prompt: "What's our cash runway look like?" },
 ];
 
 // ─── Logistics dataset: Crestview Freight Solutions ─────────────────────────
@@ -232,6 +333,87 @@ export const LOGISTICS_EXPENSES: Expense[] = [
   { id: 'lexp_14', employee: 'emp_l03', category: 'Meals',        amount:   98.10, date: '2026-04-18', status: 'pending'  },
 ];
 
+export const LOGISTICS_BANK_ACCOUNTS: BankAccount[] = [
+  { id: 'acct_ops',     nickname: 'Operating Checking', institution: 'Bank of America', last4: '3317', balance: 218000, role: 'operating' },
+  { id: 'acct_reserve', nickname: 'Reserve Savings',    institution: 'BILL Financial',  last4: '8841', balance: 890000, role: 'reserve', apy: 0.03 },
+  { id: 'acct_payroll', nickname: 'Payroll Account',    institution: 'Bank of America', last4: '6604', balance: 312000, role: 'payroll' },
+];
+
+export const LOGISTICS_LIQUIDITY_THRESHOLD = 75000;
+
+// 61 daily points. Min = $84K on May 20 (above $75K floor by $9K — close call).
+export const LOGISTICS_LIQUIDITY_PROJECTION: ProjectionPoint[] = [
+  { day: '2026-04-20', balance: 218000 },
+  { day: '2026-04-21', balance: 218000 },
+  { day: '2026-04-22', balance: 218000 },
+  { day: '2026-04-23', balance: 218000 },
+  { day: '2026-04-24', balance: 218000 },
+  { day: '2026-04-25', balance: 218000 },
+  { day: '2026-04-26', balance: 206000 },
+  { day: '2026-04-27', balance: 206000 },
+  { day: '2026-04-28', balance: 206000 },
+  { day: '2026-04-29', balance: 206000 },
+  { day: '2026-04-30', balance: 206000 },
+  { day: '2026-05-01', balance: 244000 },
+  { day: '2026-05-02', balance: 244000 },
+  { day: '2026-05-03', balance: 244000 },
+  { day: '2026-05-04', balance: 244000 },
+  { day: '2026-05-05', balance: 244000 },
+  { day: '2026-05-06', balance: 244000 },
+  { day: '2026-05-07', balance: 202000 },
+  { day: '2026-05-08', balance: 202000 },
+  { day: '2026-05-09', balance: 202000 },
+  { day: '2026-05-10', balance: 183800 },
+  { day: '2026-05-11', balance: 183800 },
+  { day: '2026-05-12', balance: 159200 },
+  { day: '2026-05-13', balance: 159200 },
+  { day: '2026-05-14', balance: 159200 },
+  { day: '2026-05-15', balance: 125200 },
+  { day: '2026-05-16', balance: 125200 },
+  { day: '2026-05-17', balance: 125200 },
+  { day: '2026-05-18', balance: 106200 },
+  { day: '2026-05-19', balance: 106200 },
+  { day: '2026-05-20', balance: 84000  },
+  { day: '2026-05-21', balance: 84000  },
+  { day: '2026-05-22', balance: 84000  },
+  { day: '2026-05-23', balance: 84000  },
+  { day: '2026-05-24', balance: 84000  },
+  { day: '2026-05-25', balance: 84000  },
+  { day: '2026-05-26', balance: 84000  },
+  { day: '2026-05-27', balance: 84000  },
+  { day: '2026-05-28', balance: 102000 },
+  { day: '2026-05-29', balance: 102000 },
+  { day: '2026-05-30', balance: 102000 },
+  { day: '2026-05-31', balance: 102000 },
+  { day: '2026-06-01', balance: 102000 },
+  { day: '2026-06-02', balance: 102000 },
+  { day: '2026-06-03', balance: 102000 },
+  { day: '2026-06-04', balance: 102000 },
+  { day: '2026-06-05', balance: 88000  },
+  { day: '2026-06-06', balance: 88000  },
+  { day: '2026-06-07', balance: 88000  },
+  { day: '2026-06-08', balance: 88000  },
+  { day: '2026-06-09', balance: 88000  },
+  { day: '2026-06-10', balance: 88000  },
+  { day: '2026-06-11', balance: 88000  },
+  { day: '2026-06-12', balance: 96000  },
+  { day: '2026-06-13', balance: 96000  },
+  { day: '2026-06-14', balance: 96000  },
+  { day: '2026-06-15', balance: 96000  },
+  { day: '2026-06-16', balance: 96000  },
+  { day: '2026-06-17', balance: 96000  },
+  { day: '2026-06-18', balance: 96000  },
+  { day: '2026-06-19', balance: 79000  },
+];
+
+export const LOGISTICS_LIQUIDITY_DRIVERS: LiquidityDriver[] = [
+  { date: '2026-05-07', label: 'SkyLink Carriers invoice',  amount: -42000, kind: 'outflow' },
+  { date: '2026-05-15', label: 'Payroll top-up (102 FTE)',  amount: -34000, kind: 'outflow' },
+  { date: '2026-05-12', label: 'Fleet lease — 12 units',    amount: -24600, kind: 'outflow' },
+  { date: '2026-05-01', label: 'AR — Beacon Health',        amount:  38000, kind: 'inflow'  },
+  { date: '2026-05-10', label: 'MidWest Fuel (monthly)',    amount: -18200, kind: 'outflow' },
+];
+
 export const LOGISTICS_DEMO_PROMPTS = [
   { label: '/ap show overdue',       prompt: 'Show me all overdue AP — carrier, fuel, and customs invoices.' },
   { label: '/pay large · SkyLink',   prompt: 'Pay the SkyLink Air Freight invoice — it needs a second approver.' },
@@ -240,6 +422,7 @@ export const LOGISTICS_DEMO_PROMPTS = [
   { label: '/chart freight-vs-fuel', prompt: 'Visualize Q1 spend by vendor category.' },
   { label: '/crm sync paid→deal',    prompt: 'When a payment clears in BILL, update the matching HubSpot deal to "Paid" and sync the amount.' },
   { label: '/dupe sweep apex',       prompt: 'Scan the last 60 days of AP for likely duplicate invoices — check Apex Carrier especially.' },
+  { label: 'Cash runway',            prompt: "What's our cash runway?" },
 ];
 
 export type DatasetKey = 'default' | 'logistics';
@@ -251,6 +434,10 @@ export const DEFAULT_DATA = {
   CATEGORY_SPEND,
   EMPLOYEES,
   EXPENSES,
+  bankAccounts: BANK_ACCOUNTS,
+  liquidityProjection: LIQUIDITY_PROJECTION,
+  liquidityDrivers: LIQUIDITY_DRIVERS,
+  liquidityThreshold: LIQUIDITY_THRESHOLD,
 };
 
 export const LOGISTICS_DATA = {
@@ -260,6 +447,10 @@ export const LOGISTICS_DATA = {
   CATEGORY_SPEND: LOGISTICS_CATEGORY_SPEND,
   EMPLOYEES: LOGISTICS_EMPLOYEES,
   EXPENSES:  LOGISTICS_EXPENSES,
+  bankAccounts: LOGISTICS_BANK_ACCOUNTS,
+  liquidityProjection: LOGISTICS_LIQUIDITY_PROJECTION,
+  liquidityDrivers: LOGISTICS_LIQUIDITY_DRIVERS,
+  liquidityThreshold: LOGISTICS_LIQUIDITY_THRESHOLD,
 };
 
 export function getDataset(d?: DatasetKey) {

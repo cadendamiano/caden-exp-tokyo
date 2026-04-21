@@ -75,6 +75,21 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     ],
   },
   {
+    name: 'liquidity',
+    aliases: ['runway', 'treasury'],
+    kind: 'sweep-rule',
+    label: 'liquidity',
+    hint: 'Draft a sweep rule for low-balance auto-funding',
+    demoFlowId: 'sweep_rule_draft',
+    requirements: [
+      'Bank accounts in scope (source + destination for sweeps)',
+      'Low-balance threshold ($ amount that triggers the sweep)',
+      'Transfer amount per trigger event',
+      'Rate limit (max triggers per day)',
+      'Safety conditions (e.g. minimum reserve balance)',
+    ],
+  },
+  {
     name: 'doc',
     aliases: ['report', 'onepager'],
     kind: 'document',

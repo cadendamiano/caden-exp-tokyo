@@ -803,6 +803,43 @@ input, textarea, select{ font-family: inherit; color: inherit; }
 .chart-head .legend span{ display: inline-flex; align-items: center; gap: 5px; }
 .chart-head .legend .swatch{ width: 8px; height: 8px; border-radius: 2px; }
 
+/* ---------- LineChart primitive ---------- */
+.linechart-threshold-band { fill: color-mix(in oklab, var(--neg) 8%, transparent); }
+.linechart-threshold-line { stroke: color-mix(in oklab, var(--neg) 60%, transparent); stroke-dasharray: 4 4; }
+.linechart-min-marker     { stroke: var(--ink-4); stroke-dasharray: 2 3; }
+.linechart-min-label      { fill: var(--ink); font-weight: 600; }
+
+/* ---------- Liquidity drivers list ---------- */
+.drivers-block{
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); padding: 14px 18px 12px;
+  margin-top: 14px;
+}
+.drivers-head{
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 10px;
+}
+.drivers-head h3{ margin: 0; font-size: 14px; font-weight: 600; }
+.drivers-hint{
+  font-family: var(--mono); font-size: 10.5px; color: var(--ink-4);
+}
+.drivers-grid{
+  display: grid; grid-template-columns: 72px 1fr auto;
+  row-gap: 2px;
+}
+.drivers-row{
+  display: contents;
+}
+.drivers-row > span{
+  padding: 7px 0;
+  border-top: 1px solid var(--line-2);
+  font-family: var(--mono); font-size: 12px;
+}
+.drivers-row:first-child > span{ border-top: none; }
+.drivers-date{ color: var(--ink-3); }
+.drivers-label{ color: var(--ink); }
+.drivers-amt{ text-align: right; font-weight: 600; }
+
 /* ---------- Artifact: automation rule ---------- */
 .rule-card{
   border: 1px solid var(--line); border-radius: var(--radius);

@@ -22,7 +22,7 @@ describe('buildModelTools', () => {
     buildModelTools('ap-table');
     const shared = MODEL_TOOLS.find(t => t.name === 'render_artifact')!;
     const sharedEnum = (shared.parameters.properties as any).kind.enum;
-    expect(sharedEnum).toEqual(['ap-table', 'spend-chart', 'rule-net15', 'crm-flow']);
+    expect(sharedEnum).toEqual(['ap-table', 'spend-chart', 'rule-net15', 'crm-flow', 'document', 'liquidity-burndown', 'sweep-rule']);
   });
 
   it('leaves every other tool definition untouched', () => {
