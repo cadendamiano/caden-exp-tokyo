@@ -164,4 +164,17 @@ describe('resolveComposerSubmit', () => {
     expect(action.opts?.forcedKind).toBe('sweep-rule');
     expect(action.opts?.commandName).toBe('liquidity');
   });
+
+  it('turn-2 recommendation chip click ("Recommend a sweep rule") → sweep_rule_draft flow', () => {
+    // Mimics clicking the turn-2 suggestion chip: setComposer populates body,
+    // forcedCmd stays null because onChange isn't fired by a programmatic store write.
+    const action = resolveComposerSubmit({
+      body: 'Recommend a sweep rule',
+      streaming: false,
+      forcedCmd: null,
+      mode: 'demo',
+      demoDataset: 'default',
+    });
+    expect(action).toEqual({ kind: 'flow', flowId: 'sweep_rule_draft' });
+  });
 });

@@ -638,6 +638,14 @@ input, textarea, select{ font-family: inherit; color: inherit; }
   color: var(--ink-3); cursor: pointer; background: var(--surface);
 }
 .composer-chip:hover{ color: var(--ink); border-color: var(--ink-4); }
+.composer-chip.chip-recommend{
+  color: var(--ink); border-color: var(--ink-3);
+  background: var(--surface-raised, var(--surface));
+  font-weight: 600;
+}
+.composer-chip.chip-recommend::before{
+  content: "✦ "; color: var(--accent, var(--ink-3));
+}
 .composer-spacer{ flex: 1; }
 .composer-mode{
   font-family: var(--mono); font-size: 10.5px; color: var(--ink-4);

@@ -142,8 +142,8 @@ function buildMockPreview(kind: ArtifactKind, asOf: string, dataset: DatasetKey)
       ? breachDays.slice(0, 5).map(p => ({
           Day: p.day,
           'Balance before': fmtMoney(p.balance),
-          Transfer: '+$50,000 (reserve → ops)',
-          'Balance after': fmtMoney(p.balance + 50000),
+          Transfer: '+$100,000 (reserve → ops)',
+          'Balance after': fmtMoney(p.balance + 100000),
         }))
       : [{ Day: '—', 'Balance before': '—', Transfer: 'no trigger in window', 'Balance after': '—' }];
     const summary = breachDays.length > 0

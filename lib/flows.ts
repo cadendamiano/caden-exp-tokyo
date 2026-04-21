@@ -302,7 +302,7 @@ Two AR receipts partially offset: **Techflow Corp +$38k** (May 1) and **Beacon H
 The projection now shows drivers annotated on the chart. Want me to draft a sweep rule to auto-fund Ops Checking when it gets close to the floor?` },
       { kind: 'artifact-enrich', delay: 300, artifactId: 'art_runway_60d',
         patch: { filter: 'projection+drivers', label: 'Cash runway · 60d · drivers' } },
-      { kind: 'suggest', items: ['/liquidity — draft sweep rule', 'Defer the SaaS batch by 7 days', 'What if AWS is Net 60?', 'Show payroll separately'] },
+      { kind: 'suggest', items: ['Recommend a sweep rule', 'Defer the SaaS batch by 7 days', 'What if AWS is Net 60?', 'Show payroll separately'] },
     ],
   },
 
@@ -312,28 +312,28 @@ The projection now shows drivers annotated on the chart. Want me to draft a swee
     steps: [
       { kind: 'user', text: '/liquidity — draft sweep rule for Ops Checking' },
       { kind: 'agent-stream', delay: 240, text:
-`Based on the projection, Ops Checking dips to **$48.2k** on May 24 — **$1.8k below your $50k floor**. I'll draft a sweep rule that auto-funds from BILL Cash Reserve before the shortfall hits.` },
+`Based on the projection, Ops Checking ••••4821 dips to **$48.2k** on May 24 — **$1.8k below your $50k floor**. I'll draft a sweep rule that auto-funds from Chase Reserve Savings ••••7732 before the shortfall hits.` },
       { kind: 'tools', delay: 700, rows: [
         { verb: 'GET',  path: '/v3/api/list/BankAccount', filter: "id IN ('acct_ops','acct_reserve')", status: '200', result: '2 accounts' },
-        { verb: 'EXEC', path: 'draft_sweep_rule',         filter: 'source=acct_reserve, dest=acct_ops, floor=50000', status: '200', result: 'rule drafted' },
+        { verb: 'EXEC', path: 'draft_sweep_rule',         filter: 'source=acct_reserve, dest=acct_ops, floor=50000, amount=100000', status: '200', result: 'rule drafted' },
       ] },
       { kind: 'agent-stream', delay: 500, text:
-`Here's the draft sweep rule. It would have triggered on **May 24**, pulling $75k from BILL Cash Reserve (current balance: $1.24M) to Ops Checking — preventing the floor breach entirely.
+`Here's the draft sweep rule. It would have triggered on **May 24**, pulling $100k from Chase Reserve Savings ••••7732 (current balance: $1.24M) to Ops Checking ••••4821 — preventing the floor breach entirely.
 
 Review the rule in the artifact pane. You'll need to preview the dry-run before activating.` },
       { kind: 'libs', delay: 300, items: [
         { pkg: '@bill/artifact-runtime', ver: '0.4.1' },
         { pkg: '@bill/treasury-rules', ver: '0.1.0' },
       ] },
-      { kind: 'building', delay: 600, label: 'Sweep rule · Ops → Reserve', sub: 'drafting rule with safety gates' },
+      { kind: 'building', delay: 600, label: 'Sweep rule · BILL Cash Reserve Auto Fund', sub: 'drafting rule with safety gates' },
       { kind: 'artifact-card', delay: 1200, artifactId: 'art_sweep_rule',
-        title: 'Sweep rule — Ops Checking auto-fund',
+        title: 'BILL Cash Reserve Auto Fund',
         sub: 'RULE DRAFT · SWEEP',
-        meta: 'When Ops < **$50k** → pull **$75k** from BILL Cash · safety: 1/day rate limit, reserve floor $200k',
+        meta: 'When Ops Checking ••••4821 < **$50k** → pull **$100k** from Chase Reserve Savings ••••7732 · safety: 1/day rate limit, reserve floor $200k',
         icon: '⇄' },
       { kind: 'suggest', items: ['Preview dry run', 'Change threshold to $75k', 'Add Slack alert on trigger', 'Activate'] },
     ],
-    artifact: { id: 'art_sweep_rule', kind: 'sweep-rule', label: 'Sweep rule · Ops auto-fund' },
+    artifact: { id: 'art_sweep_rule', kind: 'sweep-rule', label: 'BILL Cash Reserve Auto Fund' },
   },
 
   doc_q1_report: {
@@ -568,14 +568,14 @@ Open the artifact to review side-by-side. I won't void anything without approval
     steps: [
       { kind: 'user', text: "What's our cash runway?" },
       { kind: 'agent-stream', delay: 240, text:
-`Pulling Operating Checking, Reserve Savings, and Payroll balances, plus upcoming carrier + fleet AP to project Operating forward 60 days.` },
+`Pulling BILL Cash Reserve, Chase Checking, and Payroll balances, plus upcoming carrier + fleet AP to project BILL Cash Reserve forward 60 days.` },
       { kind: 'tools', delay: 900, rows: [
         { verb: 'GET',  path: '/v3/api/list/BankAccount', filter: "role IN ('operating','reserve','payroll')", status: '200', result: '3 accounts · 72ms' },
         { verb: 'POST', path: '/v3/api/list/Bill',        filter: "dueDate<='2026-06-19'",                      status: '200', result: '34 bills · 128ms' },
         { verb: 'EXEC', path: 'project_cash_runway',      filter: 'days=60, threshold=75000',                   status: '200', result: 'min $84k May 20 · 91ms' },
       ] },
       { kind: 'agent-stream', delay: 500, text:
-`Operating Checking projects from **$218k** today to a minimum of **$84k on May 20** — above your $75k floor, but only by $9k. This is a close call.
+`BILL Cash Reserve projects from **$218k** today to a minimum of **$84k on May 20** — above your $75k floor, but only by $9k. This is a close call.
 
 The chart shows the full 60-day curve. Want me to break down what's driving the compression?` },
       { kind: 'libs', delay: 300, items: [
@@ -586,7 +586,7 @@ The chart shows the full 60-day curve. Want me to break down what's driving the 
       { kind: 'artifact-card', delay: 1200, artifactId: 'art_runway_60d',
         title: 'Cash runway · 60 days',
         sub: 'PROJECTION',
-        meta: '**Runway tight** · Operating $218k → **$84k on May 20** (above $75k floor by $9k)',
+        meta: '**Runway tight** · BILL Cash Reserve $218k → **$84k on May 20** (above $75k floor by $9k)',
         icon: '∿' },
       { kind: 'suggest', items: ["What's driving the dip?", 'Extend to 90 days', 'Show all accounts', 'Draft a sweep rule'] },
     ],
@@ -612,10 +612,10 @@ The chart shows the full 60-day curve. Want me to break down what's driving the 
 
 One AR receipt partially offsets: **Beacon Health +$38k** (May 1). **MidWest Fuel (-$18.2k on May 10)** is the ongoing recurring drag.
 
-The projection now shows drivers annotated on the chart. Want me to draft a sweep rule to auto-fund Operating Checking when it gets close to the floor?` },
+The projection now shows drivers annotated on the chart. Want me to draft a sweep rule to auto-fund BILL Cash Reserve when it gets close to the floor?` },
       { kind: 'artifact-enrich', delay: 300, artifactId: 'art_runway_60d',
         patch: { filter: 'projection+drivers', label: 'Cash runway · 60d · drivers' } },
-      { kind: 'suggest', items: ['/liquidity — draft sweep rule', 'Defer the fleet lease by 10 days', 'What if SkyLink is Net 30?', 'Show payroll separately'] },
+      { kind: 'suggest', items: ['Recommend a sweep rule', 'Defer the fleet lease by 10 days', 'What if SkyLink is Net 30?', 'Show payroll separately'] },
     ],
   },
 
@@ -623,30 +623,30 @@ The projection now shows drivers annotated on the chart. Want me to draft a swee
     id: 'sweep_rule_draft',
     title: 'Sweep rule draft · Crestview',
     steps: [
-      { kind: 'user', text: '/liquidity — draft sweep rule for Operating Checking' },
+      { kind: 'user', text: '/liquidity — draft sweep rule for BILL Cash Reserve' },
       { kind: 'agent-stream', delay: 240, text:
-`Based on the projection, Operating Checking dips to **$84k** on May 20 — only **$9k above your $75k floor**. One missed AR or a surprise carrier bill puts you under. I'll draft a sweep rule that auto-funds from Reserve Savings before the shortfall hits.` },
+`Based on the projection, BILL Cash Reserve ••••3317 dips to **$84k** on May 20 — only **$9k above your $75k floor**. One missed AR or a surprise carrier bill puts you under. I'll draft a sweep rule that auto-funds from Chase Checking ••••8841 before the shortfall hits.` },
       { kind: 'tools', delay: 700, rows: [
         { verb: 'GET',  path: '/v3/api/list/BankAccount', filter: "id IN ('acct_ops','acct_reserve')", status: '200', result: '2 accounts' },
         { verb: 'EXEC', path: 'draft_sweep_rule',         filter: 'source=acct_reserve, dest=acct_ops, floor=75000', status: '200', result: 'rule drafted' },
       ] },
       { kind: 'agent-stream', delay: 500, text:
-`Here's the draft sweep rule. It would pull $100k from Reserve Savings (current balance: $890k) to Operating Checking if the balance falls below $75k — giving you a cushion without parking idle cash.
+`Here's the draft sweep rule. It would pull $100k from Chase Checking ••••8841 (current balance: $890k) to BILL Cash Reserve ••••3317 if the balance falls below $75k — giving you a cushion without parking idle cash.
 
 Review the rule in the artifact pane. You'll need to preview the dry-run before activating.` },
       { kind: 'libs', delay: 300, items: [
         { pkg: '@bill/artifact-runtime', ver: '0.4.1' },
         { pkg: '@bill/treasury-rules', ver: '0.1.0' },
       ] },
-      { kind: 'building', delay: 600, label: 'Sweep rule · Operating → Reserve', sub: 'drafting rule with safety gates' },
+      { kind: 'building', delay: 600, label: 'Sweep rule · BILL Cash Reserve Auto Fund', sub: 'drafting rule with safety gates' },
       { kind: 'artifact-card', delay: 1200, artifactId: 'art_sweep_rule',
-        title: 'Sweep rule — Operating Checking auto-fund',
+        title: 'BILL Cash Reserve Auto Fund',
         sub: 'RULE DRAFT · SWEEP',
-        meta: 'When Operating < **$75k** → pull **$100k** from Reserve Savings · safety: 1/day rate limit, reserve floor $200k',
+        meta: 'When BILL Cash Reserve ••••3317 < **$75k** → pull **$100k** from Chase Checking ••••8841 · safety: 1/day rate limit, reserve floor $200k',
         icon: '⇄' },
       { kind: 'suggest', items: ['Preview dry run', 'Change threshold to $100k', 'Add Slack alert on trigger', 'Activate'] },
     ],
-    artifact: { id: 'art_sweep_rule', kind: 'sweep-rule', label: 'Sweep rule · Operating auto-fund' },
+    artifact: { id: 'art_sweep_rule', kind: 'sweep-rule', label: 'BILL Cash Reserve Auto Fund' },
   },
 
   doc_q1_report: {
@@ -689,7 +689,19 @@ export function matchFlow(text: string, dataset: DatasetKey = 'default'): string
   if (low.includes('overdue') || (low.includes('show') && low.includes('ap'))) return 'ap_overdue';
   if (low.includes('runway') || low.includes('burndown') || low.includes('treasury') || low.includes('cash position') || low.includes('cash runway')) return 'runway_projection';
   if (low.includes('driver') || low.includes('driving') || low.includes('causing') || (low.includes('why') && (low.includes('dip') || low.includes('drop') || low.includes('zero')))) return 'runway_drivers';
-  if (low.includes('net 15') || low.includes('automation') || low.includes('rule')) return 'automate_net15';
+  // Sweep-rule intent — must come BEFORE the net-15 check so sweep/liquidity phrasing
+  // doesn't get hijacked by the old `rule`/`automation` catch-all.
+  if (
+    low.startsWith('/liquidity') ||
+    low.includes('sweep rule') ||
+    low.includes('sweep logic') ||
+    low.includes('sweep automation') ||
+    (low.includes('sweep') && (low.includes('draft') || low.includes('recommend') || low.includes('propose') || low.includes('auto-fund') || low.includes('fund'))) ||
+    (low.includes('liquidity') && (low.includes('rule') || low.includes('draft') || low.includes('recommend')))
+  ) {
+    return 'sweep_rule_draft';
+  }
+  if (low.includes('net 15') || low.includes('net-15') || low.includes('net15')) return 'automate_net15';
   if (low.includes('chart') || low.includes('visualize') || low.includes('spend')) return 'chart_spend';
   if (low.includes('crm') || low.includes('hubspot') || low.includes('deal')) return 'crm_sync';
   if (low.includes('dup') || low.includes('sweep')) return 'dupe_sweep';

@@ -195,9 +195,9 @@ function codeForKind(kind: ArtifactKind): CodeLine[] {
 
   if (kind === 'sweep-rule') {
     return [
-      { text: '# BILL Coworker · Low-balance auto-sweep rule', kind: 'comment' },
+      { text: '# BILL Coworker · BILL Cash Reserve Auto Fund', kind: 'comment' },
       { text: '# Trigger: daily balance check on operating account', kind: 'comment' },
-      { text: '# Safety: 1 sweep/day max · reserve floor $250k', kind: 'comment' },
+      { text: '# Safety: 1 sweep/day max · reserve floor $200k', kind: 'comment' },
       { text: '' },
       { text: 'schedule("0 7 * * *", async () => {', kind: 'plain' },
       { text: '  const ops = await bill.accounts.find({ role: "operating" });', kind: 'plain' },
@@ -205,7 +205,7 @@ function codeForKind(kind: ArtifactKind): CodeLine[] {
       { text: '' },
       { text: '  # --- conditions ---', kind: 'comment' },
       { text: '  if (ops.balance >= 50000) return;', kind: 'plain' },
-      { text: '  if (reserve.balance < 250000) {', kind: 'plain' },
+      { text: '  if (reserve.balance < 200000) {', kind: 'plain' },
       { text: '    await rule.pause("reserve below safety floor");', kind: 'string' },
       { text: '    return;', kind: 'plain' },
       { text: '  }', kind: 'plain' },
@@ -215,13 +215,13 @@ function codeForKind(kind: ArtifactKind): CodeLine[] {
       { text: '  const transfer = await bill.transfers.create({', kind: 'plain' },
       { text: '    from: reserve.id,', kind: 'plain' },
       { text: '    to:   ops.id,', kind: 'plain' },
-      { text: '    amount: 50000,', kind: 'plain' },
-      { text: '    memo: "Auto-sweep · low-balance rule",', kind: 'string' },
+      { text: '    amount: 100000,', kind: 'plain' },
+      { text: '    memo: "BILL Cash Reserve Auto Fund",', kind: 'string' },
       { text: '  });', kind: 'plain' },
       { text: '' },
       { text: '  await slack.postMessage({', kind: 'plain' },
       { text: '    channel: "#finance",', kind: 'string' },
-      { text: '    text: `Swept $50k → Ops · balance now $${ops.balance + 50000}`,', kind: 'string' },
+      { text: '    text: `Swept $100k → Ops · balance now $${ops.balance + 100000}`,', kind: 'string' },
       { text: '  });', kind: 'plain' },
       { text: '});', kind: 'plain' },
     ];

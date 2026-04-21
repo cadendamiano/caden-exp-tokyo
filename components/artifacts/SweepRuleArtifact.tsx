@@ -14,8 +14,8 @@ export function SweepRuleArtifact({ artifact }: Props) {
 
   const ops = bankAccounts.find(a => a.role === 'operating');
   const reserve = bankAccounts.find(a => a.role === 'reserve');
-  const transferAmount = 50000;
-  const minReserve = 250000;
+  const transferAmount = 100000;
+  const minReserve = 200000;
 
   const isActive = artifact.status === 'active';
   const canActivate = Boolean(artifact.dryRunAcknowledged);
@@ -35,14 +35,14 @@ export function SweepRuleArtifact({ artifact }: Props) {
       </div>
 
       <div className="rule-desc" style={{ marginBottom: 14 }}>
-        Auto-fund the operating account when the daily balance drops below{' '}
+        Auto-fund {ops?.nickname ?? 'the operating account'} when the daily balance drops below{' '}
         <strong style={{ color: 'var(--ink)' }}>{fmtMoneyShort(liquidityThreshold)}</strong>.
         Pulls from the reserve account in fixed tranches so the coworker never needs to ask.
       </div>
 
       <div className="rule-card">
         <div className="rule-name">
-          <h3>Low-balance auto-sweep → Operating</h3>
+          <h3>Low-balance auto-sweep → {ops?.nickname ?? 'Operating'}</h3>
           <span className={'status-pill' + (isActive ? ' ok' : '')}>
             <span className="dot" />{statusLabel}
           </span>

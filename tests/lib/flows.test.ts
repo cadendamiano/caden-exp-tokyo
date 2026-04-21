@@ -21,16 +21,41 @@ describe('matchFlow', () => {
     expect(matchFlow('show me the AP list')).toBe('ap_overdue');
   });
 
-  it('matches automate_net15 when message mentions automation', () => {
-    expect(matchFlow('Create an automation for new bills')).toBe('automate_net15');
+  it('matches automate_net15 when message mentions Net 15 automation', () => {
+    expect(matchFlow('Create a Net 15 automation for new bills')).toBe('automate_net15');
   });
 
   it('matches automate_net15 when message mentions net 15', () => {
     expect(matchFlow('Flag bills with Net 15 terms')).toBe('automate_net15');
   });
 
-  it('matches automate_net15 when message mentions rule', () => {
-    expect(matchFlow('Create a rule for large invoices')).toBe('automate_net15');
+  it('matches automate_net15 when message mentions Net 15 rule', () => {
+    expect(matchFlow('Create a Net 15 rule for large invoices')).toBe('automate_net15');
+  });
+
+  it('does NOT match automate_net15 for generic automation/rule language', () => {
+    expect(matchFlow('Create an automation for new bills')).toBeNull();
+    expect(matchFlow('Create a rule for large invoices')).toBeNull();
+  });
+
+  it('matches sweep_rule_draft for "Recommend a sweep rule"', () => {
+    expect(matchFlow('Recommend a sweep rule')).toBe('sweep_rule_draft');
+  });
+
+  it('matches sweep_rule_draft for "Draft a sweep rule"', () => {
+    expect(matchFlow('Draft a sweep rule')).toBe('sweep_rule_draft');
+  });
+
+  it('matches sweep_rule_draft for "Recommend sweep logic"', () => {
+    expect(matchFlow('Recommend sweep logic')).toBe('sweep_rule_draft');
+  });
+
+  it('matches sweep_rule_draft for /liquidity slash-style body', () => {
+    expect(matchFlow('/liquidity — draft sweep rule for Ops Checking')).toBe('sweep_rule_draft');
+  });
+
+  it('matches sweep_rule_draft for "sweep automation" phrasing', () => {
+    expect(matchFlow('Propose a sweep automation from my operating account')).toBe('sweep_rule_draft');
   });
 
   it('matches chart_spend when message mentions chart', () => {
@@ -61,7 +86,7 @@ describe('matchFlow', () => {
     expect(matchFlow('Scan for duplicate invoices')).toBe('dupe_sweep');
   });
 
-  it('matches dupe_sweep when message mentions sweep', () => {
+  it('matches dupe_sweep when message mentions sweep for dupes', () => {
     expect(matchFlow('run a sweep for dupes')).toBe('dupe_sweep');
   });
 

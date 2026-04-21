@@ -144,7 +144,7 @@ export const CONNECTORS: { name: string; status: 'ok' | 'warn'; meta: string }[]
 
 export const BANK_ACCOUNTS: BankAccount[] = [
   { id: 'acct_ops',     nickname: 'Ops Checking',       institution: 'Chase Business',  last4: '4821', balance: 142000,  role: 'operating' },
-  { id: 'acct_reserve', nickname: 'BILL Cash Account',  institution: 'BILL Financial',  last4: '7732', balance: 1240000, role: 'reserve', apy: 0.03 },
+  { id: 'acct_reserve', nickname: 'Chase Reserve Savings', institution: 'Chase Business', last4: '7732', balance: 1240000, role: 'reserve', apy: 0.03 },
   { id: 'acct_payroll', nickname: 'Payroll Account',    institution: 'Chase Business',  last4: '9103', balance: 287500,  role: 'payroll' },
 ];
 
@@ -334,8 +334,8 @@ export const LOGISTICS_EXPENSES: Expense[] = [
 ];
 
 export const LOGISTICS_BANK_ACCOUNTS: BankAccount[] = [
-  { id: 'acct_ops',     nickname: 'Operating Checking', institution: 'Bank of America', last4: '3317', balance: 218000, role: 'operating' },
-  { id: 'acct_reserve', nickname: 'Reserve Savings',    institution: 'BILL Financial',  last4: '8841', balance: 890000, role: 'reserve', apy: 0.03 },
+  { id: 'acct_ops',     nickname: 'BILL Cash Reserve',  institution: 'BILL Financial',  last4: '3317', balance: 218000, role: 'operating' },
+  { id: 'acct_reserve', nickname: 'Chase Checking',     institution: 'Chase Business',  last4: '8841', balance: 890000, role: 'reserve', apy: 0.03 },
   { id: 'acct_payroll', nickname: 'Payroll Account',    institution: 'Bank of America', last4: '6604', balance: 312000, role: 'payroll' },
 ];
 
