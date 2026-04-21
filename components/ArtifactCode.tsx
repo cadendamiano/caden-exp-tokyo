@@ -131,6 +131,71 @@ function codeForKind(kind: ArtifactKind): CodeLine[] {
     ];
   }
 
+  if (kind === 'liquidity-burndown') {
+    return [
+      { text: '# BILL Coworker · 60-day cash runway projection', kind: 'comment' },
+      { text: '# Source: operating balance + scheduled AP + expected AR', kind: 'comment' },
+      { text: '' },
+      { text: 'const opsAccount = await bill.accounts.find({ role: "operating" });', kind: 'plain' },
+      { text: 'const horizon = 60;  # days', kind: 'comment' },
+      { text: 'const floor = opsAccount.floorThreshold;', kind: 'plain' },
+      { text: '' },
+      { text: 'const scheduled = await bill.bills.list({', kind: 'plain' },
+      { text: '  status: ["scheduled", "due-soon"],', kind: 'string' },
+      { text: '  dueBefore: addDays(today, horizon),', kind: 'plain' },
+      { text: '});', kind: 'plain' },
+      { text: '' },
+      { text: 'const expectedAR = await bill.ar.list({', kind: 'plain' },
+      { text: '  expectedBefore: addDays(today, horizon),', kind: 'plain' },
+      { text: '});', kind: 'plain' },
+      { text: '' },
+      { text: 'const series = [];', kind: 'plain' },
+      { text: 'let balance = opsAccount.balance;', kind: 'plain' },
+      { text: 'for (let d = 0; d <= horizon; d++) {', kind: 'plain' },
+      { text: '  const day = addDays(today, d);', kind: 'plain' },
+      { text: '  balance -= sumDue(scheduled, day);', kind: 'plain' },
+      { text: '  balance += sumExpected(expectedAR, day);', kind: 'plain' },
+      { text: '  series.push({ day, balance });', kind: 'plain' },
+      { text: '}', kind: 'plain' },
+      { text: '' },
+      { text: 'return { series, floor, min: minPoint(series) };', kind: 'plain' },
+    ];
+  }
+
+  if (kind === 'sweep-rule') {
+    return [
+      { text: '# BILL Coworker · Low-balance auto-sweep rule', kind: 'comment' },
+      { text: '# Trigger: daily balance check on operating account', kind: 'comment' },
+      { text: '# Safety: 1 sweep/day max · reserve floor $250k', kind: 'comment' },
+      { text: '' },
+      { text: 'schedule("0 7 * * *", async () => {', kind: 'plain' },
+      { text: '  const ops = await bill.accounts.find({ role: "operating" });', kind: 'plain' },
+      { text: '  const reserve = await bill.accounts.find({ role: "reserve" });', kind: 'plain' },
+      { text: '' },
+      { text: '  # --- conditions ---', kind: 'comment' },
+      { text: '  if (ops.balance >= 50000) return;', kind: 'plain' },
+      { text: '  if (reserve.balance < 250000) {', kind: 'plain' },
+      { text: '    await rule.pause("reserve below safety floor");', kind: 'string' },
+      { text: '    return;', kind: 'plain' },
+      { text: '  }', kind: 'plain' },
+      { text: '  if (await rule.triggeredToday()) return;', kind: 'plain' },
+      { text: '' },
+      { text: '  # --- action ---', kind: 'comment' },
+      { text: '  const transfer = await bill.transfers.create({', kind: 'plain' },
+      { text: '    from: reserve.id,', kind: 'plain' },
+      { text: '    to:   ops.id,', kind: 'plain' },
+      { text: '    amount: 50000,', kind: 'plain' },
+      { text: '    memo: "Auto-sweep · low-balance rule",', kind: 'string' },
+      { text: '  });', kind: 'plain' },
+      { text: '' },
+      { text: '  await slack.postMessage({', kind: 'plain' },
+      { text: '    channel: "#finance",', kind: 'string' },
+      { text: '    text: `Swept $50k → Ops · balance now $${ops.balance + 50000}`,', kind: 'string' },
+      { text: '  });', kind: 'plain' },
+      { text: '});', kind: 'plain' },
+    ];
+  }
+
   return [{ text: '# No code template for this artifact kind', kind: 'comment' }];
 }
 

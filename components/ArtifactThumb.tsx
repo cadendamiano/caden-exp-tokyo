@@ -51,5 +51,39 @@ export function ArtifactThumb({ kind }: { kind: string }) {
       </svg>
     );
   }
+  if (kind === 'art_runway_60d') {
+    return (
+      <svg viewBox="0 0 110 70" width="200" height="120">
+        <line x1="6" y1="52" x2="104" y2="52" stroke="rgba(220,38,38,0.5)" strokeWidth="1" strokeDasharray="3 3" />
+        <polyline
+          points="6,14 22,22 38,26 54,40 70,54 80,46 94,38 104,42"
+          fill="none"
+          stroke="var(--teal)"
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+        <circle cx="70" cy="54" r="2.5" fill="var(--neg)" />
+      </svg>
+    );
+  }
+  if (kind === 'art_sweep_rule') {
+    const rows = [
+      { label: 'WHEN',  op: '<' },
+      { label: 'THEN',  op: '→' },
+      { label: 'SAFETY', op: '·' },
+    ];
+    return (
+      <div className="rule-chip-stack">
+        {rows.map(({ label, op }) => (
+          <div key={label} className="rule-chip-row">
+            <span className="rule-chip-label">{label}</span>
+            <span className="rule-chip-op">{op}</span>
+            <span className="rule-chip-value" />
+          </div>
+        ))}
+      </div>
+    );
+  }
   return <span style={{ fontFamily: 'var(--mono)', color: 'var(--ink-4)', fontSize: 11 }}>preview</span>;
 }

@@ -74,6 +74,21 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
       'Error handling (retry policy, dead-letter destination)',
     ],
   },
+  {
+    name: 'liquidity',
+    aliases: ['runway', 'treasury'],
+    kind: 'sweep-rule',
+    label: 'liquidity',
+    hint: 'Draft a sweep rule for low-balance auto-funding',
+    demoFlowId: 'sweep_rule_draft',
+    requirements: [
+      'Bank accounts in scope (source + destination for sweeps)',
+      'Low-balance threshold ($ amount that triggers the sweep)',
+      'Transfer amount per trigger event',
+      'Rate limit (max triggers per day)',
+      'Safety conditions (e.g. minimum reserve balance)',
+    ],
+  },
 ] as const;
 
 const SLASH_REGEX = /^\/([a-z0-9]+)(?:\s+([\s\S]*))?$/i;

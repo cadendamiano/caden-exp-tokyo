@@ -7,6 +7,8 @@ import { APTableArtifact } from './artifacts/APTableArtifact';
 import { SpendChartArtifact } from './artifacts/SpendChartArtifact';
 import { Net15RuleArtifact } from './artifacts/Net15RuleArtifact';
 import { CRMFlowArtifact } from './artifacts/CRMFlowArtifact';
+import { LiquidityBurndownArtifact } from './artifacts/LiquidityBurndownArtifact';
+import { SweepRuleArtifact } from './artifacts/SweepRuleArtifact';
 import { ArtifactPreview } from './ArtifactPreview';
 import { ArtifactCode } from './ArtifactCode';
 import type { ArtifactKind } from '@/lib/flows';
@@ -17,6 +19,8 @@ function glyphFor(kind: ArtifactKind) {
   if (kind === 'spend-chart') return <Icon.Chart />;
   if (kind === 'rule-net15') return <Icon.Rule />;
   if (kind === 'crm-flow') return <Icon.Flow />;
+  if (kind === 'liquidity-burndown') return <Icon.Chart />;
+  if (kind === 'sweep-rule') return <Icon.Rule />;
   return <Icon.Doc />;
 }
 
@@ -168,6 +172,8 @@ export function ArtifactPane() {
                 {view === 'logic' && cur.kind === 'rule-net15' && <Net15RuleArtifact artifact={cur} />}
                 {view === 'logic' && cur.kind === 'spend-chart' && <SpendChartArtifact />}
                 {view === 'logic' && cur.kind === 'crm-flow' && <CRMFlowArtifact artifact={cur} />}
+                {view === 'logic' && cur.kind === 'liquidity-burndown' && <LiquidityBurndownArtifact artifact={cur} />}
+                {view === 'logic' && cur.kind === 'sweep-rule' && <SweepRuleArtifact artifact={cur} />}
               </div>
             </>
           ) : (

@@ -89,9 +89,18 @@ describe('SLASH_COMMANDS invariants', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it('covers all four canonical ArtifactKind values', () => {
+  it('covers the five user-facing ArtifactKinds (sweep-rule is via /liquidity)', () => {
     const kinds = SLASH_COMMANDS.map(c => c.kind).sort();
-    expect(kinds).toEqual(['ap-table', 'crm-flow', 'rule-net15', 'spend-chart']);
+    expect(kinds).toEqual(['ap-table', 'crm-flow', 'rule-net15', 'spend-chart', 'sweep-rule']);
+  });
+
+  it('includes /liquidity mapped to sweep-rule and sweep_rule_draft', () => {
+    const cmd = SLASH_COMMANDS.find(c => c.name === 'liquidity');
+    expect(cmd).toBeDefined();
+    expect(cmd!.kind).toBe('sweep-rule');
+    expect(cmd!.demoFlowId).toBe('sweep_rule_draft');
+    expect(cmd!.aliases).toContain('runway');
+    expect(cmd!.aliases).toContain('treasury');
   });
 });
 
