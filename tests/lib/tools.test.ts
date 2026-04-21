@@ -85,14 +85,15 @@ describe('TOOLS definitions', () => {
     expect(tool.parameters.required).toContain('title');
   });
 
-  it('render_artifact kind enum has exactly 6 values', () => {
+  it('render_artifact kind enum has exactly 7 values', () => {
     const tool = TOOLS.find(t => t.name === 'render_artifact')!;
     const kindEnum = tool.parameters.properties.kind.enum as string[];
-    expect(kindEnum).toHaveLength(6);
+    expect(kindEnum).toHaveLength(7);
     expect(kindEnum).toContain('ap-table');
     expect(kindEnum).toContain('spend-chart');
     expect(kindEnum).toContain('rule-net15');
     expect(kindEnum).toContain('crm-flow');
+    expect(kindEnum).toContain('document');
     expect(kindEnum).toContain('liquidity-burndown');
     expect(kindEnum).toContain('sweep-rule');
   });

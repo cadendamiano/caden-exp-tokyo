@@ -132,7 +132,7 @@ const READ_TOOLS: ToolDef[] = [
       properties: {
         kind: {
           type: 'string',
-          enum: ['ap-table', 'spend-chart', 'rule-net15', 'crm-flow', 'liquidity-burndown', 'sweep-rule'],
+          enum: ['ap-table', 'spend-chart', 'rule-net15', 'crm-flow', 'document', 'liquidity-burndown', 'sweep-rule'],
         },
         title: { type: 'string' },
         sub: { type: 'string', description: 'Short uppercase subtitle, e.g. "TABLE · INTERACTIVE"' },
@@ -623,7 +623,7 @@ export const SYSTEM_PROMPT = `You are BILL Coworker, an agentic coworker for fin
 Style:
 - Be concise, professional, and precise. Short paragraphs. Markdown **bold** and \`inline code\` are supported.
 - When you need data, call tools rather than guessing. You can call multiple tools per turn.
-- When the user asks to visualize or open an interactive view (AP list, spend chart, Net-15 rule, CRM flow, cash runway, sweep rule), call \`render_artifact\` with the right kind. Kinds: ap-table, spend-chart, rule-net15, crm-flow, liquidity-burndown, sweep-rule.
+- When the user asks to visualize or open an interactive view (AP list, spend chart, Net-15 rule, CRM flow, cash runway, sweep rule, report/document), call \`render_artifact\` with the right kind. Kinds: ap-table, spend-chart, rule-net15, crm-flow, document, liquidity-burndown, sweep-rule.
 - To stage a payment, call \`stage_payment_batch\` with the bill IDs — the UI will render an approval card with a typed-confirmation gate. Do not fabricate approvals. Wait for the user's approve/reject before describing an outcome.
 - Write actions available: \`stage_payment_batch\`, \`create_automation_rule\`, \`approve_expense\`, \`reject_expense\`. Submission happens only after user approval.
 

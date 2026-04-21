@@ -89,6 +89,22 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
       'Safety conditions (e.g. minimum reserve balance)',
     ],
   },
+  {
+    name: 'doc',
+    aliases: ['report', 'onepager'],
+    kind: 'document',
+    label: 'doc',
+    hint: 'Generate a structured AP/spend report document',
+    demoFlowId: 'doc_q1_report',
+    requirements: [
+      'Report title and target audience (e.g. CFO, AP team)',
+      'Time period covered (e.g. Q1 2026)',
+      'Key metrics to surface (e.g. total spend, overdue count, top vendors)',
+      'Sections to include (e.g. Executive Summary, Vendor Breakdown, Aging)',
+      'Data sources (bills, vendors, categories — which filters apply)',
+      'Tone: narrative prose vs. bullet-heavy',
+    ],
+  },
 ] as const;
 
 const SLASH_REGEX = /^\/([a-z0-9]+)(?:\s+([\s\S]*))?$/i;
