@@ -2,7 +2,8 @@
 
 import { useStore } from '@/lib/store';
 import { getDataset } from '@/lib/data';
-import { fmtMoneyShort } from '@/lib/format';
+import { fmtMoneyShort, fmtDate } from '@/lib/format';
+import { runSweepSimForDataset } from '@/lib/simulateSweep';
 import type { Artifact } from '@/lib/store';
 
 type Props = { artifact: Artifact };
@@ -10,12 +11,17 @@ type Props = { artifact: Artifact };
 export function SweepRuleArtifact({ artifact }: Props) {
   const demoDataset = useStore(s => s.tweaks.demoDataset);
   const activateArtifact = useStore(s => s.activateArtifact);
-  const { bankAccounts, liquidityThreshold } = getDataset(demoDataset);
+  const data = getDataset(demoDataset);
+  const { bankAccounts, liquidityThreshold } = data;
 
   const ops = bankAccounts.find(a => a.role === 'operating');
   const reserve = bankAccounts.find(a => a.role === 'reserve');
   const transferAmount = 100000;
   const minReserve = 200000;
+
+  const sim = runSweepSimForDataset(data);
+  const sweepCount = sim.sweeps.length;
+  const firstSweepDay = sim.sweeps[0]?.day;
 
   const isActive = artifact.status === 'active';
   const canActivate = Boolean(artifact.dryRunAcknowledged);
@@ -105,7 +111,20 @@ export function SweepRuleArtifact({ artifact }: Props) {
           <div style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.6 }}>
             · Rate-limit: max <strong style={{ color: 'var(--ink)' }}>1 sweep per day</strong><br />
             · Minimum reserve: pause if reserve &lt; {fmtMoneyShort(minReserve)}<br />
-            · Dry-run window: last 60d projection would have triggered <strong style={{ color: 'var(--ink)' }}>1 sweep</strong> (May 24)<br />
+            · Dry-run window: next 60d projection{' '}
+            {sweepCount > 0 ? (
+              <>
+                expects <strong style={{ color: 'var(--ink)' }}>
+                  {sweepCount} sweep{sweepCount === 1 ? '' : 's'}
+                </strong>
+                {firstSweepDay ? ` (first on ${fmtDate(firstSweepDay)})` : ''}
+              </>
+            ) : (
+              <>
+                expects <strong style={{ color: 'var(--ink)' }}>0 sweeps</strong> · armed for future dips
+              </>
+            )}
+            <br />
             · Pause rule on any transfer error
           </div>
         </div>

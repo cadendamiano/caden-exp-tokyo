@@ -1,12 +1,19 @@
 import type { ProjectionPoint } from '@/lib/data';
 import { fmtMoneyShort } from '@/lib/format';
 
+export type LineChartMarker = {
+  day: string;
+  label?: string;
+  color?: string;
+};
+
 type Props = {
   data: ProjectionPoint[];
   threshold?: number;
   height?: number;
   accent?: string;
   title?: string;
+  markers?: LineChartMarker[];
 };
 
 function formatShortDate(iso: string): string {
@@ -20,6 +27,7 @@ export function LineChart({
   height = 220,
   accent = 'var(--teal)',
   title,
+  markers,
 }: Props) {
   if (data.length === 0) return null;
 
@@ -151,33 +159,83 @@ export function LineChart({
           strokeLinecap="round"
         />
 
-        {/* Min marker: vertical dashed line + bubble label */}
-        <line
-          x1={xOf(minIdx)}
-          x2={xOf(minIdx)}
-          y1={plotTop}
-          y2={plotBottom}
-          className="linechart-min-marker"
-          strokeWidth={1}
-        />
-        <circle
-          cx={xOf(minIdx)}
-          cy={yOf(minPoint.balance)}
-          r={3.5}
-          fill={accent}
-          stroke="var(--surface)"
-          strokeWidth={1.5}
-        />
-        <text
-          x={xOf(minIdx)}
-          y={yOf(minPoint.balance) - 10}
-          fontSize="11"
-          fontFamily="var(--mono)"
-          textAnchor={minIdx > data.length / 2 ? 'end' : 'start'}
-          className="linechart-min-label"
-        >
-          {formatShortDate(minPoint.day)} · {fmtMoneyShort(minPoint.balance)}
-        </text>
+        {/* Min marker: vertical dashed line + bubble label (suppressed when sweep markers are provided) */}
+        {(!markers || markers.length === 0) && (
+          <>
+            <line
+              x1={xOf(minIdx)}
+              x2={xOf(minIdx)}
+              y1={plotTop}
+              y2={plotBottom}
+              className="linechart-min-marker"
+              strokeWidth={1}
+            />
+            <circle
+              cx={xOf(minIdx)}
+              cy={yOf(minPoint.balance)}
+              r={3.5}
+              fill={accent}
+              stroke="var(--surface)"
+              strokeWidth={1.5}
+            />
+            <text
+              x={xOf(minIdx)}
+              y={yOf(minPoint.balance) - 10}
+              fontSize="11"
+              fontFamily="var(--mono)"
+              textAnchor={minIdx > data.length / 2 ? 'end' : 'start'}
+              className="linechart-min-label"
+            >
+              {formatShortDate(minPoint.day)} · {fmtMoneyShort(minPoint.balance)}
+            </text>
+          </>
+        )}
+
+        {/* Sweep event markers: vertical dashed line + dot + label */}
+        {markers && markers.map((m, mi) => {
+          const idx = data.findIndex(p => p.day === m.day);
+          if (idx < 0) return null;
+          const mx = xOf(idx);
+          const my = yOf(data[idx].balance);
+          const color = m.color ?? 'var(--pos)';
+          const anchor = idx > data.length / 2 ? 'end' : 'start';
+          const labelDx = anchor === 'end' ? -6 : 6;
+          return (
+            <g key={`mk${mi}`}>
+              <line
+                x1={mx}
+                x2={mx}
+                y1={plotTop}
+                y2={plotBottom}
+                stroke={color}
+                strokeWidth={1}
+                strokeDasharray="2 3"
+                opacity={0.6}
+              />
+              <circle
+                cx={mx}
+                cy={my}
+                r={3.5}
+                fill={color}
+                stroke="var(--surface)"
+                strokeWidth={1.5}
+              />
+              {m.label && (
+                <text
+                  x={mx + labelDx}
+                  y={my - 8}
+                  fontSize="11"
+                  fontFamily="var(--mono)"
+                  textAnchor={anchor}
+                  fill={color}
+                  fontWeight={600}
+                >
+                  {m.label}
+                </text>
+              )}
+            </g>
+          );
+        })}
 
         {/* X axis labels */}
         {xTicks.map((i) => (

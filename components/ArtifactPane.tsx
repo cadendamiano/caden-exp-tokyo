@@ -145,7 +145,7 @@ export function ArtifactPane() {
                       className={'artifact-view-tab' + (view === v ? ' active' : '')}
                       onClick={() => setView(v)}
                     >
-                      {v === 'logic' ? 'Logic' : v === 'preview' ? (cur.kind === 'rule-net15' ? 'Pro forma ledger' : 'Ledger') : 'Code'}
+                      {v === 'logic' ? 'Logic' : v === 'preview' ? (['rule-net15', 'sweep-rule'].includes(cur.kind) ? 'Pro Forma Ledger' : 'Ledger') : 'Code'}
                     </button>
                   ))}
                 </div>

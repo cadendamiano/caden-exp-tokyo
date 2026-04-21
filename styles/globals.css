@@ -1250,6 +1250,10 @@ input, textarea, select{ font-family: inherit; color: inherit; }
 .preview-as-of{
   font-family: var(--mono); font-size: 10.5px; color: var(--ink-4); white-space: nowrap;
 }
+.preview-chart-wrap{
+  /* chart-card already provides border + padding; cancel its bottom margin so preview-view gap controls spacing */
+}
+.preview-chart-wrap .chart-card{ margin-bottom: 0; }
 .preview-table-wrap{
   border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
   background: var(--surface);
