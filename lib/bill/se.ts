@@ -1,14 +1,15 @@
 import type { BillEnvironment } from '../secrets';
 
 export const BILL_SE_SANDBOX_BASE = 'https://gateway.stage.bill.com/connect/v1';
-const TOKEN_TTL_MS = 30 * 60 * 1000;
+const DEFAULT_TOKEN_TTL_MS = 55 * 60 * 1000; // fallback if server omits expires_in
+const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000; // refresh 5 min before actual expiry
 
-type TokenEntry = { token: string; fetchedAt: number };
+type TokenEntry = { token: string; expiresAt: number };
 
 const tokenCache = new Map<string, TokenEntry>();
 
 function isFresh(entry: TokenEntry | undefined): entry is TokenEntry {
-  return !!entry && Date.now() - entry.fetchedAt < TOKEN_TTL_MS;
+  return !!entry && Date.now() < entry.expiresAt;
 }
 
 function requireSeCreds(env: BillEnvironment): { id: string; secret: string } {
@@ -41,14 +42,18 @@ export async function loginSe(env: BillEnvironment): Promise<string> {
     throw new Error(`Bill S&E token failed (${res.status}): ${body.slice(0, 200)}`);
   }
 
-  const json = (await res.json()) as { access_token?: string; error?: string; error_description?: string };
+  const json = (await res.json()) as { access_token?: string; expires_in?: number; error?: string; error_description?: string };
   if (!json.access_token) {
     const reason = json.error_description || json.error || 'no access_token in response';
     throw new Error(`Bill S&E token rejected: ${reason}`);
   }
 
-  const entry: TokenEntry = { token: json.access_token, fetchedAt: Date.now() };
+  const ttlMs = typeof json.expires_in === 'number'
+    ? json.expires_in * 1000 - TOKEN_EXPIRY_BUFFER_MS
+    : DEFAULT_TOKEN_TTL_MS;
+  const entry: TokenEntry = { token: json.access_token, expiresAt: Date.now() + ttlMs };
   tokenCache.set(env.id, entry);
+  console.debug(`[bill/se] token acquired for "${env.name || env.id}", expires in ${Math.round(ttlMs / 60000)}m`);
   return entry.token;
 }
 

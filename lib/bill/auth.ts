@@ -1,9 +1,9 @@
 import type { BillEnvironment } from '../secrets';
 
 export const BILL_AP_SANDBOX_BASE = 'https://api-sandbox.bill.com';
-const SESSION_TTL_MS = 30 * 60 * 1000;
+const SESSION_TTL_MS = 28 * 60 * 1000; // BILL AP sessions last ~30m; refresh 2m early
 
-type Session = { sessionId: string; fetchedAt: number };
+type Session = { sessionId: string; expiresAt: number };
 
 const sessionCache = new Map<string, Session>();
 
@@ -18,7 +18,7 @@ export type BillApLoginResponse = {
 };
 
 function isFresh(s: Session | undefined): s is Session {
-  return !!s && Date.now() - s.fetchedAt < SESSION_TTL_MS;
+  return !!s && Date.now() < s.expiresAt;
 }
 
 export async function loginAp(env: BillEnvironment): Promise<string> {
@@ -55,8 +55,9 @@ export async function loginAp(env: BillEnvironment): Promise<string> {
     );
   }
 
-  const next: Session = { sessionId: json.response_data.sessionId, fetchedAt: Date.now() };
+  const next: Session = { sessionId: json.response_data.sessionId, expiresAt: Date.now() + SESSION_TTL_MS };
   sessionCache.set(env.id, next);
+  console.debug(`[bill/ap] session acquired for "${env.name || env.id}"`);
   return next.sessionId;
 }
 
