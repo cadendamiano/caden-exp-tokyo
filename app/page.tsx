@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '@/lib/store';
-import { handleApprove, handleReject } from '@/lib/runtime';
+import { handleApprove, handleReject, handleFormAnswer } from '@/lib/runtime';
 import { TopBar } from '@/components/TopBar';
 import { Rail } from '@/components/Rail';
 import { Composer } from '@/components/Composer';
@@ -104,6 +104,7 @@ export default function Page() {
               activeArtifact={activeArtifact}
               onOpenArtifact={setActiveArtifact}
               onSuggestion={setComposer}
+              onFormAnswer={handleFormAnswer}
             />
           ))}
           <div ref={bottomRef} />

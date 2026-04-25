@@ -294,6 +294,40 @@ export function handleReject(batchId: string) {
   });
 }
 
+// ─── Form question answer ────────────────────────────────────────────────
+export function handleFormAnswer(
+  turnId: string,
+  selected: string[],
+  labels: string[],
+  freeText: string
+) {
+  const s = useStore.getState();
+  const isTestingMode = s.mode === 'testing';
+
+  const patch = { answered: true, selected, freeTextValue: freeText };
+  if (isTestingMode) {
+    s.updateTurnInActiveThread(turnId, patch as any);
+  } else {
+    s.updateTurn(turnId, patch as any);
+  }
+
+  const parts = labels.filter(Boolean);
+  let submission: string;
+  if (freeText.trim() && parts.length) {
+    submission = `${parts.join(', ')} — also: ${freeText.trim()}`;
+  } else if (freeText.trim()) {
+    submission = freeText.trim();
+  } else {
+    submission = parts.join(', ');
+  }
+
+  if (isTestingMode) {
+    void runLLMTesting(submission);
+  } else {
+    void runLLM(submission);
+  }
+}
+
 // ─── Free-text LLM path ─────────────────────────────────────────────────
 export async function runLLM(userText: string, opts?: ForcedArtifact) {
   const s = useStore.getState();
@@ -407,6 +441,16 @@ export async function runLLM(userText: string, opts?: ForcedArtifact) {
             kind: 'approval',
             payload,
             simulated: ev.simulated === true,
+          });
+        } else if (ev.type === 'form-question') {
+          useStore.getState().updateTurn(agentId, { text: acc, streaming: false });
+          useStore.getState().addTurn({
+            id: newId('fq'),
+            kind: 'form-question',
+            question: ev.question,
+            options: ev.options,
+            multiSelect: ev.multiSelect,
+            freeText: ev.freeText,
           });
         } else if (ev.type === 'done') {
           useStore.getState().updateTurn(agentId, { text: acc || ev.text || '', streaming: false });
@@ -564,6 +608,16 @@ export async function runLLMTesting(userText: string, opts?: ForcedArtifact) {
             kind: 'approval',
             payload,
             simulated: ev.simulated === true,
+          });
+        } else if (ev.type === 'form-question') {
+          useStore.getState().updateTurnInActiveThread(agentId, { text: acc, streaming: false });
+          useStore.getState().addTurnToActiveThread({
+            id: newId('fq'),
+            kind: 'form-question',
+            question: ev.question,
+            options: ev.options,
+            multiSelect: ev.multiSelect,
+            freeText: ev.freeText,
           });
         } else if (ev.type === 'done') {
           useStore.getState().updateTurnInActiveThread(agentId, { text: acc || ev.text || '', streaming: false });

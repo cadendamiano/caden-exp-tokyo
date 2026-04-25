@@ -21,7 +21,19 @@ export type Turn =
       payload: Extract<FlowStep, { kind: 'approval' }>['payload'];
       simulated?: boolean;
     }
-  | { id: string; kind: 'suggest'; items: string[] };
+  | { id: string; kind: 'suggest'; items: string[] }
+  | {
+      id: string;
+      kind: 'form-question';
+      question: string;
+      options: { id: string; label: string; description?: string }[];
+      multiSelect?: boolean;
+      freeText?: boolean;
+      // runtime state
+      answered?: boolean;
+      selected?: string[];
+      freeTextValue?: string;
+    };
 
 let seq = 0;
 export const newId = (prefix: string) =>
