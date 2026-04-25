@@ -1,5 +1,6 @@
 'use client';
 
+import { useCallback, useState } from 'react';
 import { ToolRow } from './primitives/ToolRow';
 import { ApprovalCard } from './primitives/ApprovalCard';
 import { Icon } from './primitives/Icon';
@@ -16,6 +17,7 @@ type Props = {
   activeArtifact: string | null;
   onOpenArtifact: (id: string) => void;
   onSuggestion: (text: string) => void;
+  onFormAnswer: (turnId: string, selected: string[], labels: string[], freeText: string) => void;
 };
 
 export function Turn({
@@ -26,6 +28,7 @@ export function Turn({
   activeArtifact,
   onOpenArtifact,
   onSuggestion,
+  onFormAnswer,
 }: Props) {
   if (turn.kind === 'user') {
     return (
@@ -209,5 +212,110 @@ export function Turn({
     );
   }
 
+  if (turn.kind === 'form-question') {
+    return <FormQuestion turn={turn} onFormAnswer={onFormAnswer} />;
+  }
+
   return null;
+}
+
+type FormQuestionProps = {
+  turn: Extract<TurnType, { kind: 'form-question' }>;
+  onFormAnswer: (turnId: string, selected: string[], labels: string[], freeText: string) => void;
+};
+
+function FormQuestion({ turn, onFormAnswer }: FormQuestionProps) {
+  const [localSelected, setLocalSelected] = useState<string[]>(turn.selected ?? []);
+  const [freeTextValue, setFreeTextValue] = useState(turn.freeTextValue ?? '');
+  const answered = turn.answered ?? false;
+
+  const toggleOption = useCallback((id: string) => {
+    if (answered) return;
+    if (!turn.multiSelect) {
+      setLocalSelected([id]);
+      return;
+    }
+    setLocalSelected(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  }, [answered, turn.multiSelect]);
+
+  const handleSubmit = useCallback(() => {
+    if (answered) return;
+    const labels = localSelected.map(
+      sid => turn.options.find(o => o.id === sid)?.label ?? sid
+    );
+    onFormAnswer(turn.id, localSelected, labels, freeTextValue);
+  }, [answered, localSelected, freeTextValue, turn.id, turn.options, onFormAnswer]);
+
+  const handleSingleSelect = useCallback((id: string, label: string) => {
+    if (answered) return;
+    onFormAnswer(turn.id, [id], [label], '');
+  }, [answered, turn.id, onFormAnswer]);
+
+  const canSubmit = localSelected.length > 0 || freeTextValue.trim().length > 0;
+  const showSubmitButton = turn.multiSelect || turn.freeText;
+
+  return (
+    <div className="msg agent fade-in">
+      <span className="msg-gutter agent">⏵</span>
+      <div className="msg-body">
+        <div className="fq-question">{turn.question}</div>
+        <div className="fq-options">
+          {turn.options.map(opt => {
+            const isSelected = localSelected.includes(opt.id);
+            const isAnsweredOther = answered && !isSelected;
+            return (
+              <button
+                key={opt.id}
+                className={`fq-option${isSelected ? ' fq-option-selected' : ''}${isAnsweredOther ? ' fq-option-dim' : ''}`}
+                onClick={() =>
+                  turn.multiSelect
+                    ? toggleOption(opt.id)
+                    : handleSingleSelect(opt.id, opt.label)
+                }
+                disabled={answered}
+              >
+                {turn.multiSelect && (
+                  <span className={`fq-checkbox${isSelected ? ' fq-checkbox-checked' : ''}`}>
+                    {isSelected && '✓'}
+                  </span>
+                )}
+                <span className="fq-option-body">
+                  <span className="fq-option-label">{opt.label}</span>
+                  {opt.description && (
+                    <span className="fq-option-desc">{opt.description}</span>
+                  )}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        {turn.freeText && (
+          <div className="fq-free-text">
+            <textarea
+              className="fq-textarea"
+              placeholder="Or describe what you need…"
+              value={freeTextValue}
+              onChange={e => !answered && setFreeTextValue(e.target.value)}
+              disabled={answered}
+              rows={2}
+            />
+          </div>
+        )}
+        {showSubmitButton && !answered && (
+          <button
+            className="fq-submit"
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+          >
+            Continue →
+          </button>
+        )}
+        {answered && (
+          <div className="fq-answered-badge">Submitted</div>
+        )}
+      </div>
+    </div>
+  );
 }

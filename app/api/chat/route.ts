@@ -31,6 +31,14 @@ type Event =
       dataJson?: string;
     }
   | { type: 'approval'; payload: ApprovalPayload; simulated: boolean }
+  | {
+      type: 'form-question';
+      id: string;
+      question: string;
+      options: { id: string; label: string; description?: string }[];
+      multiSelect: boolean;
+      freeText: boolean;
+    }
   | { type: 'done' }
   | { type: 'error'; message: string };
 
@@ -158,6 +166,18 @@ async function runAnthropic(
     const toolResults: any[] = [];
     for (const tu of toolUses) {
       send({ type: 'tool-call', id: tu.id, name: tu.name, input: tu.input });
+      if (tu.name === 'ask_question') {
+        const inp = tu.input as any;
+        send({
+          type: 'form-question',
+          id: tu.id,
+          question: inp.question ?? '',
+          options: Array.isArray(inp.options) ? inp.options : [],
+          multiSelect: inp.multi_select === true,
+          freeText: inp.allow_free_text === true,
+        });
+        return;
+      }
       const res = await runTool(tu.name, tu.input, ctx);
       send({ type: 'tool-result', id: tu.id, name: tu.name, input: tu.input, ok: res.ok, summary: res.summary });
       if (tu.name === 'render_artifact') {
@@ -273,6 +293,18 @@ async function runGemini(
     const toolParts: any[] = [];
     for (const tc of toolCalls) {
       send({ type: 'tool-call', id: tc.id, name: tc.name, input: tc.input });
+      if (tc.name === 'ask_question') {
+        const inp = tc.input as any;
+        send({
+          type: 'form-question',
+          id: tc.id,
+          question: inp.question ?? '',
+          options: Array.isArray(inp.options) ? inp.options : [],
+          multiSelect: inp.multi_select === true,
+          freeText: inp.allow_free_text === true,
+        });
+        return;
+      }
       const res = await runTool(tc.name, tc.input, ctx);
       send({ type: 'tool-result', id: tc.id, name: tc.name, input: tc.input, ok: res.ok, summary: res.summary });
       if (tc.name === 'render_artifact') {

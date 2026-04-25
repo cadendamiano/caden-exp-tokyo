@@ -172,6 +172,42 @@ const READ_TOOLS: ToolDef[] = [
   },
 ];
 
+const FORM_TOOLS: ToolDef[] = [
+  {
+    name: 'ask_question',
+    description:
+      'Ask the user a structured question to collect context before proceeding. Use this when intent is ambiguous — especially for automation setup. Prefer multi_select when several options might apply simultaneously. Set allow_free_text when the option list may not be exhaustive.',
+    parameters: {
+      type: 'object',
+      properties: {
+        question: { type: 'string', description: 'The question to display to the user.' },
+        options: {
+          type: 'array',
+          description: 'Choices to present. Each option needs an id (short slug) and a label.',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              label: { type: 'string' },
+              description: { type: 'string', description: 'Optional subtitle shown below the label.' },
+            },
+            required: ['id', 'label'],
+          },
+        },
+        multi_select: {
+          type: 'boolean',
+          description: 'If true, render checkboxes so the user can pick multiple options.',
+        },
+        allow_free_text: {
+          type: 'boolean',
+          description: 'If true, show a free-text input below the options for custom answers.',
+        },
+      },
+      required: ['question', 'options'],
+    },
+  },
+];
+
 const WRITE_TOOLS: ToolDef[] = [
   {
     name: 'stage_payment_batch',
@@ -243,7 +279,7 @@ const WRITE_TOOLS: ToolDef[] = [
 ];
 
 // Tools the LLM can call.
-export const MODEL_TOOLS: ToolDef[] = [...READ_TOOLS, ...WRITE_TOOLS];
+export const MODEL_TOOLS: ToolDef[] = [...READ_TOOLS, ...FORM_TOOLS, ...WRITE_TOOLS];
 
 // Internal dispatcher — not exposed to the LLM.
 export const INTERNAL_TOOLS: ToolDef[] = [
@@ -304,6 +340,9 @@ async function runRealTool(
     }
     if (name === 'render_html_artifact') {
       return { ok: true, summary: 'html artifact opened in UI', data: input };
+    }
+    if (name === 'ask_question') {
+      return { ok: true, summary: 'question presented to user', data: { __awaiting_input: true } };
     }
     const env = await getBillEnvironment(ctx.billEnvId!);
     if (!env) {
@@ -538,6 +577,9 @@ async function runMockTool(
     if (name === 'render_html_artifact') {
       return { ok: true, summary: 'html artifact opened in UI', data: input };
     }
+    if (name === 'ask_question') {
+      return { ok: true, summary: 'question presented to user', data: { __awaiting_input: true } };
+    }
 
     // ── Write tools ──
     if (name === 'stage_payment_batch') {
@@ -677,6 +719,8 @@ Style:
 - When the user asks to visualize or open an interactive view (AP list, spend chart, Net-15 rule, CRM flow, cash runway, sweep rule, report/document), call \`render_artifact\` with the right kind. Kinds: ap-table, spend-chart, rule-net15, crm-flow, document, liquidity-burndown, sweep-rule.
 - To stage a payment, call \`stage_payment_batch\` with the bill IDs — the UI will render an approval card with a typed-confirmation gate. Do not fabricate approvals. Wait for the user's approve/reject before describing an outcome.
 - Write actions available: \`stage_payment_batch\`, \`create_automation_rule\`, \`approve_expense\`, \`reject_expense\`. Submission happens only after user approval.
+- When the user asks to set up an automation without specifying what it should do, call \`ask_question\` before proceeding. Offer 3–5 concrete options (e.g. "Auto-pay Net-15 bills", "Flag invoices over a threshold", "Sweep idle cash", "Auto-categorize spend"). Set \`allow_free_text: true\` so they can describe something custom. Do not guess their intent and build an artifact without asking first.
+- Use \`ask_question\` whenever you need to clarify ambiguous intent before taking a write action or building an artifact. Prefer it over asking in plain text — the structured UI is clearer for the user.
 ${DYNAMIC_ARTIFACT_GUIDANCE}
 
 Finish every turn with a short natural-language summary of what you learned or did.`;
