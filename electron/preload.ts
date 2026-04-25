@@ -20,6 +20,11 @@ const api = {
     ipcRenderer.on('auth-changed', listener);
     return () => ipcRenderer.removeListener('auth-changed', listener);
   },
+  onFullScreenChanged(cb: (isFullScreen: boolean) => void): () => void {
+    const listener = (_evt: IpcRendererEvent, val: boolean) => cb(val);
+    ipcRenderer.on('fullscreen-changed', listener);
+    return () => ipcRenderer.removeListener('fullscreen-changed', listener);
+  },
   exportTemplate(data: object): Promise<{ ok: boolean; path?: string }> {
     return ipcRenderer.invoke('export-template', data);
   },

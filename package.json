@@ -11,11 +11,15 @@
     "lint": "next lint",
     "test": "vitest",
     "test:run": "vitest run",
+    "preflight": "node scripts/preflight.js",
     "electron:build-next": "next build",
     "electron:copy-standalone": "node scripts/copy-standalone.js",
     "electron:build-main": "tsc -p tsconfig.electron.json",
     "electron:build": "npm run electron:build-next && npm run electron:copy-standalone && npm run electron:build-main",
+    "preelectron:dev": "npm run preflight",
     "electron:dev": "npm run electron:build && electron .",
+    "preelectron:dev:fast": "npm run preflight && npm run electron:build-main",
+    "electron:dev:fast": "concurrently -k -s first -n next,electron -c blue,magenta \"next dev -p 3100\" \"wait-on http://127.0.0.1:3100 && cross-env ELECTRON_DEV_URL=http://127.0.0.1:3100 electron .\"",
     "electron:dist": "npm run electron:build && electron-builder --mac",
     "electron:dist:zip": "npm run electron:build && electron-builder --mac --config.mac.target=zip"
   },
@@ -24,7 +28,6 @@
     "@google/genai": "^0.7.0",
     "braintrust": "^3.9.0",
     "electron-store": "^8.2.0",
-    "get-port": "^7.1.0",
     "next": "^14.2.34",
     "react": "18.3.1",
     "react-dom": "18.3.1",
@@ -34,11 +37,14 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
     "electron": "^30.0.0",
     "electron-builder": "^24.13.0",
     "jsdom": "^29.0.2",
     "typescript": "^5",
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.4",
+    "wait-on": "^7.2.0"
   },
   "build": {
     "appId": "com.bill.coworker",
@@ -62,8 +68,20 @@
       "category": "public.app-category.business",
       "icon": "electron/assets/icon.icns",
       "target": [
-        { "target": "dmg", "arch": ["arm64", "x64"] },
-        { "target": "zip", "arch": ["arm64", "x64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ],
       "identity": null
     }
