@@ -27,6 +27,13 @@ type IncomingPatch = {
   anthropicApiKey?: string | null;
   geminiApiKey?: string | null;
   billEnvironments?: IncomingBillEnv[];
+  braintrustApiKey?: string | null;
+  braintrustOrgName?: string | null;
+  braintrustProjectName?: string | null;
+  braintrustEnabled?: boolean;
+  disabledTools?: string[];
+  systemPromptOverrideDemo?: string | null;
+  systemPromptOverrideTesting?: string | null;
 };
 
 export async function GET() {
@@ -47,6 +54,13 @@ export async function POST(req: NextRequest) {
     anthropicApiKey: current.anthropicApiKey,
     geminiApiKey: current.geminiApiKey,
     billEnvironments: [...current.billEnvironments],
+    braintrustApiKey: current.braintrustApiKey,
+    braintrustOrgName: current.braintrustOrgName,
+    braintrustProjectName: current.braintrustProjectName,
+    braintrustEnabled: current.braintrustEnabled,
+    disabledTools: current.disabledTools ?? [],
+    systemPromptOverrideDemo: current.systemPromptOverrideDemo ?? null,
+    systemPromptOverrideTesting: current.systemPromptOverrideTesting ?? null,
   };
 
   if (patch.anthropicApiKey !== undefined) {
@@ -54,6 +68,31 @@ export async function POST(req: NextRequest) {
   }
   if (patch.geminiApiKey !== undefined) {
     next.geminiApiKey = patch.geminiApiKey ? String(patch.geminiApiKey) : undefined;
+  }
+  if (patch.braintrustApiKey !== undefined) {
+    next.braintrustApiKey = patch.braintrustApiKey ? String(patch.braintrustApiKey) : undefined;
+  }
+  if (patch.braintrustOrgName !== undefined) {
+    next.braintrustOrgName = patch.braintrustOrgName ? String(patch.braintrustOrgName) : undefined;
+  }
+  if (patch.braintrustProjectName !== undefined) {
+    next.braintrustProjectName = patch.braintrustProjectName ? String(patch.braintrustProjectName) : undefined;
+  }
+  if (patch.braintrustEnabled !== undefined) {
+    next.braintrustEnabled = Boolean(patch.braintrustEnabled);
+  }
+  if (Array.isArray(patch.disabledTools)) {
+    next.disabledTools = patch.disabledTools.filter(t => typeof t === 'string');
+  }
+  if ('systemPromptOverrideDemo' in patch) {
+    next.systemPromptOverrideDemo = patch.systemPromptOverrideDemo
+      ? String(patch.systemPromptOverrideDemo)
+      : null;
+  }
+  if ('systemPromptOverrideTesting' in patch) {
+    next.systemPromptOverrideTesting = patch.systemPromptOverrideTesting
+      ? String(patch.systemPromptOverrideTesting)
+      : null;
   }
 
   if (Array.isArray(patch.billEnvironments)) {

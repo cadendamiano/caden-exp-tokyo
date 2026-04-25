@@ -4,9 +4,10 @@ import { GoogleGenAI, Type } from '@google/genai';
 import { runTool, SYSTEM_PROMPT, TESTING_SYSTEM_PROMPT, type ToolContext, type ToolDef } from '@/lib/tools';
 import type { DatasetKey } from '@/lib/data';
 import type { ArtifactKind, FlowStep } from '@/lib/flows';
-import { getAnthropicKey, getGeminiKey } from '@/lib/secrets';
+import { getAnthropicKey, getGeminiKey, readSecrets } from '@/lib/secrets';
 import { providerOf } from '@/lib/models';
 import { buildModelTools, buildRequirementsBlock, coerceArtifactKind } from '@/lib/chatSchema';
+import { recordSpan, type ToolCallRecord } from '@/lib/spanBuffer';
 
 type ApprovalPayload = Extract<FlowStep, { kind: 'approval' }>['payload'];
 
@@ -70,12 +71,32 @@ export async function POST(req: NextRequest) {
     billProduct: body.billProduct,
     demoDataset: body.demoDataset,
   };
-  const baseSystem = ctx.mode === 'testing' ? TESTING_SYSTEM_PROMPT : SYSTEM_PROMPT;
+
+  // Load overrides + disabled tools from secrets
+  const secrets = await readSecrets();
+  const demoOverride = secrets.systemPromptOverrideDemo;
+  const testingOverride = secrets.systemPromptOverrideTesting;
+  const disabledTools = new Set(secrets.disabledTools ?? []);
+
+  const baseSystem =
+    ctx.mode === 'testing'
+      ? (testingOverride || TESTING_SYSTEM_PROMPT)
+      : (demoOverride || SYSTEM_PROMPT);
   const systemPrompt =
     body.forcedKind && body.commandName
       ? `${baseSystem}\n\n${buildRequirementsBlock(body.commandName, body.forcedKind, body.requirements ?? [])}`
       : baseSystem;
-  const tools = buildModelTools(body.forcedKind);
+  const allTools = buildModelTools(body.forcedKind);
+  const tools = disabledTools.size > 0
+    ? allTools.filter(t => !disabledTools.has(t.name))
+    : allTools;
+
+  // Span accumulator for observability
+  const spanId = `span_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  const spanToolCalls: ToolCallRecord[] = [];
+  let spanResponseText = '';
+  let spanInputTokens: number | undefined;
+  let spanOutputTokens: number | undefined;
   const forcedKind = body.forcedKind;
 
   const encoder = new TextEncoder();
@@ -84,13 +105,24 @@ export async function POST(req: NextRequest) {
       const send = (ev: Event) => controller.enqueue(encoder.encode(sseEncode(ev)));
       try {
         if (provider === 'gemini') {
-          await runGemini(model, userMessage, send, ctx, systemPrompt, tools, forcedKind, history);
+          await runGemini(model, userMessage, send, ctx, systemPrompt, tools, forcedKind, history, spanToolCalls, (t, it, ot) => { spanResponseText = t; spanInputTokens = it; spanOutputTokens = ot; });
         } else {
-          await runAnthropic(model, userMessage, send, ctx, systemPrompt, tools, forcedKind, history);
+          await runAnthropic(model, userMessage, send, ctx, systemPrompt, tools, forcedKind, history, spanToolCalls, (t, it, ot) => { spanResponseText = t; spanInputTokens = it; spanOutputTokens = ot; });
         }
       } catch (e: any) {
         send({ type: 'error', message: e?.message ?? 'unknown error' });
       } finally {
+        recordSpan({
+          id: spanId,
+          timestamp: Date.now(),
+          model,
+          systemPrompt,
+          userMessage,
+          toolCalls: spanToolCalls,
+          responseText: spanResponseText,
+          inputTokens: spanInputTokens,
+          outputTokens: spanOutputTokens,
+        });
         send({ type: 'done' });
         controller.close();
       }
@@ -115,7 +147,9 @@ async function runAnthropic(
   systemPrompt: string,
   modelTools: ToolDef[],
   forcedKind: ArtifactKind | undefined,
-  history: ChatHistoryTurn[]
+  history: ChatHistoryTurn[],
+  spanToolCalls: ToolCallRecord[],
+  onFinish: (text: string, inputTokens?: number, outputTokens?: number) => void
 ) {
   const apiKey = await getAnthropicKey();
   if (!apiKey) throw new Error('Anthropic API key not set. Configure it in Settings (or ANTHROPIC_API_KEY in .env.local).');
@@ -134,6 +168,10 @@ async function runAnthropic(
     })) as Anthropic.Messages.MessageParam[],
     { role: 'user', content: userMessage },
   ];
+
+  let fullResponseText = '';
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
 
   for (let turn = 0; turn < 4; turn++) {
     const stream = await client.messages.stream({
@@ -155,13 +193,20 @@ async function runAnthropic(
     }
 
     const final = await stream.finalMessage();
+    fullResponseText += textAccum;
+    totalInputTokens += final.usage?.input_tokens ?? 0;
+    totalOutputTokens += final.usage?.output_tokens ?? 0;
+
     for (const block of final.content) {
       if (block.type === 'tool_use') {
         toolUses.push({ id: block.id, name: block.name, input: block.input });
       }
     }
 
-    if (toolUses.length === 0) return;
+    if (toolUses.length === 0) {
+      onFinish(fullResponseText, totalInputTokens, totalOutputTokens);
+      return;
+    }
 
     const toolResults: any[] = [];
     for (const tu of toolUses) {
@@ -176,9 +221,11 @@ async function runAnthropic(
           multiSelect: inp.multi_select === true,
           freeText: inp.allow_free_text === true,
         });
+        onFinish(fullResponseText, totalInputTokens, totalOutputTokens);
         return;
       }
       const res = await runTool(tu.name, tu.input, ctx);
+      spanToolCalls.push({ name: tu.name, input: tu.input, result: res.summary, ok: res.ok });
       send({ type: 'tool-result', id: tu.id, name: tu.name, input: tu.input, ok: res.ok, summary: res.summary });
       if (tu.name === 'render_artifact') {
         const inp = tu.input as any;
@@ -221,6 +268,7 @@ async function runAnthropic(
     messages.push({ role: 'assistant', content: final.content });
     messages.push({ role: 'user', content: toolResults });
   }
+  onFinish(fullResponseText, totalInputTokens, totalOutputTokens);
 }
 
 // ── Gemini ─────────────────────────────────────────────────────────────
@@ -232,7 +280,9 @@ async function runGemini(
   systemPrompt: string,
   modelTools: ToolDef[],
   forcedKind: ArtifactKind | undefined,
-  history: ChatHistoryTurn[]
+  history: ChatHistoryTurn[],
+  spanToolCalls: ToolCallRecord[],
+  onFinish: (text: string, inputTokens?: number, outputTokens?: number) => void
 ) {
   const apiKey = await getGeminiKey();
   if (!apiKey) throw new Error('Gemini API key not set. Configure it in Settings (or GEMINI_API_KEY in .env.local).');
@@ -257,6 +307,8 @@ async function runGemini(
     { role: 'user', parts: [{ text: userMessage }] },
   ];
 
+  let fullResponseText = '';
+
   for (let turn = 0; turn < 4; turn++) {
     const stream = await ai.models.generateContentStream({
       model,
@@ -275,6 +327,7 @@ async function runGemini(
       const parts = cand?.content?.parts ?? [];
       for (const part of parts) {
         if ((part as any).text) {
+          fullResponseText += (part as any).text;
           send({ type: 'text', text: (part as any).text });
           modelParts.push({ text: (part as any).text });
         } else if ((part as any).functionCall) {
@@ -286,7 +339,10 @@ async function runGemini(
       }
     }
 
-    if (toolCalls.length === 0) return;
+    if (toolCalls.length === 0) {
+      onFinish(fullResponseText);
+      return;
+    }
 
     contents.push({ role: 'model', parts: modelParts });
 
@@ -303,9 +359,11 @@ async function runGemini(
           multiSelect: inp.multi_select === true,
           freeText: inp.allow_free_text === true,
         });
+        onFinish(fullResponseText);
         return;
       }
       const res = await runTool(tc.name, tc.input, ctx);
+      spanToolCalls.push({ name: tc.name, input: tc.input, result: res.summary, ok: res.ok });
       send({ type: 'tool-result', id: tc.id, name: tc.name, input: tc.input, ok: res.ok, summary: res.summary });
       if (tc.name === 'render_artifact') {
         const inp = tc.input as any;
@@ -347,6 +405,7 @@ async function runGemini(
     }
     contents.push({ role: 'user', parts: toolParts });
   }
+  onFinish(fullResponseText);
 }
 
 export function jsonSchemaToGemini(s: any): any {

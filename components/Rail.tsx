@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { CONNECTORS, SESSIONS } from '@/lib/data';
 import { useStore } from '@/lib/store';
 import { runFlow } from '@/lib/runtime';
@@ -18,10 +19,9 @@ const SESSION_MAP: Record<string, string> = {
 
 type Props = {
   onNewSession: () => void;
-  onOpenSettings: () => void;
 };
 
-export function Rail({ onNewSession, onOpenSettings }: Props) {
+export function Rail({ onNewSession }: Props) {
   const mode = useStore(s => s.mode);
 
   return (
@@ -35,10 +35,10 @@ export function Rail({ onNewSession, onOpenSettings }: Props) {
       </div>
 
       <div className="rail-footer">
-        <button className="rail-settings" onClick={onOpenSettings} type="button">
+        <Link href="/settings" className="rail-settings">
           <span className="rail-settings-icon"><Icon.Gear /></span>
           <span>Settings</span>
-        </button>
+        </Link>
       </div>
     </aside>
   );
