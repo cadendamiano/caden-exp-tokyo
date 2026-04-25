@@ -128,6 +128,360 @@ export const EXPENSES: Expense[] = [
   { id: 'exp_1008', employee: 'emp_02', category: 'Meals',       amount:  142.10, date: '2026-04-17', status: 'approved' },
 ];
 
+// ─── New types ────────────────────────────────────────────────────────
+
+export type PaymentStatus = 'pending' | 'processing' | 'paid' | 'failed';
+export type Payment = {
+  id: string;
+  billId: string;
+  vendorId: string;
+  amount: number;
+  method: 'ACH' | 'Check' | 'Wire';
+  status: PaymentStatus;
+  processedDate: string;
+  confirmationId: string;
+};
+
+export type ApprovalPolicy = {
+  id: string;
+  name: string;
+  type: 'amount' | 'always' | 'vendor';
+  threshold?: number;
+  approvers: string[];
+  minApprovers: number;
+};
+
+export type CustomerStatus = 'active' | 'inactive';
+export type Customer = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  terms: string;
+  status: CustomerStatus;
+};
+
+export type LineItem = { description: string; quantity: number; unitPrice: number };
+
+export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'void';
+export type ArInvoice = {
+  id: string;
+  customerId: string;
+  amount: number;
+  dueDate: string;
+  status: InvoiceStatus;
+  lineItems: LineItem[];
+};
+
+export type EstimateStatus = 'draft' | 'sent' | 'approved' | 'rejected' | 'converted';
+export type Estimate = {
+  id: string;
+  customerId: string;
+  amount: number;
+  status: EstimateStatus;
+  lineItems: LineItem[];
+};
+
+export type CardStatus = 'active' | 'frozen' | 'cancelled';
+export type Card = {
+  id: string;
+  employeeId: string;
+  last4: string;
+  limit: number;
+  spent: number;
+  status: CardStatus;
+  type: 'virtual' | 'physical';
+};
+
+export type Budget = {
+  id: string;
+  name: string;
+  ownerId: string;
+  limit: number;
+  spent: number;
+  resetInterval: 'monthly' | 'quarterly' | 'annually' | 'never';
+  expiresAt?: string;
+};
+
+export type Transaction = {
+  id: string;
+  cardId: string;
+  employeeId: string;
+  amount: number;
+  merchant: string;
+  date: string;
+  category: string;
+  status: 'posted' | 'pending';
+};
+
+export type ReimbursementStatus = 'pending' | 'approved' | 'paid' | 'rejected';
+export type Reimbursement = {
+  id: string;
+  employeeId: string;
+  amount: number;
+  description: string;
+  status: ReimbursementStatus;
+  submittedDate: string;
+};
+
+export type ChartOfAccount = {
+  id: string;
+  name: string;
+  number: string;
+  type: 'asset' | 'liability' | 'equity' | 'income' | 'expense';
+  category: string;
+  active: boolean;
+};
+
+export type User = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  status: 'active' | 'inactive';
+};
+
+export type Role = {
+  id: string;
+  name: string;
+  permissions: string[];
+};
+
+export type WebhookSubscription = {
+  id: string;
+  url: string;
+  events: string[];
+  createdAt: string;
+};
+
+export type EventCatalogEntry = {
+  id: string;
+  name: string;
+  description: string;
+};
+
+// ─── Shared org-level fixtures (same across datasets) ──────────────────
+
+export const CHART_OF_ACCOUNTS: ChartOfAccount[] = [
+  { id: 'coa_1000', name: 'Cash and Cash Equivalents',  number: '1000', type: 'asset',     category: 'Current Assets',       active: true },
+  { id: 'coa_1100', name: 'Accounts Receivable',         number: '1100', type: 'asset',     category: 'Current Assets',       active: true },
+  { id: 'coa_1500', name: 'Prepaid Expenses',            number: '1500', type: 'asset',     category: 'Current Assets',       active: true },
+  { id: 'coa_2000', name: 'Accounts Payable',            number: '2000', type: 'liability', category: 'Current Liabilities',  active: true },
+  { id: 'coa_2100', name: 'Accrued Liabilities',         number: '2100', type: 'liability', category: 'Current Liabilities',  active: true },
+  { id: 'coa_3000', name: 'Common Stock',                number: '3000', type: 'equity',    category: 'Equity',               active: true },
+  { id: 'coa_3100', name: 'Retained Earnings',           number: '3100', type: 'equity',    category: 'Equity',               active: true },
+  { id: 'coa_4000', name: 'Revenue',                     number: '4000', type: 'income',    category: 'Operating Revenue',    active: true },
+  { id: 'coa_4100', name: 'Service Revenue',             number: '4100', type: 'income',    category: 'Operating Revenue',    active: true },
+  { id: 'coa_5000', name: 'Cost of Goods Sold',          number: '5000', type: 'expense',   category: 'Cost of Revenue',      active: true },
+  { id: 'coa_6000', name: 'Salaries & Wages',            number: '6000', type: 'expense',   category: 'Operating Expenses',   active: true },
+  { id: 'coa_6100', name: 'Software & Subscriptions',    number: '6100', type: 'expense',   category: 'Operating Expenses',   active: true },
+  { id: 'coa_6200', name: 'Marketing & Advertising',     number: '6200', type: 'expense',   category: 'Operating Expenses',   active: true },
+  { id: 'coa_6300', name: 'Travel & Entertainment',      number: '6300', type: 'expense',   category: 'Operating Expenses',   active: true },
+  { id: 'coa_6400', name: 'Professional Services',       number: '6400', type: 'expense',   category: 'Operating Expenses',   active: true },
+  { id: 'coa_6500', name: 'Rent & Facilities',           number: '6500', type: 'expense',   category: 'Operating Expenses',   active: true },
+  { id: 'coa_6600', name: 'Insurance',                   number: '6600', type: 'expense',   category: 'Operating Expenses',   active: true },
+  { id: 'coa_6700', name: 'Utilities',                   number: '6700', type: 'expense',   category: 'Operating Expenses',   active: true },
+];
+
+export const ROLES: Role[] = [
+  { id: 'role_admin',    name: 'Administrator', permissions: ['bills:read','bills:write','vendors:read','vendors:write','payments:read','payments:write','users:read','users:write','settings:write'] },
+  { id: 'role_clerk',    name: 'Clerk',         permissions: ['bills:read','bills:write','vendors:read'] },
+  { id: 'role_approver', name: 'Approver',      permissions: ['bills:read','bills:approve','payments:read'] },
+  { id: 'role_viewer',   name: 'Viewer',        permissions: ['bills:read','vendors:read','payments:read','expenses:read'] },
+];
+
+export const EVENT_CATALOG: EventCatalogEntry[] = [
+  { id: 'vendor.created',           name: 'Vendor created',           description: 'Fired when a new vendor is added' },
+  { id: 'vendor.updated',           name: 'Vendor updated',           description: 'Fired when vendor details change' },
+  { id: 'vendor.deleted',           name: 'Vendor deleted',           description: 'Fired when a vendor is removed' },
+  { id: 'bill.created',             name: 'Bill created',             description: 'Fired when a new bill is created' },
+  { id: 'bill.updated',             name: 'Bill updated',             description: 'Fired when a bill is modified' },
+  { id: 'bill.approved',            name: 'Bill approved',            description: 'Fired when a bill clears approval' },
+  { id: 'bill.rejected',            name: 'Bill rejected',            description: 'Fired when a bill is rejected' },
+  { id: 'bill.paid',                name: 'Bill paid',                description: 'Fired when payment for a bill is processed' },
+  { id: 'payment.created',          name: 'Payment created',          description: 'Fired when a payment is initiated' },
+  { id: 'payment.updated',          name: 'Payment updated',          description: 'Fired when a payment status changes' },
+  { id: 'invoice.created',          name: 'Invoice created',          description: 'Fired when an AR invoice is created' },
+  { id: 'invoice.sent',             name: 'Invoice sent',             description: 'Fired when an AR invoice is sent to a customer' },
+  { id: 'invoice.paid',             name: 'Invoice paid',             description: 'Fired when an AR invoice is marked paid' },
+  { id: 'spend.transaction',        name: 'Card transaction',         description: 'Fired when a card transaction posts' },
+  { id: 'spend.reimbursement',      name: 'Reimbursement submitted',  description: 'Fired when an employee submits a reimbursement' },
+  { id: 'spend.threeDsChallenge',   name: '3DS challenge',            description: 'Fired when a card transaction triggers a 3DS challenge' },
+];
+
+// ─── Default dataset: tech-startup fixtures ────────────────────────────
+
+export const PAYMENTS: Payment[] = [
+  { id: 'pmt_5001', billId: 'bll_4183', vendorId: 'vnd_02', amount:  3214.55, method: 'ACH',   status: 'paid',       processedDate: '2026-04-10', confirmationId: 'ACH-8821-A' },
+  { id: 'pmt_5002', billId: 'bll_4188', vendorId: 'vnd_07', amount:   318.72, method: 'Check', status: 'paid',       processedDate: '2026-04-12', confirmationId: 'CHK-0041'   },
+  { id: 'pmt_5003', billId: 'bll_4182', vendorId: 'vnd_01', amount: 14820.00, method: 'ACH',   status: 'processing', processedDate: '2026-04-23', confirmationId: 'ACH-8904-B' },
+  { id: 'pmt_5004', billId: 'bll_4186', vendorId: 'vnd_05', amount: 12000.00, method: 'ACH',   status: 'pending',    processedDate: '2026-04-25', confirmationId: ''           },
+  { id: 'pmt_5005', billId: 'bll_4190', vendorId: 'vnd_09', amount: 18240.00, method: 'ACH',   status: 'paid',       processedDate: '2026-04-03', confirmationId: 'ACH-8771-C' },
+  { id: 'pmt_5006', billId: 'bll_4195', vendorId: 'vnd_06', amount:  2150.00, method: 'Check', status: 'failed',     processedDate: '2026-04-17', confirmationId: ''           },
+];
+
+export const APPROVAL_POLICIES: ApprovalPolicy[] = [
+  { id: 'pol_01', name: 'Large payment review',  type: 'amount',  threshold: 25000, approvers: ['usr_01', 'usr_02'], minApprovers: 2 },
+  { id: 'pol_02', name: 'All bills require approval', type: 'always', approvers: ['usr_01'], minApprovers: 1 },
+  { id: 'pol_03', name: 'Legal vendor gate',     type: 'vendor',  approvers: ['usr_01', 'usr_03'], minApprovers: 1 },
+];
+
+export const CUSTOMERS: Customer[] = [
+  { id: 'cust_01', name: 'Techflow Corp',       email: 'ap@techflow.com',      phone: '415-555-0101', terms: 'Net 30', status: 'active' },
+  { id: 'cust_02', name: 'Beacon Health LLC',   email: 'billing@beaconh.com',  phone: '212-555-0184', terms: 'Net 45', status: 'active' },
+  { id: 'cust_03', name: 'Vantage Analytics',   email: 'finance@vantage.io',   phone: '650-555-0122', terms: 'Net 30', status: 'active' },
+  { id: 'cust_04', name: 'Orion Retail Group',  email: 'accounts@orionrg.com', phone: '312-555-0199', terms: 'Net 15', status: 'active' },
+  { id: 'cust_05', name: 'Summit Labs Inc',     email: 'ap@summitlabs.com',    phone: '408-555-0177', terms: 'Net 30', status: 'inactive' },
+];
+
+export const AR_INVOICES: ArInvoice[] = [
+  { id: 'inv_2001', customerId: 'cust_01', amount: 38000.00, dueDate: '2026-05-01', status: 'paid',    lineItems: [{ description: 'Platform license Q2', quantity: 1, unitPrice: 38000 }] },
+  { id: 'inv_2002', customerId: 'cust_02', amount: 28000.00, dueDate: '2026-05-22', status: 'sent',    lineItems: [{ description: 'Implementation services', quantity: 4, unitPrice: 7000 }] },
+  { id: 'inv_2003', customerId: 'cust_03', amount: 12500.00, dueDate: '2026-04-30', status: 'overdue', lineItems: [{ description: 'Data analytics module', quantity: 1, unitPrice: 12500 }] },
+  { id: 'inv_2004', customerId: 'cust_04', amount:  6200.00, dueDate: '2026-05-10', status: 'sent',    lineItems: [{ description: 'Setup & onboarding', quantity: 2, unitPrice: 3100 }] },
+  { id: 'inv_2005', customerId: 'cust_01', amount: 38000.00, dueDate: '2026-07-31', status: 'draft',   lineItems: [{ description: 'Platform license Q3', quantity: 1, unitPrice: 38000 }] },
+  { id: 'inv_2006', customerId: 'cust_02', amount:  4500.00, dueDate: '2026-04-15', status: 'void',    lineItems: [{ description: 'Support retainer (cancelled)', quantity: 1, unitPrice: 4500 }] },
+];
+
+export const ESTIMATES: Estimate[] = [
+  { id: 'est_101', customerId: 'cust_03', amount: 18000.00, status: 'approved',  lineItems: [{ description: 'Enterprise upgrade', quantity: 1, unitPrice: 18000 }] },
+  { id: 'est_102', customerId: 'cust_04', amount:  9500.00, status: 'sent',      lineItems: [{ description: 'Custom integration work', quantity: 5, unitPrice: 1900 }] },
+  { id: 'est_103', customerId: 'cust_05', amount: 22000.00, status: 'draft',     lineItems: [{ description: 'Annual enterprise plan', quantity: 1, unitPrice: 22000 }] },
+];
+
+export const CARDS: Card[] = [
+  { id: 'card_01', employeeId: 'emp_01', last4: '4411', limit: 5000,  spent: 1284.00, status: 'active',  type: 'virtual'  },
+  { id: 'card_02', employeeId: 'emp_02', last4: '8820', limit: 10000, spent: 4822.40, status: 'active',  type: 'virtual'  },
+  { id: 'card_03', employeeId: 'emp_03', last4: '3319', limit: 3000,  spent:  892.10, status: 'active',  type: 'physical' },
+  { id: 'card_04', employeeId: 'emp_04', last4: '7701', limit: 2000,  spent:    0.00, status: 'frozen',  type: 'virtual'  },
+  { id: 'card_05', employeeId: 'emp_05', last4: '5544', limit: 8000,  spent: 2340.00, status: 'active',  type: 'physical' },
+];
+
+export const BUDGETS: Budget[] = [
+  { id: 'bgt_01', name: 'Marketing Q2',     ownerId: 'emp_02', limit: 20000, spent: 8822,  resetInterval: 'quarterly' },
+  { id: 'bgt_02', name: 'Engineering tools', ownerId: 'emp_01', limit:  5000, spent: 1284,  resetInterval: 'monthly'   },
+  { id: 'bgt_03', name: 'Sales travel',      ownerId: 'emp_03', limit:  8000, spent: 2240,  resetInterval: 'quarterly' },
+  { id: 'bgt_04', name: 'Executive T&E',     ownerId: 'emp_05', limit: 15000, spent: 3940,  resetInterval: 'annually'  },
+];
+
+export const TRANSACTIONS: Transaction[] = [
+  { id: 'txn_001', cardId: 'card_01', employeeId: 'emp_01', amount:  128.00, merchant: 'GitHub',            date: '2026-04-02', category: 'Software',  status: 'posted'  },
+  { id: 'txn_002', cardId: 'card_01', employeeId: 'emp_01', amount:  642.55, merchant: 'Delta Airlines',    date: '2026-04-08', category: 'Travel',    status: 'posted'  },
+  { id: 'txn_003', cardId: 'card_02', employeeId: 'emp_02', amount: 2400.00, merchant: 'Google Ads',        date: '2026-04-09', category: 'Ads',       status: 'posted'  },
+  { id: 'txn_004', cardId: 'card_03', employeeId: 'emp_03', amount:   88.40, merchant: 'Nobu Restaurant',   date: '2026-04-11', category: 'Meals',     status: 'posted'  },
+  { id: 'txn_005', cardId: 'card_03', employeeId: 'emp_03', amount: 1125.00, merchant: 'Marriott Hotels',   date: '2026-04-13', category: 'Travel',    status: 'posted'  },
+  { id: 'txn_006', cardId: 'card_01', employeeId: 'emp_01', amount:   59.00, merchant: 'Figma',             date: '2026-04-15', category: 'Software',  status: 'posted'  },
+  { id: 'txn_007', cardId: 'card_02', employeeId: 'emp_02', amount:  142.10, merchant: 'Prospect Kitchen',  date: '2026-04-17', category: 'Meals',     status: 'posted'  },
+  { id: 'txn_008', cardId: 'card_05', employeeId: 'emp_05', amount:  340.00, merchant: 'Hilton Hotels',     date: '2026-04-19', category: 'Travel',    status: 'pending' },
+];
+
+export const REIMBURSEMENTS: Reimbursement[] = [
+  { id: 'rei_01', employeeId: 'emp_04', amount:  182.50, description: 'Client dinner — Orion Retail',  status: 'approved', submittedDate: '2026-04-10' },
+  { id: 'rei_02', employeeId: 'emp_01', amount:   45.00, description: 'Home office supplies',           status: 'pending',  submittedDate: '2026-04-16' },
+  { id: 'rei_03', employeeId: 'emp_03', amount:  520.00, description: 'Conference registration',        status: 'rejected', submittedDate: '2026-04-08' },
+  { id: 'rei_04', employeeId: 'emp_05', amount: 1899.00, description: 'SaaStr Annual ticket',           status: 'pending',  submittedDate: '2026-04-18' },
+];
+
+export const USERS: User[] = [
+  { id: 'usr_01', name: 'Morgan Hughes',  email: 'morgan@company.com',  role: 'Administrator', status: 'active'   },
+  { id: 'usr_02', name: 'Avery Chen',     email: 'avery@company.com',   role: 'Approver',      status: 'active'   },
+  { id: 'usr_03', name: 'Jordan Patel',   email: 'jordan@company.com',  role: 'Clerk',         status: 'active'   },
+  { id: 'usr_04', name: 'Riley Nakamura', email: 'riley@company.com',   role: 'Viewer',        status: 'active'   },
+  { id: 'usr_05', name: 'Sam Okafor',     email: 'sam@company.com',     role: 'Viewer',        status: 'inactive' },
+];
+
+export const WEBHOOK_SUBSCRIPTIONS: WebhookSubscription[] = [
+  { id: 'sub_01', url: 'https://hooks.company.com/bill/payments', events: ['payment.created', 'payment.updated', 'bill.paid'], createdAt: '2026-01-15' },
+  { id: 'sub_02', url: 'https://hooks.company.com/bill/invoices', events: ['invoice.created', 'invoice.paid'], createdAt: '2026-02-08' },
+];
+
+// ─── Logistics dataset: new fixtures ──────────────────────────────────
+
+export const LOGISTICS_PAYMENTS: Payment[] = [
+  { id: 'lpmt_01', billId: 'lbl_001', vendorId: 'lvnd_02', amount: 18240.00, method: 'ACH',   status: 'paid',       processedDate: '2026-04-06', confirmationId: 'ACH-CF-9901' },
+  { id: 'lpmt_02', billId: 'lbl_003', vendorId: 'lvnd_16', amount:  2840.00, method: 'Check', status: 'paid',       processedDate: '2026-04-10', confirmationId: 'CHK-CF-0021' },
+  { id: 'lpmt_03', billId: 'lbl_004', vendorId: 'lvnd_14', amount:  5820.00, method: 'ACH',   status: 'processing', processedDate: '2026-04-20', confirmationId: 'ACH-CF-9944' },
+  { id: 'lpmt_04', billId: 'lbl_005', vendorId: 'lvnd_07', amount: 22800.00, method: 'ACH',   status: 'pending',    processedDate: '2026-04-21', confirmationId: ''            },
+  { id: 'lpmt_05', billId: 'lbl_006', vendorId: 'lvnd_15', amount: 28400.00, method: 'Wire',  status: 'paid',       processedDate: '2026-03-20', confirmationId: 'WIR-CF-0018' },
+  { id: 'lpmt_06', billId: 'lbl_002', vendorId: 'lvnd_01', amount: 14200.00, method: 'ACH',   status: 'failed',     processedDate: '2026-04-18', confirmationId: ''            },
+];
+
+export const LOGISTICS_APPROVAL_POLICIES: ApprovalPolicy[] = [
+  { id: 'lpol_01', name: 'Large carrier payment', type: 'amount',  threshold: 20000, approvers: ['lusr_01', 'lusr_02'], minApprovers: 2 },
+  { id: 'lpol_02', name: 'All AP bills',           type: 'always',                   approvers: ['lusr_01'],            minApprovers: 1 },
+  { id: 'lpol_03', name: 'International freight',  type: 'vendor',                   approvers: ['lusr_01', 'lusr_03'], minApprovers: 1 },
+];
+
+export const LOGISTICS_CUSTOMERS: Customer[] = [
+  { id: 'lcust_01', name: 'Beacon Health LLC',     email: 'logistics@beaconh.com',   phone: '212-555-0184', terms: 'Net 30', status: 'active' },
+  { id: 'lcust_02', name: 'Northgate Retail Corp', email: 'ap@northgateretail.com',  phone: '773-555-0141', terms: 'Net 30', status: 'active' },
+  { id: 'lcust_03', name: 'Horizon Manufacturing', email: 'finance@horizonmfg.com',  phone: '313-555-0188', terms: 'Net 45', status: 'active' },
+  { id: 'lcust_04', name: 'Pacific Distributors',  email: 'billing@pacdist.com',     phone: '206-555-0122', terms: 'Net 15', status: 'active' },
+  { id: 'lcust_05', name: 'Atlas Grocery Chain',   email: 'ap@atlasgrocery.com',     phone: '602-555-0199', terms: 'Net 30', status: 'inactive' },
+];
+
+export const LOGISTICS_AR_INVOICES: ArInvoice[] = [
+  { id: 'linv_01', customerId: 'lcust_01', amount: 42000.00, dueDate: '2026-05-01', status: 'sent',    lineItems: [{ description: 'LTL freight services April', quantity: 1, unitPrice: 42000 }] },
+  { id: 'linv_02', customerId: 'lcust_02', amount: 28500.00, dueDate: '2026-04-28', status: 'overdue', lineItems: [{ description: 'Warehouse storage March', quantity: 3, unitPrice: 9500 }] },
+  { id: 'linv_03', customerId: 'lcust_03', amount: 61000.00, dueDate: '2026-05-15', status: 'sent',    lineItems: [{ description: 'Dedicated fleet Q2', quantity: 1, unitPrice: 61000 }] },
+  { id: 'linv_04', customerId: 'lcust_04', amount: 18200.00, dueDate: '2026-05-10', status: 'draft',   lineItems: [{ description: 'Last-mile delivery batch', quantity: 20, unitPrice: 910 }] },
+  { id: 'linv_05', customerId: 'lcust_01', amount: 38000.00, dueDate: '2026-03-15', status: 'paid',    lineItems: [{ description: 'LTL freight services March', quantity: 1, unitPrice: 38000 }] },
+];
+
+export const LOGISTICS_ESTIMATES: Estimate[] = [
+  { id: 'lest_01', customerId: 'lcust_03', amount: 74000.00, status: 'sent',     lineItems: [{ description: 'Dedicated fleet contract Q3', quantity: 1, unitPrice: 74000 }] },
+  { id: 'lest_02', customerId: 'lcust_02', amount: 32000.00, status: 'approved', lineItems: [{ description: 'Warehousing expansion — 6 months', quantity: 6, unitPrice: 5333 }] },
+  { id: 'lest_03', customerId: 'lcust_05', amount: 15000.00, status: 'draft',    lineItems: [{ description: 'Last-mile pilot program', quantity: 1, unitPrice: 15000 }] },
+];
+
+export const LOGISTICS_CARDS: Card[] = [
+  { id: 'lcard_01', employeeId: 'emp_l01', last4: '2291', limit: 10000, spent: 1180.00, status: 'active',  type: 'virtual'  },
+  { id: 'lcard_02', employeeId: 'emp_l02', last4: '7714', limit:  5000, spent:   59.00, status: 'active',  type: 'virtual'  },
+  { id: 'lcard_03', employeeId: 'emp_l03', last4: '3308', limit:  8000, spent: 2265.00, status: 'active',  type: 'physical' },
+  { id: 'lcard_04', employeeId: 'emp_l05', last4: '9941', limit: 12000, spent: 2582.00, status: 'active',  type: 'physical' },
+  { id: 'lcard_05', employeeId: 'emp_l08', last4: '6612', limit:  3000, spent:  182.70, status: 'active',  type: 'physical' },
+  { id: 'lcard_06', employeeId: 'emp_l04', last4: '4420', limit:  2000, spent:    0.00, status: 'frozen',  type: 'virtual'  },
+];
+
+export const LOGISTICS_BUDGETS: Budget[] = [
+  { id: 'lbgt_01', name: 'Driver fuel & expenses', ownerId: 'emp_l08', limit: 12000, spent: 1840,  resetInterval: 'monthly'   },
+  { id: 'lbgt_02', name: 'Sales T&E',              ownerId: 'emp_l05', limit: 20000, spent: 4822,  resetInterval: 'quarterly' },
+  { id: 'lbgt_03', name: 'IT & software',          ownerId: 'emp_l06', limit:  8000, spent: 1287,  resetInterval: 'annually'  },
+  { id: 'lbgt_04', name: 'Operations misc',        ownerId: 'emp_l03', limit:  5000, spent:  342,  resetInterval: 'monthly'   },
+];
+
+export const LOGISTICS_TRANSACTIONS: Transaction[] = [
+  { id: 'ltxn_01', cardId: 'lcard_01', employeeId: 'emp_l01', amount: 1180.00, merchant: 'United Airlines',  date: '2026-04-07', category: 'Travel',   status: 'posted'  },
+  { id: 'ltxn_02', cardId: 'lcard_02', employeeId: 'emp_l02', amount:   59.00, merchant: 'Microsoft 365',    date: '2026-04-12', category: 'Software', status: 'posted'  },
+  { id: 'ltxn_03', cardId: 'lcard_03', employeeId: 'emp_l03', amount:  842.00, merchant: 'Delta Airlines',   date: '2026-04-02', category: 'Travel',   status: 'posted'  },
+  { id: 'ltxn_04', cardId: 'lcard_03', employeeId: 'emp_l03', amount:  124.40, merchant: 'Applebee\'s',      date: '2026-04-03', category: 'Meals',    status: 'posted'  },
+  { id: 'ltxn_05', cardId: 'lcard_03', employeeId: 'emp_l03', amount: 1299.00, merchant: 'Manifest 2026',    date: '2026-04-04', category: 'Conferences', status: 'posted' },
+  { id: 'ltxn_06', cardId: 'lcard_04', employeeId: 'emp_l05', amount:  342.00, merchant: 'Fleming\'s Steak', date: '2026-04-11', category: 'Meals',    status: 'posted'  },
+  { id: 'ltxn_07', cardId: 'lcard_04', employeeId: 'emp_l05', amount: 2240.00, merchant: 'Hyatt Hotels',     date: '2026-04-15', category: 'Travel',   status: 'posted'  },
+  { id: 'ltxn_08', cardId: 'lcard_05', employeeId: 'emp_l08', amount:   88.50, merchant: 'Pilot Flying J',   date: '2026-04-08', category: 'Fuel',     status: 'posted'  },
+  { id: 'ltxn_09', cardId: 'lcard_05', employeeId: 'emp_l08', amount:   94.20, merchant: 'Love\'s Travel',   date: '2026-04-10', category: 'Fuel',     status: 'posted'  },
+  { id: 'ltxn_10', cardId: 'lcard_04', employeeId: 'emp_l05', amount:  215.00, merchant: 'Home Depot',       date: '2026-04-15', category: 'Materials',status: 'pending' },
+];
+
+export const LOGISTICS_REIMBURSEMENTS: Reimbursement[] = [
+  { id: 'lrei_01', employeeId: 'emp_l03', amount:  450.00, description: 'FreightWaves conference',          status: 'approved', submittedDate: '2026-04-06' },
+  { id: 'lrei_02', employeeId: 'emp_l08', amount:   94.20, description: 'Fuel — personal card emergency',   status: 'pending',  submittedDate: '2026-04-10' },
+  { id: 'lrei_03', employeeId: 'emp_l01', amount: 2800.00, description: 'Industry summit registration',     status: 'rejected', submittedDate: '2026-04-18' },
+  { id: 'lrei_04', employeeId: 'emp_l05', amount:  185.00, description: 'Client dinner — Pacific Dist.',    status: 'pending',  submittedDate: '2026-04-19' },
+];
+
+export const LOGISTICS_USERS: User[] = [
+  { id: 'lusr_01', name: 'Dana Kowalski',  email: 'dana@crestviewfreight.com',   role: 'Administrator', status: 'active'   },
+  { id: 'lusr_02', name: 'Marcus Webb',    email: 'marcus@crestviewfreight.com', role: 'Approver',      status: 'active'   },
+  { id: 'lusr_03', name: 'Priya Nair',     email: 'priya@crestviewfreight.com',  role: 'Approver',      status: 'active'   },
+  { id: 'lusr_04', name: 'Devon Osei',     email: 'devon@crestviewfreight.com',  role: 'Clerk',         status: 'active'   },
+  { id: 'lusr_05', name: 'Aaliyah Brooks', email: 'aaliyah@crestviewfreight.com',role: 'Viewer',        status: 'active'   },
+];
+
+export const LOGISTICS_WEBHOOK_SUBSCRIPTIONS: WebhookSubscription[] = [
+  { id: 'lsub_01', url: 'https://hooks.crestviewfreight.com/bill', events: ['payment.created', 'payment.updated', 'bill.paid', 'bill.approved'], createdAt: '2026-02-01' },
+];
+
 export const SESSIONS = [
   { id: 's1', title: 'Pay down April AP',       meta: '3 steps · approved',     glyph: '→' },
   { id: 's2', title: 'Weekly CFO digest',        meta: 'scheduled · Fri 07:00',  glyph: '◷' },
@@ -440,6 +794,20 @@ export const DEFAULT_DATA = {
   liquidityProjection: LIQUIDITY_PROJECTION,
   liquidityDrivers: LIQUIDITY_DRIVERS,
   liquidityThreshold: LIQUIDITY_THRESHOLD,
+  PAYMENTS,
+  APPROVAL_POLICIES,
+  CUSTOMERS,
+  AR_INVOICES,
+  ESTIMATES,
+  CARDS,
+  BUDGETS,
+  TRANSACTIONS,
+  REIMBURSEMENTS,
+  USERS,
+  CHART_OF_ACCOUNTS,
+  ROLES,
+  WEBHOOK_SUBSCRIPTIONS,
+  EVENT_CATALOG,
 };
 
 export const LOGISTICS_DATA = {
@@ -453,6 +821,20 @@ export const LOGISTICS_DATA = {
   liquidityProjection: LOGISTICS_LIQUIDITY_PROJECTION,
   liquidityDrivers: LOGISTICS_LIQUIDITY_DRIVERS,
   liquidityThreshold: LOGISTICS_LIQUIDITY_THRESHOLD,
+  PAYMENTS: LOGISTICS_PAYMENTS,
+  APPROVAL_POLICIES: LOGISTICS_APPROVAL_POLICIES,
+  CUSTOMERS: LOGISTICS_CUSTOMERS,
+  AR_INVOICES: LOGISTICS_AR_INVOICES,
+  ESTIMATES: LOGISTICS_ESTIMATES,
+  CARDS: LOGISTICS_CARDS,
+  BUDGETS: LOGISTICS_BUDGETS,
+  TRANSACTIONS: LOGISTICS_TRANSACTIONS,
+  REIMBURSEMENTS: LOGISTICS_REIMBURSEMENTS,
+  USERS: LOGISTICS_USERS,
+  CHART_OF_ACCOUNTS,
+  ROLES,
+  WEBHOOK_SUBSCRIPTIONS: LOGISTICS_WEBHOOK_SUBSCRIPTIONS,
+  EVENT_CATALOG,
 };
 
 export function getDataset(d?: DatasetKey) {

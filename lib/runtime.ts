@@ -3,6 +3,12 @@
 import { FLOWS, LOGISTICS_FLOWS, type ArtifactKind, type Flow, type FlowStep } from './flows';
 import { newId, type Turn } from './turns';
 import { useStore, getActiveThread, type ApprovalPayload } from './store';
+import { MODEL_TOOLS, INTERNAL_TOOLS } from './tools';
+
+const ALL_TOOLS = [...MODEL_TOOLS, ...INTERNAL_TOOLS];
+function toolLabel(name: string): string {
+  return ALL_TOOLS.find(t => t.name === name)?.label ?? name;
+}
 
 type HistoryTurn = { role: 'user' | 'assistant'; text: string };
 
@@ -388,7 +394,7 @@ export async function runLLM(userText: string, opts?: ForcedArtifact) {
           useStore.getState().addTurn({
             id: tid,
             kind: 'tools',
-            rows: [{ verb: 'EXEC', path: ev.name, filter: JSON.stringify(ev.input), status: '…', result: 'running' }],
+            rows: [{ verb: 'EXEC', path: toolLabel(ev.name), filter: JSON.stringify(ev.input), status: '…', result: 'running' }],
             pending: 0,
           });
         } else if (ev.type === 'tool-result') {
@@ -397,7 +403,7 @@ export async function runLLM(userText: string, opts?: ForcedArtifact) {
             useStore.getState().updateTurn(tid, {
               rows: [{
                 verb: 'EXEC',
-                path: ev.name,
+                path: toolLabel(ev.name),
                 filter: JSON.stringify(ev.input),
                 status: ev.ok ? 'ok' : 'err',
                 result: ev.summary,
@@ -555,7 +561,7 @@ export async function runLLMTesting(userText: string, opts?: ForcedArtifact) {
           useStore.getState().addTurnToActiveThread({
             id: tid,
             kind: 'tools',
-            rows: [{ verb: 'EXEC', path: ev.name, filter: JSON.stringify(ev.input), status: '…', result: 'running' }],
+            rows: [{ verb: 'EXEC', path: toolLabel(ev.name), filter: JSON.stringify(ev.input), status: '…', result: 'running' }],
             pending: 0,
           });
         } else if (ev.type === 'tool-result') {
@@ -564,7 +570,7 @@ export async function runLLMTesting(userText: string, opts?: ForcedArtifact) {
             useStore.getState().updateTurnInActiveThread(tid, {
               rows: [{
                 verb: 'EXEC',
-                path: ev.name,
+                path: toolLabel(ev.name),
                 filter: JSON.stringify(ev.input),
                 status: ev.ok ? 'ok' : 'err',
                 result: ev.summary,
