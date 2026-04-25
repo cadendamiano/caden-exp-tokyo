@@ -92,7 +92,6 @@ function StatusPill({ configured }: { configured: boolean }) {
 export function CredentialsColumn() {
   const mode = useStore(s => s.mode);
   const setMode = useStore(s => s.setMode);
-  const showCodeView = useStore(s => s.tweaks.showCodeView);
   const demoDataset = useStore(s => s.tweaks.demoDataset);
   const setTweak = useStore(s => s.setTweak);
   const newThread = useStore(s => s.newThread);
@@ -214,18 +213,7 @@ export function CredentialsColumn() {
   }
 
   return (
-    <div className="scol-body">
-      <section className="settings-section">
-        <div className="settings-section-head">
-          <span>Code view</span>
-          <span className={'status-pill' + (showCodeView ? ' ok' : '')}>{showCodeView ? 'enabled' : 'off'}</span>
-        </div>
-        <label className="tweak-toggle" style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
-          <input type="checkbox" checked={showCodeView} onChange={e => setTweak('showCodeView', e.target.checked)} />
-          Show Code tab in artifact view
-        </label>
-      </section>
-
+    <>
       <section className="settings-section">
         <div className="settings-section-head">
           <span>Demo dataset</span>
@@ -414,6 +402,6 @@ export function CredentialsColumn() {
       )}
 
       {error && !view && <div className="settings-error">{error}</div>}
-    </div>
+    </>
   );
 }
