@@ -1,53 +1,17 @@
 import { NextRequest } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 import { runTool, SYSTEM_PROMPT, TESTING_SYSTEM_PROMPT, type ToolContext, type ToolDef } from '@/lib/tools';
 import type { DatasetKey } from '@/lib/data';
-import type { ArtifactKind, FlowStep } from '@/lib/flows';
+import type { ArtifactKind } from '@/lib/flows';
 import { getAnthropicKey, getGeminiKey, readSecrets } from '@/lib/secrets';
 import { providerOf } from '@/lib/models';
 import { buildModelTools, buildRequirementsBlock, coerceArtifactKind } from '@/lib/chatSchema';
 import { recordSpan, type ToolCallRecord } from '@/lib/spanBuffer';
-
-type ApprovalPayload = Extract<FlowStep, { kind: 'approval' }>['payload'];
+import { sseEncode, jsonSchemaToGemini, type Event, type ChatHistoryTurn, type ApprovalPayload } from '@/lib/chatRouteHelpers';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-type Event =
-  | { type: 'text'; text: string }
-  | { type: 'tool-call'; id: string; name: string; input: any }
-  | { type: 'tool-result'; id: string; name: string; input: any; ok: boolean; summary: string }
-  | {
-      type: 'artifact';
-      kind: string;
-      title?: string;
-      sub?: string;
-      meta?: string;
-      label?: string;
-      icon?: string;
-      html?: string;
-      css?: string;
-      script?: string;
-      dataJson?: string;
-    }
-  | { type: 'approval'; payload: ApprovalPayload; simulated: boolean }
-  | {
-      type: 'form-question';
-      id: string;
-      question: string;
-      options: { id: string; label: string; description?: string }[];
-      multiSelect: boolean;
-      freeText: boolean;
-    }
-  | { type: 'done' }
-  | { type: 'error'; message: string };
-
-export function sseEncode(ev: Event) {
-  return `data: ${JSON.stringify(ev)}\n\n`;
-}
-
-export type ChatHistoryTurn = { role: 'user' | 'assistant'; text: string };
 
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as {
@@ -406,33 +370,4 @@ async function runGemini(
     contents.push({ role: 'user', parts: toolParts });
   }
   onFinish(fullResponseText);
-}
-
-export function jsonSchemaToGemini(s: any): any {
-  if (!s || typeof s !== 'object') return s;
-  const out: any = {};
-  if (s.type === 'object') {
-    out.type = Type.OBJECT;
-    out.properties = {};
-    for (const [k, v] of Object.entries(s.properties ?? {})) {
-      out.properties[k] = jsonSchemaToGemini(v);
-    }
-    if (s.required) out.required = s.required;
-  } else if (s.type === 'string') {
-    out.type = Type.STRING;
-    if (s.enum) out.enum = s.enum;
-    if (s.description) out.description = s.description;
-  } else if (s.type === 'integer') {
-    out.type = Type.INTEGER;
-    if (s.description) out.description = s.description;
-  } else if (s.type === 'number') {
-    out.type = Type.NUMBER;
-  } else if (s.type === 'boolean') {
-    out.type = Type.BOOLEAN;
-  } else if (s.type === 'array') {
-    out.type = Type.ARRAY;
-    if (s.items) out.items = jsonSchemaToGemini(s.items);
-  }
-  if (s.description && !out.description) out.description = s.description;
-  return out;
 }

@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  output: 'standalone',
   webpack(config, { isServer }) {
     if (!isServer) {
       // Strip node: prefix so built-in fallbacks apply

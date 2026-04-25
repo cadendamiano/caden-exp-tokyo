@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useStore } from '@/lib/store';
 
 type Props = { onOpenTweaks: () => void };
@@ -10,6 +11,15 @@ export function TopBar({ onOpenTweaks }: Props) {
   const childCompany = demoDataset === 'logistics'
     ? 'Crestview Freight Solutions'
     : 'Meridian Operations';
+
+  const [userName, setUserName] = useState('Developer');
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+    if (!api?.getAuthState) return;
+    api.getAuthState().then((s: any) => {
+      if (s?.user?.name) setUserName(s.user.name);
+    });
+  }, []);
 
   return (
     <div className="topbar">
@@ -29,7 +39,7 @@ export function TopBar({ onOpenTweaks }: Props) {
       </div>
       <div className="topbar-spacer" />
       <div className="topbar-meta">
-        <span>Riya Shah · Controller</span>
+        <span>{userName}</span>
         <button className="kbd" onClick={onOpenTweaks} title="Open tweaks">⌘K</button>
       </div>
     </div>

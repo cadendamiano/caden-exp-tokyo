@@ -2,6 +2,7 @@
   "name": "caden-exp-bill-coworker",
   "version": "0.1.0",
   "private": true,
+  "main": "electron-dist/main.js",
   "scripts": {
     "dev": "next dev -p 3000",
     "dev:preview": "next dev",
@@ -9,12 +10,21 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "electron:build-next": "next build",
+    "electron:copy-standalone": "node scripts/copy-standalone.js",
+    "electron:build-main": "tsc -p tsconfig.electron.json",
+    "electron:build": "npm run electron:build-next && npm run electron:copy-standalone && npm run electron:build-main",
+    "electron:dev": "npm run electron:build && electron .",
+    "electron:dist": "npm run electron:build && electron-builder --mac",
+    "electron:dist:zip": "npm run electron:build && electron-builder --mac --config.mac.target=zip"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@google/genai": "^0.7.0",
     "braintrust": "^3.9.0",
+    "electron-store": "^8.2.0",
+    "get-port": "^7.1.0",
     "next": "^14.2.34",
     "react": "18.3.1",
     "react-dom": "18.3.1",
@@ -24,8 +34,38 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.0",
     "jsdom": "^29.0.2",
     "typescript": "^5",
     "vitest": "^4.1.4"
+  },
+  "build": {
+    "appId": "com.bill.coworker",
+    "productName": "BILL Coworker",
+    "directories": {
+      "output": "dist-electron",
+      "buildResources": "electron/assets"
+    },
+    "files": [
+      "electron-dist/**/*",
+      "!**/*.map"
+    ],
+    "extraResources": [
+      {
+        "from": "electron-next",
+        "to": "app/electron-next"
+      }
+    ],
+    "asar": true,
+    "mac": {
+      "category": "public.app-category.business",
+      "icon": "electron/assets/icon.icns",
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
+      ],
+      "identity": null
+    }
   }
 }

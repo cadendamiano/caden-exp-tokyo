@@ -51,7 +51,8 @@ export type SecretsMasked = {
   systemPromptOverrideTesting: string | null;
 };
 
-const SECRETS_PATH = path.join(process.cwd(), '.secrets.local.json');
+const SECRETS_PATH = process.env.COWORKER_SECRETS_PATH
+  ?? path.join(process.cwd(), '.secrets.local.json');
 
 const EMPTY: Secrets = { billEnvironments: [] };
 
