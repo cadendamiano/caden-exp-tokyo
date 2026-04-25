@@ -102,7 +102,7 @@ export const DEMO_SANDBOX_ENV_ID = '__demo_sandbox__';
 
 // ─── Tool definitions ─────────────────────────────────────────────────
 
-const READ_TOOLS: ToolDef[] = [
+export const READ_TOOLS: ToolDef[] = [
   {
     name: 'list_bills',
     label: 'List bills',
@@ -573,7 +573,7 @@ const READ_TOOLS: ToolDef[] = [
   },
 ];
 
-const FORM_TOOLS: ToolDef[] = [
+export const FORM_TOOLS: ToolDef[] = [
   {
     name: 'ask_question',
     label: 'Ask clarifying question',
@@ -610,7 +610,7 @@ const FORM_TOOLS: ToolDef[] = [
   },
 ];
 
-const WRITE_TOOLS: ToolDef[] = [
+export const WRITE_TOOLS: ToolDef[] = [
   {
     name: 'stage_payment_batch',
     label: 'Stage payment batch',

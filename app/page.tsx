@@ -10,7 +10,6 @@ import { Turn } from '@/components/Turn';
 import { ArtifactPane } from '@/components/ArtifactPane';
 import { ResizeHandle } from '@/components/ResizeHandle';
 import { TweaksPanel } from '@/components/TweaksPanel';
-import { SettingsPanel } from '@/components/SettingsPanel';
 
 export default function Page() {
   const mode = useStore(s => s.mode);
@@ -26,7 +25,6 @@ export default function Page() {
   const newThread = useStore(s => s.newThread);
 
   const [tweaksOpen, setTweaksOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [railW, setRailW] = useState(240);
   const [convoW, setConvoW] = useState(480);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -73,7 +71,6 @@ export default function Page() {
 
       <Rail
         onNewSession={mode === 'testing' ? () => newThread() : reset}
-        onOpenSettings={() => setSettingsOpen(v => !v)}
       />
 
       <ResizeHandle onDelta={d => setRailW(w => Math.max(160, w + d))} />
@@ -117,7 +114,6 @@ export default function Page() {
       <ArtifactPane />
 
       {tweaksOpen && <TweaksPanel onClose={() => setTweaksOpen(false)} />}
-      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
     </div>
   );
 }

@@ -20,6 +20,13 @@ export type Secrets = {
   anthropicApiKey?: string;
   geminiApiKey?: string;
   billEnvironments: BillEnvironment[];
+  braintrustApiKey?: string;
+  braintrustOrgName?: string;
+  braintrustProjectName?: string;
+  braintrustEnabled?: boolean;
+  disabledTools?: string[];
+  systemPromptOverrideDemo?: string | null;
+  systemPromptOverrideTesting?: string | null;
 };
 
 export type BillEnvironmentMasked = {
@@ -38,6 +45,10 @@ export type SecretsMasked = {
   anthropic: { configured: boolean; masked: string };
   gemini: { configured: boolean; masked: string };
   billEnvironments: BillEnvironmentMasked[];
+  braintrust: { configured: boolean; masked: string; orgName: string; projectName: string; enabled: boolean };
+  disabledTools: string[];
+  systemPromptOverrideDemo: string | null;
+  systemPromptOverrideTesting: string | null;
 };
 
 const SECRETS_PATH = path.join(process.cwd(), '.secrets.local.json');
@@ -57,6 +68,13 @@ export async function readSecrets(): Promise<Secrets> {
     return {
       anthropicApiKey: parsed.anthropicApiKey,
       geminiApiKey: parsed.geminiApiKey,
+      braintrustApiKey: parsed.braintrustApiKey,
+      braintrustOrgName: parsed.braintrustOrgName,
+      braintrustProjectName: parsed.braintrustProjectName,
+      braintrustEnabled: parsed.braintrustEnabled ?? false,
+      disabledTools: Array.isArray(parsed.disabledTools) ? parsed.disabledTools : [],
+      systemPromptOverrideDemo: parsed.systemPromptOverrideDemo ?? null,
+      systemPromptOverrideTesting: parsed.systemPromptOverrideTesting ?? null,
       billEnvironments: envs.map(e => ({
         id: String(e.id ?? ''),
         name: String(e.name ?? ''),
@@ -116,6 +134,16 @@ export function toMaskedView(s: Secrets): SecretsMasked {
       configured: Boolean(s.geminiApiKey),
       masked: maskSecret(s.geminiApiKey),
     },
+    braintrust: {
+      configured: Boolean(s.braintrustApiKey),
+      masked: maskSecret(s.braintrustApiKey),
+      orgName: s.braintrustOrgName ?? '',
+      projectName: s.braintrustProjectName ?? '',
+      enabled: s.braintrustEnabled ?? false,
+    },
+    disabledTools: s.disabledTools ?? [],
+    systemPromptOverrideDemo: s.systemPromptOverrideDemo ?? null,
+    systemPromptOverrideTesting: s.systemPromptOverrideTesting ?? null,
     billEnvironments: s.billEnvironments.map(e => ({
       id: e.id,
       name: e.name,
