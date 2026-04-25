@@ -84,9 +84,10 @@ input, textarea, select{ font-family: inherit; color: inherit; }
 .topbar{
   grid-column: 1 / -1;
   display: flex; align-items: center; gap: 12px;
-  padding: 0 14px;
+  padding: 0 14px 0 76px;
   border-bottom: 1px solid var(--line);
   background: #edf0ed;
+  -webkit-app-region: drag;
 }
 
 .topbar-crumbs{
@@ -128,8 +129,8 @@ input, textarea, select{ font-family: inherit; color: inherit; }
 
 .topbar-spacer{ flex: 1; }
 
-.topbar-meta{ font-family: var(--mono); font-size: 11px; color: var(--ink-3); display:flex; gap: 14px; align-items: center; }
-.kbd{ font-family: var(--mono); font-size: 10.5px; padding: 2px 5px; border:1px solid var(--line); border-bottom-width:2px; border-radius: 4px; color: var(--ink-2); background: var(--surface); }
+.topbar-meta{ font-family: var(--mono); font-size: 11px; color: var(--ink-3); display:flex; gap: 14px; align-items: center; -webkit-app-region: no-drag; }
+.kbd{ font-family: var(--mono); font-size: 10.5px; padding: 2px 5px; border:1px solid var(--line); border-bottom-width:2px; border-radius: 4px; color: var(--ink-2); background: var(--surface); -webkit-app-region: no-drag; }
 
 /* ---------- Left rail (sessions) ---------- */
 .rail{

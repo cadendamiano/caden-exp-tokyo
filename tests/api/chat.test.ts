@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { sseEncode, jsonSchemaToGemini } from '@/app/api/chat/route';
+import { sseEncode, jsonSchemaToGemini } from '@/lib/chatRouteHelpers';
 import { Type } from '@google/genai';
 
 // ─── sseEncode ────────────────────────────────────────────────────────────────
