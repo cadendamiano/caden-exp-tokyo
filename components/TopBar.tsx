@@ -3,9 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '@/lib/store';
 
-type Props = { onOpenTweaks: () => void };
-
-export function TopBar({ onOpenTweaks }: Props) {
+export function TopBar() {
   const mode = useStore(s => s.mode);
   const demoDataset = useStore(s => s.tweaks.demoDataset);
   const childCompany = demoDataset === 'logistics'
@@ -40,7 +38,6 @@ export function TopBar({ onOpenTweaks }: Props) {
       <div className="topbar-spacer" />
       <div className="topbar-meta">
         <span>{userName}</span>
-        <button className="kbd" onClick={onOpenTweaks} title="Open tweaks">⌘K</button>
       </div>
     </div>
   );

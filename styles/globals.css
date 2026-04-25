@@ -1781,3 +1781,65 @@ input, textarea, select{ font-family: inherit; color: inherit; }
   overflow-x: auto; white-space: pre;
 }
 
+/* ─── Dev Config Panel (⌘K secret overlay) ─────────────────────────── */
+
+.dev-panel-overlay {
+  position: fixed; inset: 0;
+  background: oklch(0 0 0 / 0.4);
+  z-index: 100;
+  display: flex; align-items: stretch;
+}
+
+.dev-panel {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  background: var(--bg);
+  width: 100%; height: 100%;
+  overflow: hidden;
+}
+
+.dev-panel-nav {
+  display: flex; flex-direction: column;
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+  overflow-y: auto;
+}
+
+.dev-panel-nav-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; border-bottom: 1px solid var(--line);
+  font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--ink-3); flex: none;
+}
+
+.dev-panel-tab {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px; font-size: 13px; color: var(--ink-2);
+  background: none; border: none; text-align: left; cursor: pointer;
+  border-radius: 0;
+}
+.dev-panel-tab:hover { background: var(--surface-2); color: var(--ink); }
+.dev-panel-tab.active { background: var(--surface-2); color: var(--ink); font-weight: 500; }
+.dev-panel-tab-icon { font-size: 14px; color: var(--ink-3); width: 16px; text-align: center; }
+.dev-panel-tab.active .dev-panel-tab-icon { color: var(--ink-2); }
+
+.dev-panel-content {
+  display: flex; flex-direction: column;
+  min-height: 0; overflow: hidden;
+}
+
+.dev-config-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 600px) 260px;
+  flex: 1; min-height: 0; overflow: hidden;
+}
+.dev-config-columns > * { border-right: 1px solid var(--line); }
+.dev-config-columns > *:last-child { border-right: none; }
+
+.settings-placeholder {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  padding: 40px;
+}
+.settings-placeholder-text {
+  font-family: var(--mono); font-size: 12px; color: var(--ink-4);
+}

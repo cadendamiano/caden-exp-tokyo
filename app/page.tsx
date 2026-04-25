@@ -9,7 +9,7 @@ import { Composer } from '@/components/Composer';
 import { Turn } from '@/components/Turn';
 import { ArtifactPane } from '@/components/ArtifactPane';
 import { ResizeHandle } from '@/components/ResizeHandle';
-import { TweaksPanel } from '@/components/TweaksPanel';
+import { DevConfigPanel } from '@/components/DevConfigPanel';
 
 export default function Page() {
   const mode = useStore(s => s.mode);
@@ -67,7 +67,7 @@ export default function Page() {
 
   return (
     <div className="app" style={{ '--rail-w': railW + 'px', '--convo-w': convoW + 'px' } as React.CSSProperties}>
-      <TopBar onOpenTweaks={() => setTweaksOpen(v => !v)} />
+      <TopBar />
 
       <Rail
         onNewSession={mode === 'testing' ? () => newThread() : reset}
@@ -113,7 +113,7 @@ export default function Page() {
 
       <ArtifactPane />
 
-      {tweaksOpen && <TweaksPanel onClose={() => setTweaksOpen(false)} />}
+      {tweaksOpen && <DevConfigPanel onClose={() => setTweaksOpen(false)} />}
     </div>
   );
 }
