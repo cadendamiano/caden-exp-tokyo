@@ -122,6 +122,78 @@ export async function seGetEmployee(env: BillEnvironment, id: string): Promise<a
   return seRequest<any>(env, `/employees/${encodeURIComponent(id)}`);
 }
 
+export async function seListEmployees(
+  env: BillEnvironment,
+  filters: SeExpenseFilter[] = [],
+  max = 200
+): Promise<any[]> {
+  const params = new URLSearchParams({ max: String(max) });
+  for (const f of filters) params.set(f.field, String(f.value));
+  const res = await seRequest<{ results?: any[] } | any[]>(env, `/employees?${params}`);
+  if (Array.isArray(res)) return res;
+  return Array.isArray((res as any)?.results) ? (res as any).results : [];
+}
+
+export async function seListCards(
+  env: BillEnvironment,
+  filters: SeExpenseFilter[] = [],
+  max = 200
+): Promise<any[]> {
+  const params = new URLSearchParams({ max: String(max) });
+  for (const f of filters) params.set(f.field, String(f.value));
+  const res = await seRequest<{ results?: any[] } | any[]>(env, `/spend/cards?${params}`);
+  if (Array.isArray(res)) return res;
+  return Array.isArray((res as any)?.results) ? (res as any).results : [];
+}
+
+export async function seGetCard(env: BillEnvironment, uuid: string): Promise<any> {
+  return seRequest<any>(env, `/spend/cards/${encodeURIComponent(uuid)}`);
+}
+
+export async function seListBudgets(
+  env: BillEnvironment,
+  filters: SeExpenseFilter[] = [],
+  max = 100
+): Promise<any[]> {
+  const params = new URLSearchParams({ max: String(max) });
+  for (const f of filters) params.set(f.field, String(f.value));
+  const res = await seRequest<{ results?: any[] } | any[]>(env, `/spend/budgets?${params}`);
+  if (Array.isArray(res)) return res;
+  return Array.isArray((res as any)?.results) ? (res as any).results : [];
+}
+
+export async function seGetBudget(env: BillEnvironment, id: string): Promise<any> {
+  return seRequest<any>(env, `/spend/budgets/${encodeURIComponent(id)}`);
+}
+
+export async function seListTransactions(
+  env: BillEnvironment,
+  filters: SeExpenseFilter[] = [],
+  max = 200
+): Promise<any[]> {
+  const params = new URLSearchParams({ max: String(max) });
+  for (const f of filters) params.set(f.field, String(f.value));
+  const res = await seRequest<{ results?: any[] } | any[]>(env, `/spend/transactions?${params}`);
+  if (Array.isArray(res)) return res;
+  return Array.isArray((res as any)?.results) ? (res as any).results : [];
+}
+
+export async function seGetTransaction(env: BillEnvironment, id: string): Promise<any> {
+  return seRequest<any>(env, `/spend/transactions/${encodeURIComponent(id)}`);
+}
+
+export async function seListReimbursements(
+  env: BillEnvironment,
+  filters: SeExpenseFilter[] = [],
+  max = 100
+): Promise<any[]> {
+  const params = new URLSearchParams({ max: String(max) });
+  for (const f of filters) params.set(f.field, String(f.value));
+  const res = await seRequest<{ results?: any[] } | any[]>(env, `/spend/reimbursement-requests?${params}`);
+  if (Array.isArray(res)) return res;
+  return Array.isArray((res as any)?.results) ? (res as any).results : [];
+}
+
 // ─── Write stubs ──────────────────────────────────────────────────────
 // When real S&E write endpoints are wired, these can return the live response
 // (without `simulated: true`) and the dispatcher will pass it through.
@@ -134,6 +206,48 @@ export async function seApproveExpense(
 }
 
 export async function seRejectExpense(
+  _env: BillEnvironment,
+  _input: unknown
+): Promise<{ simulated: true; note: string }> {
+  return { simulated: true, note: 'real write endpoint not yet wired' };
+}
+
+export async function seCreateCard(
+  _env: BillEnvironment,
+  _input: unknown
+): Promise<{ simulated: true; note: string }> {
+  return { simulated: true, note: 'real write endpoint not yet wired' };
+}
+
+export async function seUpdateCard(
+  _env: BillEnvironment,
+  _input: unknown
+): Promise<{ simulated: true; note: string }> {
+  return { simulated: true, note: 'real write endpoint not yet wired' };
+}
+
+export async function seCreateBudget(
+  _env: BillEnvironment,
+  _input: unknown
+): Promise<{ simulated: true; note: string }> {
+  return { simulated: true, note: 'real write endpoint not yet wired' };
+}
+
+export async function seUpdateBudget(
+  _env: BillEnvironment,
+  _input: unknown
+): Promise<{ simulated: true; note: string }> {
+  return { simulated: true, note: 'real write endpoint not yet wired' };
+}
+
+export async function seCreateReimbursement(
+  _env: BillEnvironment,
+  _input: unknown
+): Promise<{ simulated: true; note: string }> {
+  return { simulated: true, note: 'real write endpoint not yet wired' };
+}
+
+export async function seApproveReimbursement(
   _env: BillEnvironment,
   _input: unknown
 ): Promise<{ simulated: true; note: string }> {

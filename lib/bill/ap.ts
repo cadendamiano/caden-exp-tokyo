@@ -1,7 +1,7 @@
 import type { BillEnvironment } from '../secrets';
 import { BILL_AP_SANDBOX_BASE, loginAp, logoutAp } from './auth';
 
-export type ApListObject = 'Bill' | 'Vendor';
+export type ApListObject = 'Bill' | 'Vendor' | 'VendorBankAccount' | 'Payment' | 'Customer' | 'Invoice' | 'Estimate' | 'ChartOfAccount' | 'User';
 
 export type ApFilter = { field: string; op: string; value: string | number };
 
@@ -11,7 +11,7 @@ type ApEnvelope<T> = {
   response_data: T;
 };
 
-async function apPost<T>(
+export async function apPost<T>(
   env: BillEnvironment,
   path: string,
   payload: Record<string, unknown>,
@@ -57,6 +57,41 @@ export async function apList(
 
 export async function apReadBill(env: BillEnvironment, id: string): Promise<any> {
   return apPost<any>(env, '/api/v3/Crud/Read/Bill.json', { id });
+}
+
+export async function apReadVendor(env: BillEnvironment, id: string): Promise<any> {
+  return apPost<any>(env, '/api/v3/Crud/Read/Vendor.json', { id });
+}
+
+export async function apListPayments(env: BillEnvironment, filters: ApFilter[] = []): Promise<any[]> {
+  return apList(env, 'Payment', filters, 200);
+}
+
+export async function apReadPayment(env: BillEnvironment, id: string): Promise<any> {
+  return apPost<any>(env, '/api/v3/Crud/Read/Payment.json', { id });
+}
+
+export async function apGetPaymentOptions(env: BillEnvironment, vendorId: string): Promise<any> {
+  return apPost<any>(env, '/api/v3/payments/options', { vendorId });
+}
+
+export async function apGetExchangeRate(env: BillEnvironment, currency: string): Promise<any> {
+  const sessionId = await loginAp(env);
+  const res = await fetch(
+    `${BILL_AP_SANDBOX_BASE}/api/v3/payments/exchange-rate?currency=${encodeURIComponent(currency)}&devKey=${encodeURIComponent(env.devKey)}&sessionId=${encodeURIComponent(sessionId)}`
+  );
+  if (!res.ok) throw new Error(`Bill AP exchange-rate failed (${res.status})`);
+  return res.json();
+}
+
+export async function apListApprovalPolicies(env: BillEnvironment): Promise<any[]> {
+  const sessionId = await loginAp(env);
+  const res = await fetch(`${BILL_AP_SANDBOX_BASE}/api/v3/bill-approvals`, {
+    headers: { devKey: env.devKey, sessionId },
+  });
+  if (!res.ok) throw new Error(`Bill AP bill-approvals failed (${res.status})`);
+  const json = await res.json();
+  return Array.isArray(json) ? json : json.response_data ?? [];
 }
 
 export type AgingBucket = { bucket: string; amount: number; count: number };
@@ -176,6 +211,76 @@ function levenshtein(a: string, b: string): number {
 // Returned `{ simulated: true }` flips the dispatcher to the mock handler.
 // When real AP write endpoints are wired, these can return the live response
 // (without `simulated: true`) and the dispatcher will pass it through.
+
+export async function apCreateBill(
+  _env: BillEnvironment,
+  _input: unknown
+): Promise<{ simulated: true; note: string }> {
+  return { simulated: true, note: 'real write endpoint not yet wired' };
+}
+
+export async function apUpdateBill(
+  _env: BillEnvironment,
+  _input: unknown
+): Promise<{ simulated: true; note: string }> {
+  return { simulated: true, note: 'real write endpoint not yet wired' };
+}
+
+export async function apDeleteBill(
+  _env: BillEnvironment,
+  _input: unknown
+): Promise<{ simulated: true; note: string }> {
+  return { simulated: true, note: 'real write endpoint not yet wired' };
+}
+
+export async function apApproveBill(
+  _env: BillEnvironment,
+  _input: unknown
+): Promise<{ simulated: true; note: string }> {
+  return { simulated: true, note: 'real write endpoint not yet wired' };
+}
+
+export async function apRejectBill(
+  _env: BillEnvironment,
+  _input: unknown
+): Promise<{ simulated: true; note: string }> {
+  return { simulated: true, note: 'real write endpoint not yet wired' };
+}
+
+export async function apCreateVendor(
+  _env: BillEnvironment,
+  _input: unknown
+): Promise<{ simulated: true; note: string }> {
+  return { simulated: true, note: 'real write endpoint not yet wired' };
+}
+
+export async function apUpdateVendor(
+  _env: BillEnvironment,
+  _input: unknown
+): Promise<{ simulated: true; note: string }> {
+  return { simulated: true, note: 'real write endpoint not yet wired' };
+}
+
+export async function apCreateVendorBankAccount(
+  _env: BillEnvironment,
+  _input: unknown
+): Promise<{ simulated: true; note: string }> {
+  return { simulated: true, note: 'real write endpoint not yet wired' };
+}
+
+export async function apCreateApprovalPolicy(
+  _env: BillEnvironment,
+  _input: unknown
+): Promise<{ simulated: true; note: string }> {
+  return { simulated: true, note: 'real write endpoint not yet wired' };
+}
+
+export async function apUpdateApprovalPolicy(
+  _env: BillEnvironment,
+  _input: unknown
+): Promise<{ simulated: true; note: string }> {
+  return { simulated: true, note: 'real write endpoint not yet wired' };
+}
 
 export async function apStagePaymentBatch(
   _env: BillEnvironment,
