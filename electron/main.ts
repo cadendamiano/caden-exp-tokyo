@@ -4,8 +4,8 @@ import { randomBytes } from 'node:crypto';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as http from 'node:http';
+import * as net from 'node:net';
 import Store from 'electron-store';
-import getPort from 'get-port';
 import { DevPasswordVerifier, AuthVerifier, User, Credentials } from './auth';
 
 type AuthStore = {
@@ -36,8 +36,22 @@ function resolveServerCwd(): string {
   return path.dirname(resolveServerEntry());
 }
 
+function isPortFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const srv = net.createServer();
+    srv.once('error', () => resolve(false));
+    srv.once('listening', () => srv.close(() => resolve(true)));
+    srv.listen(port, '127.0.0.1');
+  });
+}
+
+async function pickPort(candidates: number[]): Promise<number> {
+  for (const p of candidates) if (await isPortFree(p)) return p;
+  throw new Error(`no free port among ${candidates.join(', ')}`);
+}
+
 async function startNextServer(): Promise<number> {
-  const port = await getPort({ port: [3100, 3200, 3300] });
+  const port = await pickPort([3100, 3200, 3300]);
   const entry = resolveServerEntry();
   const cwd = resolveServerCwd();
 
@@ -110,10 +124,15 @@ function broadcastAuthChange(state: { loggedIn: boolean; user: User | null }) {
   }
 }
 
+function baseUrl(): string {
+  if (process.env.ELECTRON_DEV_URL) return process.env.ELECTRON_DEV_URL.replace(/\/$/, '');
+  return `http://127.0.0.1:${serverPort}`;
+}
+
 async function loadInitialRoute(win: BrowserWindow) {
   const state = await getCurrentAuthState();
   const route = state.loggedIn ? '/' : '/login';
-  await win.loadURL(`http://127.0.0.1:${serverPort}${route}`);
+  await win.loadURL(`${baseUrl()}${route}`);
 }
 
 async function createWindow() {
@@ -138,6 +157,13 @@ async function createWindow() {
   mainWindow.once('ready-to-show', () => mainWindow?.show());
   mainWindow.on('closed', () => { mainWindow = null; });
 
+  mainWindow.webContents.once('did-finish-load', () =>
+    mainWindow?.webContents.send('fullscreen-changed', mainWindow.isFullScreen()));
+  mainWindow.on('enter-full-screen', () =>
+    mainWindow?.webContents.send('fullscreen-changed', true));
+  mainWindow.on('leave-full-screen', () =>
+    mainWindow?.webContents.send('fullscreen-changed', false));
+
   await loadInitialRoute(mainWindow);
 }
 
@@ -156,7 +182,7 @@ function registerIpc() {
   ipcMain.handle('logout', async () => {
     store.delete('auth');
     broadcastAuthChange({ loggedIn: false, user: null });
-    if (mainWindow) await mainWindow.loadURL(`http://127.0.0.1:${serverPort}/login`);
+    if (mainWindow) await mainWindow.loadURL(`${baseUrl()}/login`);
   });
 
   ipcMain.handle('export-template', async (_evt, data: object) => {
@@ -184,8 +210,13 @@ function registerIpc() {
 
 app.whenReady().then(async () => {
   registerIpc();
-  serverPort = await startNextServer();
+  if (!process.env.ELECTRON_DEV_URL) {
+    serverPort = await startNextServer();
+  } else {
+    console.log(`[main] ELECTRON_DEV_URL set — using ${process.env.ELECTRON_DEV_URL}, skipping standalone server`);
+  }
   await createWindow();
+  if (process.env.ELECTRON_DEV_URL) mainWindow?.webContents.openDevTools({ mode: 'detach' });
 
   app.on('activate', async () => {
     if (BrowserWindow.getAllWindows().length === 0) await createWindow();

@@ -88,7 +88,9 @@ input, textarea, select{ font-family: inherit; color: inherit; }
   border-bottom: 1px solid var(--line);
   background: #edf0ed;
   -webkit-app-region: drag;
+  transition: padding-left 50ms ease-in;
 }
+.topbar :where(button, a, input, select, textarea){ -webkit-app-region: no-drag; }
 
 .topbar-crumbs{
   display: flex; align-items: center; gap: 8px;
@@ -1525,9 +1527,15 @@ input, textarea, select{ font-family: inherit; color: inherit; }
 
 .settings-page-header{
   display: flex; align-items: center; gap: 14px;
-  padding: 0 28px; height: 52px; border-bottom: 1px solid var(--line);
+  padding: 0 28px 0 90px; height: 52px; border-bottom: 1px solid var(--line);
   background: var(--surface); flex: none; position: sticky; top: 0; z-index: 10;
+  -webkit-app-region: drag;
+  transition: padding-left 50ms ease-in;
 }
+.settings-page-header :where(button, a, input, select, textarea){ -webkit-app-region: no-drag; }
+
+body.fullscreen .topbar{ padding-left: 14px; }
+body.fullscreen .settings-page-header{ padding-left: 28px; }
 
 .settings-back-btn{
   display: inline-flex; align-items: center; gap: 6px;

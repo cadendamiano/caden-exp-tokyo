@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import '../styles/globals.css';
+import { FullScreenSync } from '../components/FullScreenSync';
 
 export const metadata: Metadata = {
   title: 'BILL Coworker',
@@ -18,7 +19,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </head>
-      <body>{children}</body>
+      <body>
+        <FullScreenSync />
+        {children}
+      </body>
     </html>
   );
 }
