@@ -1,6 +1,6 @@
 import { getDataset, type DatasetKey } from './data';
 import { fmtMoneyShort } from './format';
-import { getBillEnvironment } from './secrets';
+
 import {
   apList,
   apAgingSummary,
@@ -1148,6 +1148,7 @@ async function runRealTool(
     if (name === 'ask_question') {
       return { ok: true, summary: 'question presented to user', data: { __awaiting_input: true } };
     }
+    const { getBillEnvironment } = await import('./secrets');
     const env = await getBillEnvironment(ctx.billEnvId!);
     if (!env) {
       return {
