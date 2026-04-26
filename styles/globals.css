@@ -88,7 +88,6 @@ input, textarea, select{ font-family: inherit; color: inherit; }
   border-bottom: 1px solid var(--line);
   background: #edf0ed;
   -webkit-app-region: drag;
-  transition: padding-left 50ms ease-in;
 }
 .topbar :where(button, a, input, select, textarea){ -webkit-app-region: no-drag; }
 
@@ -132,6 +131,7 @@ input, textarea, select{ font-family: inherit; color: inherit; }
 .topbar-spacer{ flex: 1; }
 
 .topbar-meta{ font-family: var(--mono); font-size: 11px; color: var(--ink-3); display:flex; gap: 14px; align-items: center; -webkit-app-region: no-drag; }
+
 .kbd{ font-family: var(--mono); font-size: 10.5px; padding: 2px 5px; border:1px solid var(--line); border-bottom-width:2px; border-radius: 4px; color: var(--ink-2); background: var(--surface); -webkit-app-region: no-drag; }
 
 /* ---------- Left rail (sessions) ---------- */
@@ -140,7 +140,6 @@ input, textarea, select{ font-family: inherit; color: inherit; }
   overflow-y: auto;
   padding: 14px 10px;
   display: flex; flex-direction: column;
-  min-height: 0;
 }
 .rail-top{
   display: flex; flex-direction: column; gap: 18px;
@@ -1044,17 +1043,6 @@ input, textarea, select{ font-family: inherit; color: inherit; }
 }
 .settings-link:disabled{ opacity: 0.5; cursor: default; }
 .settings-link:hover:not(:disabled){ text-decoration: underline; }
-.settings-actions{
-  display: flex; align-items: center; gap: 10px;
-  flex-wrap: wrap;
-}
-.settings-test-ok{
-  font-family: var(--mono); font-size: 10.5px; color: var(--pos);
-}
-.settings-test-error{
-  font-family: var(--mono); font-size: 10.5px; color: var(--neg);
-  white-space: normal; overflow-wrap: anywhere;
-}
 .settings-empty{
   font-family: var(--mono); font-size: 11px; color: var(--ink-4);
   padding: 4px 2px;

@@ -26,6 +26,7 @@ const CLEAN_STATE = {
     modelId: 'claude-sonnet-4-5',
     showCodeView: false,
     demoDataset: 'default' as const,
+    defaultBillProduct: 'ap' as const,
   },
   activeArtifact: null,
   selectedBills: [],

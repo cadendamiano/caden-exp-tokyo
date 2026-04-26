@@ -174,7 +174,7 @@ export function Composer() {
 
   const placeholder =
     mode === 'testing'
-      ? 'Ask something — calls the real Bill sandbox configured for this thread'
+      ? 'Ask something -- calls the real Bill sandbox (set default in Cmd+K)'
       : `Ask the coworker something — e.g. "show me all overdue AP" or "/" for commands`;
 
   return (

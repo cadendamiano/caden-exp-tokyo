@@ -3,10 +3,17 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '@/lib/store';
 import { MODELS } from '@/lib/models';
+import { DEMO_SANDBOX_ENV_ID } from '@/lib/tools';
 import { Icon } from './primitives/Icon';
 import { CredentialsColumn } from './settings/CredentialsColumn';
 import { BrainTrustColumn } from './settings/BrainTrustColumn';
 import { ToolsColumn } from './settings/ToolsColumn';
+
+type EnvView = {
+  id: string;
+  name: string;
+  product: 'ap' | 'se' | 'both';
+};
 
 type Tab = 'configuration' | 'observability' | 'tools';
 
@@ -18,12 +25,104 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'tools', label: 'Prompts & Tools', icon: '⬡' },
 ];
 
+function SandboxDefaultSection() {
+  const tweaks = useStore(s => s.tweaks);
+  const set = useStore(s => s.setTweak);
+  const [envs, setEnvs] = useState<EnvView[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/settings', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setEnvs(
+          (data.billEnvironments ?? []).map((e: any) => ({
+            id: e.id,
+            name: e.name,
+            product: e.product ?? 'ap',
+          }))
+        );
+      } catch {
+        if (!cancelled) setEnvs([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const isDemo = tweaks.defaultBillEnvId === DEMO_SANDBOX_ENV_ID;
+  const selected = tweaks.defaultBillEnvId ?? '';
+  const missing =
+    !!tweaks.defaultBillEnvId &&
+    !isDemo &&
+    envs !== null &&
+    !envs.some(e => e.id === tweaks.defaultBillEnvId);
+
+  return (
+    <section className="settings-section">
+      <span className="settings-col-subtitle">Default Sandbox</span>
+      <div className="tweak-row">
+        <label>Sandbox</label>
+        <select
+          value={selected}
+          onChange={(e) => {
+            const next = e.target.value || undefined;
+            set('defaultBillEnvId', next);
+            if (next === DEMO_SANDBOX_ENV_ID) {
+              set('defaultBillProduct', 'ap');
+            }
+          }}
+        >
+          <option value="">— none —</option>
+          <option value={DEMO_SANDBOX_ENV_ID}>Demo Sandbox · fake data</option>
+          {(envs ?? []).map(env => (
+            <option key={env.id} value={env.id}>
+              {env.name} · {env.product}
+            </option>
+          ))}
+        </select>
+      </div>
+      {!isDemo && tweaks.defaultBillEnvId && (
+        <div className="tweak-row">
+          <label>Product</label>
+          <div className="rail-product-toggle">
+            {(['ap', 'se'] as const).map(p => (
+              <button
+                key={p}
+                type="button"
+                className={
+                  'rail-product-btn' +
+                  (tweaks.defaultBillProduct === p ? ' active' : '')
+                }
+                onClick={() => set('defaultBillProduct', p)}
+              >
+                {p === 'ap' ? 'AP' : 'S&E'}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {missing && (
+        <div className="rail-empty" style={{ marginTop: 8 }}>
+          The previously selected sandbox is no longer configured. Pick another or clear the default.
+        </div>
+      )}
+    </section>
+  );
+}
+
 function TweaksSection() {
   const tweaks = useStore(s => s.tweaks);
   const set = useStore(s => s.setTweak);
+  const mode = useStore(s => s.mode);
 
   return (
     <div className="scol-body">
+      {mode === 'testing' && <SandboxDefaultSection />}
       <section className="settings-section">
         <span className="settings-col-subtitle">App Tweaks</span>
         <div className="tweak-row">

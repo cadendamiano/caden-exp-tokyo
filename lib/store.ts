@@ -52,6 +52,8 @@ export type Tweaks = {
   modelId: ModelId;
   showCodeView: boolean;
   demoDataset: DatasetKey;
+  defaultBillEnvId?: string;
+  defaultBillProduct: BillProduct;
 };
 
 export type SettingsStatus = { anthropic: boolean; gemini: boolean };
@@ -155,9 +157,11 @@ const DEFAULT_TWEAKS: Tweaks = {
   modelId: DEFAULT_MODEL_ID,
   showCodeView: false,
   demoDataset: 'logistics',
+  defaultBillEnvId: undefined,
+  defaultBillProduct: 'ap',
 };
 
-function createThread(title?: string): Thread {
+function createThread(title?: string, tweaks?: Tweaks): Thread {
   return {
     id: `thr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
     title: title ?? 'New thread',
@@ -167,7 +171,8 @@ function createThread(title?: string): Thread {
     selectedBills: [],
     approvalStates: {},
     approvalPayloads: {},
-    billProduct: 'ap',
+    billEnvId: tweaks?.defaultBillEnvId,
+    billProduct: tweaks?.defaultBillProduct ?? 'ap',
   };
 }
 
@@ -317,18 +322,22 @@ export const useStore = create<State>()(
         }),
 
       newWorkspaceThread: (workspaceId, title) => {
-        const thread = createThread(title);
-        set(s => ({
-          workspaces: s.workspaces.map(w =>
-            w.id === workspaceId ? { ...w, threads: [...w.threads, thread] } : w
-          ),
-          activeWorkspaceId: workspaceId,
-          activeWorkspaceThreadId: thread.id,
-          expandedWorkspaceIds: s.expandedWorkspaceIds.includes(workspaceId)
-            ? s.expandedWorkspaceIds
-            : [...s.expandedWorkspaceIds, workspaceId],
-        }));
-        return thread.id;
+        let threadId = '';
+        set(s => {
+          const thread = createThread(title, s.tweaks);
+          threadId = thread.id;
+          return {
+            workspaces: s.workspaces.map(w =>
+              w.id === workspaceId ? { ...w, threads: [...w.threads, thread] } : w
+            ),
+            activeWorkspaceId: workspaceId,
+            activeWorkspaceThreadId: thread.id,
+            expandedWorkspaceIds: s.expandedWorkspaceIds.includes(workspaceId)
+              ? s.expandedWorkspaceIds
+              : [...s.expandedWorkspaceIds, workspaceId],
+          };
+        });
+        return threadId;
       },
 
       setActiveWorkspaceThread: (workspaceId, threadId) =>
@@ -515,7 +524,7 @@ export const useStore = create<State>()(
     {
       name: 'bcw:state',
       storage: createJSONStorage(() => localStorage),
-      version: 6,
+      version: 7,
       migrate: (persisted: any, fromVersion: number) => {
         if (persisted && fromVersion < 2) {
           persisted.tweaks = { ...DEFAULT_TWEAKS, ...(persisted.tweaks ?? {}) };
@@ -546,6 +555,12 @@ export const useStore = create<State>()(
           delete persisted.testingThreads;
           delete persisted.activeTestingThreadId;
           persisted.shortcuts = persisted.shortcuts ?? [];
+        }
+        if (persisted && fromVersion < 7) {
+          if (persisted.tweaks) {
+            persisted.tweaks.defaultBillEnvId = persisted.tweaks.defaultBillEnvId ?? undefined;
+            persisted.tweaks.defaultBillProduct = persisted.tweaks.defaultBillProduct ?? 'ap';
+          }
         }
         return persisted;
       },

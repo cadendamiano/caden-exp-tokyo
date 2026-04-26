@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useStore, type Workspace, type Artifact } from '@/lib/store';
+import { DEMO_SANDBOX_ENV_ID } from '@/lib/tools';
 import { Icon } from './primitives/Icon';
-
-const DEMO_SANDBOX_ENV_ID = '__demo_sandbox__';
 
 type EnvView = {
   id: string;
@@ -68,6 +67,8 @@ function WorkspaceBillEnvPicker() {
   const activeThreadId = useStore(s => s.activeWorkspaceThreadId);
   const workspaces = useStore(s => s.workspaces);
   const setWorkspaceThreadBillEnv = useStore(s => s.setWorkspaceThreadBillEnv);
+  const defaultBillEnvId = useStore(s => s.tweaks.defaultBillEnvId);
+  const defaultBillProduct = useStore(s => s.tweaks.defaultBillProduct);
 
   const [envs, setEnvs] = useState<EnvView[] | null>(null);
 
@@ -100,40 +101,48 @@ function WorkspaceBillEnvPicker() {
   const active = ws?.threads.find(t => t.id === activeThreadId);
   if (!active) return null;
 
+  const usingDefault = active.billEnvId === undefined;
+  const effectiveEnvId = active.billEnvId ?? defaultBillEnvId;
+  const effectiveProduct = active.billProduct ?? defaultBillProduct;
+  const defaultSuffix = (id: string) => (usingDefault && id === defaultBillEnvId ? ' (default)' : '');
+
   return (
     <div className="rail-mini">
-      <div className="rail-section-label">Bill env for this thread</div>
+      <div className="rail-section-label">Sandbox override</div>
       <select
         className="rail-env-select"
-        value={active.billEnvId ?? ''}
+        value={effectiveEnvId ?? ''}
+        style={usingDefault ? { opacity: 0.7 } : undefined}
         onChange={e => {
           const envId = e.target.value || undefined;
           if (envId === DEMO_SANDBOX_ENV_ID) {
             setWorkspaceThreadBillEnv(activeWorkspaceId, active.id, envId, 'ap');
           } else {
-            setWorkspaceThreadBillEnv(activeWorkspaceId, active.id, envId, active.billProduct ?? 'ap');
+            setWorkspaceThreadBillEnv(activeWorkspaceId, active.id, envId, effectiveProduct ?? 'ap');
           }
         }}
       >
         <option value="">— pick an env —</option>
-        <option value={DEMO_SANDBOX_ENV_ID}>Demo Sandbox · fake data</option>
+        <option value={DEMO_SANDBOX_ENV_ID}>
+          Demo Sandbox · fake data{defaultSuffix(DEMO_SANDBOX_ENV_ID)}
+        </option>
         {(envs ?? []).map(env => (
           <option key={env.id} value={env.id}>
-            {env.name} · {env.product}
+            {env.name} · {env.product}{defaultSuffix(env.id)}
           </option>
         ))}
       </select>
-      {active.billEnvId !== DEMO_SANDBOX_ENV_ID && (
+      {effectiveEnvId !== DEMO_SANDBOX_ENV_ID && effectiveEnvId && (
         <div className="rail-product-toggle">
           {(['ap', 'se'] as const).map(p => (
             <button
               key={p}
               className={
                 'rail-product-btn' +
-                ((active.billProduct ?? 'ap') === p ? ' active' : '')
+                ((effectiveProduct ?? 'ap') === p ? ' active' : '')
               }
               onClick={() =>
-                setWorkspaceThreadBillEnv(activeWorkspaceId, active.id, active.billEnvId, p)
+                setWorkspaceThreadBillEnv(activeWorkspaceId, active.id, effectiveEnvId, p)
               }
             >
               {p === 'ap' ? 'AP' : 'S&E'}
@@ -141,7 +150,7 @@ function WorkspaceBillEnvPicker() {
           ))}
         </div>
       )}
-      {envs && envs.length === 0 && active.billEnvId !== DEMO_SANDBOX_ENV_ID && (
+      {envs && envs.length === 0 && effectiveEnvId !== DEMO_SANDBOX_ENV_ID && !defaultBillEnvId && (
         <div className="rail-empty" style={{ marginTop: 8 }}>
           No real sandbox envs configured. Pick Demo Sandbox above or add one in Settings.
         </div>
@@ -173,15 +182,15 @@ function WorkspaceList() {
 
       <div className="ws-section">
         <div className="ws-section-header">
-          <span className="ws-section-label">Workspaces</span>
+          <span className="ws-section-label">Workbooks</span>
           <div className="ws-section-actions">
             <button className="ws-icon-btn" aria-label="Filter workspaces" title="Filter">
               <Filter />
             </button>
             <button
               className="ws-icon-btn"
-              aria-label="New workspace"
-              title="New workspace"
+              aria-label="New workbook"
+              title="New workbook"
               onClick={() => setCreating(true)}
             >
               <FolderPlus />
@@ -219,7 +228,7 @@ function WorkspaceList() {
         {!creating && (
           <button className="ws-add-ghost" onClick={() => setCreating(true)}>
             <Icon.Plus />
-            <span>New workspace</span>
+            <span>New workbook</span>
           </button>
         )}
       </div>

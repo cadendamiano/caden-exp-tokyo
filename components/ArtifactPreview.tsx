@@ -228,7 +228,10 @@ export function ArtifactPreview({ artifact }: Props) {
   useEffect(() => {
     setLoading(true);
     const thread = getActiveWorkspaceThread();
-    fetchPreview(artifact.kind, mode, thread?.billEnvId, thread?.billProduct, demoDataset)
+    const tweaks = useStore.getState().tweaks;
+    const envId = thread?.billEnvId ?? tweaks.defaultBillEnvId;
+    const product = thread?.billProduct ?? tweaks.defaultBillProduct;
+    fetchPreview(artifact.kind, mode, envId, product, demoDataset)
       .then(r => {
         setResult(r);
         setLoading(false);
