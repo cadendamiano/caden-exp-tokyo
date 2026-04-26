@@ -11,13 +11,17 @@ import { HtmlArtifact } from './artifacts/HtmlArtifact';
 import { LiquidityBurndownArtifact } from './artifacts/LiquidityBurndownArtifact';
 import { SweepRuleArtifact } from './artifacts/SweepRuleArtifact';
 import { DocumentArtifact } from './artifacts/DocumentArtifact';
+import { SpreadsheetArtifact } from './artifacts/SpreadsheetArtifact';
 import { ArtifactPreview } from './ArtifactPreview';
 import { ArtifactCode } from './ArtifactCode';
 import type { ArtifactKind } from '@/lib/flows';
-import type { ArtifactStatus } from '@/lib/store';
+import type { Artifact, ArtifactStatus } from '@/lib/store';
+import { BILLS, VENDORS } from '@/lib/data';
+import { billsToSpreadsheetJson } from '@/lib/spreadsheetData';
 
 function glyphFor(kind: ArtifactKind) {
   if (kind === 'ap-table') return <Icon.Table />;
+  if (kind === 'spreadsheet') return <Icon.Table />;
   if (kind === 'spend-chart') return <Icon.Chart />;
   if (kind === 'rule-net15') return <Icon.Rule />;
   if (kind === 'crm-flow') return <Icon.Flow />;
@@ -98,6 +102,28 @@ export function ArtifactPane() {
     if (active === id) setActive(null);
   };
 
+  const openAsSpreadsheet = (source: Artifact) => {
+    const newId = `art_ss_${Date.now().toString(36)}`;
+    const newArtifact: Artifact = {
+      id: newId,
+      kind: 'spreadsheet',
+      label: `${source.label} · Spreadsheet`,
+      status: 'draft',
+      version: 1,
+      createdBy: 'Coworker',
+      dataJson: billsToSpreadsheetJson(BILLS, VENDORS),
+    };
+    const add = (prev: Artifact[]) => [...prev, newArtifact];
+    if (mode === 'workspace') {
+      setWsThreadArtifacts(add);
+    } else if (mode === 'testing') {
+      setThreadArtifacts(add);
+    } else {
+      setDemoArtifacts(add);
+    }
+    setActive(newId);
+  };
+
   return (
     <>
       <div
@@ -143,6 +169,16 @@ export function ArtifactPane() {
           )}
           <div className="artifact-tabs-spacer" />
           <div className="artifact-tools">
+            {cur?.kind === 'ap-table' && (
+              <button
+                className="icon-btn"
+                title="Open as Spreadsheet"
+                onClick={() => openAsSpreadsheet(cur)}
+                style={{ fontSize: 11, padding: '0 8px', fontFamily: 'var(--mono)' }}
+              >
+                ⊞ Spreadsheet
+              </button>
+            )}
             <button className="icon-btn" title="Copy as link">↗</button>
             <button className="icon-btn" title="Download">⤓</button>
           </div>
@@ -187,6 +223,9 @@ export function ArtifactPane() {
                 {view === 'code' && <ArtifactCode artifact={cur} />}
                 {view === 'logic' && cur.kind === 'ap-table' && (
                   <APTableArtifact selected={new Set(selectedBills)} onToggle={toggleBill} />
+                )}
+                {view === 'logic' && cur.kind === 'spreadsheet' && (
+                  <SpreadsheetArtifact artifact={cur} />
                 )}
                 {view === 'logic' && cur.kind === 'rule-net15' && <Net15RuleArtifact artifact={cur} />}
                 {view === 'logic' && cur.kind === 'spend-chart' && <SpendChartArtifact />}

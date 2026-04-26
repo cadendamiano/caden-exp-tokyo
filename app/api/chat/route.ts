@@ -226,6 +226,18 @@ async function runAnthropic(
           dataJson: inp.dataJson,
         });
       }
+      if (tu.name === 'render_spreadsheet_artifact') {
+        const inp = tu.input as any;
+        send({
+          type: 'artifact',
+          kind: 'spreadsheet',
+          title: inp.title,
+          sub: inp.sub,
+          meta: inp.meta,
+          label: inp.title,
+          dataJson: inp.dataJson,
+        });
+      }
       if (tu.name === 'stage_payment_batch' && res.data && (res.data as any).approvalPayload) {
         const d = res.data as { approvalPayload: ApprovalPayload; simulated?: boolean };
         send({ type: 'approval', payload: d.approvalPayload, simulated: d.simulated === true });
@@ -361,6 +373,18 @@ async function runGemini(
           html: inp.html,
           css: inp.css,
           script: inp.script,
+          dataJson: inp.dataJson,
+        });
+      }
+      if (tc.name === 'render_spreadsheet_artifact') {
+        const inp = tc.input as any;
+        send({
+          type: 'artifact',
+          kind: 'spreadsheet',
+          title: inp.title,
+          sub: inp.sub,
+          meta: inp.meta,
+          label: inp.title,
           dataJson: inp.dataJson,
         });
       }
