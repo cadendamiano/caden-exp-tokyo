@@ -2,7 +2,7 @@
 
 import { FLOWS, LOGISTICS_FLOWS, type ArtifactKind, type Flow, type FlowStep } from './flows';
 import { newId, type Turn } from './turns';
-import { useStore, getActiveThread, type ApprovalPayload } from './store';
+import { useStore, getActiveThread, getActiveWorkspaceThread, type ApprovalPayload } from './store';
 import { MODEL_TOOLS, INTERNAL_TOOLS } from './tools';
 
 const ALL_TOOLS = [...MODEL_TOOLS, ...INTERNAL_TOOLS];
@@ -66,37 +66,62 @@ export function runFlow(flowId: string) {
   setTimeout(() => useStore.getState().setStreaming(false), acc + 400);
 }
 
+function getFlowActions(s: ReturnType<typeof useStore.getState>) {
+  if (s.mode === 'workspace') {
+    const wsThread = getActiveWorkspaceThread();
+    return {
+      addTurn: s.addTurnToActiveWorkspaceThread,
+      updateTurn: s.updateTurnInActiveWorkspaceThread,
+      removeTurnsByKind: s.removeTurnsByKindInActiveWorkspaceThread,
+      setArtifacts: s.setArtifactsInActiveWorkspaceThread,
+      setApprovalPayload: s.setApprovalPayloadInActiveWorkspaceThread,
+      findTurn: (id: string) => wsThread?.turns.find(t => t.id === id),
+    };
+  }
+  return {
+    addTurn: s.addTurn,
+    updateTurn: s.updateTurn,
+    removeTurnsByKind: s.removeTurnsByKind,
+    setArtifacts: s.setArtifacts,
+    setApprovalPayload: s.setApprovalPayload,
+    findTurn: (id: string) => s.turns.find(t => t.id === id),
+  };
+}
+
 function executeStep(flow: Flow, step: FlowStep, mult: number) {
   const s = useStore.getState();
+  const a = getFlowActions(s);
   if (step.kind === 'user') {
-    s.addTurn({ id: newId('u'), kind: 'user', text: step.text });
+    a.addTurn({ id: newId('u'), kind: 'user', text: step.text });
     return;
   }
   if (step.kind === 'agent-stream') {
     const id = newId('a');
     const turn: Turn = { id, kind: 'agent', text: '', streaming: true };
-    s.addTurn(turn);
+    a.addTurn(turn);
     const words = step.text.split(/(\s+)/);
     let i = 0;
     const iv = setInterval(() => {
       i += 2 + Math.floor(Math.random() * 3);
+      const actions = getFlowActions(useStore.getState());
       if (i >= words.length) {
         clearInterval(iv);
-        useStore.getState().updateTurn(id, { text: step.text, streaming: false });
+        actions.updateTurn(id, { text: step.text, streaming: false });
       } else {
-        useStore.getState().updateTurn(id, { text: words.slice(0, i).join(''), streaming: true });
+        actions.updateTurn(id, { text: words.slice(0, i).join(''), streaming: true });
       }
     }, 35 * mult);
     return;
   }
   if (step.kind === 'tools') {
     const id = newId('tl');
-    s.addTurn({ id, kind: 'tools', rows: [], pending: step.rows.length });
+    a.addTurn({ id, kind: 'tools', rows: [], pending: step.rows.length });
     step.rows.forEach((r, idx) => {
       setTimeout(() => {
-        const cur = useStore.getState().turns.find(t => t.id === id);
+        const actions = getFlowActions(useStore.getState());
+        const cur = actions.findTurn(id);
         if (!cur || cur.kind !== 'tools') return;
-        useStore.getState().updateTurn(id, {
+        actions.updateTurn(id, {
           rows: [...cur.rows, r],
           pending: step.rows.length - idx - 1,
         } as Partial<Turn>);
@@ -106,32 +131,33 @@ function executeStep(flow: Flow, step: FlowStep, mult: number) {
   }
   if (step.kind === 'libs') {
     const id = newId('lb');
-    s.addTurn({ id, kind: 'libs', items: [], total: step.items.length });
+    a.addTurn({ id, kind: 'libs', items: [], total: step.items.length });
     step.items.forEach((lib, idx) => {
       setTimeout(() => {
-        const cur = useStore.getState().turns.find(t => t.id === id);
+        const actions = getFlowActions(useStore.getState());
+        const cur = actions.findTurn(id);
         if (!cur || cur.kind !== 'libs') return;
-        useStore.getState().updateTurn(id, { items: [...cur.items, lib] } as Partial<Turn>);
+        actions.updateTurn(id, { items: [...cur.items, lib] } as Partial<Turn>);
       }, (idx + 1) * 160 * mult);
     });
     return;
   }
   if (step.kind === 'building') {
-    s.addTurn({ id: newId('bl'), kind: 'building', label: step.label, sub: step.sub });
+    a.addTurn({ id: newId('bl'), kind: 'building', label: step.label, sub: step.sub });
     return;
   }
   if (step.kind === 'artifact-card') {
-    s.removeTurnsByKind('building');
+    a.removeTurnsByKind('building');
     if (flow.artifact) {
       const art = flow.artifact;
-      s.setArtifacts(prev => (prev.find(p => p.id === art.id) ? prev : [...prev, {
+      a.setArtifacts(prev => (prev.find(p => p.id === art.id) ? prev : [...prev, {
         ...art,
         status: 'draft' as const,
         version: 1,
         createdBy: 'Coworker',
       }]));
     }
-    s.addTurn({
+    a.addTurn({
       id: newId('ac'),
       kind: 'artifact-card',
       artifactId: step.artifactId,
@@ -140,12 +166,10 @@ function executeStep(flow: Flow, step: FlowStep, mult: number) {
       meta: step.meta,
       icon: step.icon,
     });
-    // Seed approval payload for any approval step in this flow so handleApprove
-    // can find it via getSubmitContext.
     return;
   }
   if (step.kind === 'artifact-enrich') {
-    s.setArtifacts(prev => {
+    a.setArtifacts(prev => {
       const exists = prev.find(a => a.id === step.artifactId);
       if (exists) {
         return prev.map(a => a.id === step.artifactId
@@ -165,12 +189,12 @@ function executeStep(flow: Flow, step: FlowStep, mult: number) {
     return;
   }
   if (step.kind === 'approval') {
-    s.addTurn({ id: newId('ap'), kind: 'approval', payload: step.payload });
-    s.setApprovalPayload(step.payload.batchId, step.payload);
+    a.addTurn({ id: newId('ap'), kind: 'approval', payload: step.payload });
+    a.setApprovalPayload(step.payload.batchId, step.payload);
     return;
   }
   if (step.kind === 'suggest') {
-    s.addTurn({ id: newId('sg'), kind: 'suggest', items: step.items });
+    a.addTurn({ id: newId('sg'), kind: 'suggest', items: step.items });
     return;
   }
 }
@@ -178,7 +202,7 @@ function executeStep(flow: Flow, step: FlowStep, mult: number) {
 // ─── Approval submission helpers ──────────────────────────────────────
 
 type SubmitContext = {
-  mode: 'demo' | 'testing';
+  mode: 'demo' | 'testing' | 'workspace';
   payload: ApprovalPayload | undefined;
   billEnvId?: string;
   billProduct?: 'ap' | 'se';
@@ -187,6 +211,14 @@ type SubmitContext = {
 
 function getSubmitContext(batchId: string): SubmitContext {
   const s = useStore.getState();
+  if (s.mode === 'workspace') {
+    const wsThread = getActiveWorkspaceThread();
+    return {
+      mode: 'workspace',
+      payload: wsThread?.approvalPayloads?.[batchId],
+      demoDataset: s.tweaks.demoDataset,
+    };
+  }
   if (s.mode === 'testing') {
     const thread = getActiveThread();
     return {
@@ -204,11 +236,26 @@ function getSubmitContext(batchId: string): SubmitContext {
   };
 }
 
+function getApprovalActions(s: ReturnType<typeof useStore.getState>, mode: SubmitContext['mode']) {
+  if (mode === 'workspace') {
+    return {
+      addTurn: s.addTurnToActiveWorkspaceThread,
+      setApproval: s.setApprovalInActiveWorkspaceThread,
+    };
+  }
+  if (mode === 'testing') {
+    return {
+      addTurn: s.addTurnToActiveThread,
+      setApproval: s.setApprovalInActiveThread,
+    };
+  }
+  return { addTurn: s.addTurn, setApproval: s.setApproval };
+}
+
 export async function handleApprove(batchId: string) {
   const ctx = getSubmitContext(batchId);
   const s = useStore.getState();
-  const addTurn = ctx.mode === 'testing' ? s.addTurnToActiveThread : s.addTurn;
-  const setApproval = ctx.mode === 'testing' ? s.setApprovalInActiveThread : s.setApproval;
+  const { addTurn, setApproval } = getApprovalActions(s, ctx.mode);
 
   if (!ctx.payload) {
     addTurn({
@@ -289,8 +336,7 @@ export async function handleApprove(batchId: string) {
 export function handleReject(batchId: string) {
   const ctx = getSubmitContext(batchId);
   const s = useStore.getState();
-  const addTurn = ctx.mode === 'testing' ? s.addTurnToActiveThread : s.addTurn;
-  const setApproval = ctx.mode === 'testing' ? s.setApprovalInActiveThread : s.setApproval;
+  const { addTurn, setApproval } = getApprovalActions(s, ctx.mode);
 
   setApproval(batchId, 'rejected');
   addTurn({
@@ -308,10 +354,11 @@ export function handleFormAnswer(
   freeText: string
 ) {
   const s = useStore.getState();
-  const isTestingMode = s.mode === 'testing';
 
   const patch = { answered: true, selected, freeTextValue: freeText };
-  if (isTestingMode) {
+  if (s.mode === 'workspace') {
+    s.updateTurnInActiveWorkspaceThread(turnId, patch as any);
+  } else if (s.mode === 'testing') {
     s.updateTurnInActiveThread(turnId, patch as any);
   } else {
     s.updateTurn(turnId, patch as any);
@@ -327,7 +374,9 @@ export function handleFormAnswer(
     submission = parts.join(', ');
   }
 
-  if (isTestingMode) {
+  if (s.mode === 'workspace') {
+    void runLLMWorkspace(submission);
+  } else if (s.mode === 'testing') {
     void runLLMTesting(submission);
   } else {
     void runLLM(submission);
@@ -638,6 +687,153 @@ export async function runLLMTesting(userText: string, opts?: ForcedArtifact) {
   } catch (e: any) {
     useStore.getState().updateTurnInActiveThread(agentId, {
       text: `_Couldn't reach the model. ${e?.message ?? 'unknown error'}._`,
+      streaming: false,
+    });
+  } finally {
+    useStore.getState().setStreaming(false);
+  }
+}
+
+// ─── Workspace mode: demo-like LLM but turns go to workspace thread ─────
+export async function runLLMWorkspace(userText: string, opts?: ForcedArtifact) {
+  const s = useStore.getState();
+  if (s.streaming) return;
+
+  const wsThread = getActiveWorkspaceThread();
+  if (!wsThread) return;
+
+  const displayText = opts
+    ? `/${opts.commandName}${userText ? ' ' + userText : ''}`
+    : userText;
+
+  const history = buildHistory(wsThread.turns);
+  s.addTurnToActiveWorkspaceThread({ id: newId('u'), kind: 'user', text: displayText });
+  s.setStreaming(true);
+
+  const agentId = newId('a');
+  s.addTurnToActiveWorkspaceThread({ id: agentId, kind: 'agent', text: '', streaming: true });
+
+  let acc = '';
+  const toolTurnIds: Record<string, string> = {};
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: s.tweaks.modelId,
+        userMessage: userText,
+        demoDataset: s.tweaks.demoDataset,
+        history,
+        ...(opts ? {
+          forcedKind: opts.forcedKind,
+          requirements: opts.requirements,
+          commandName: opts.commandName,
+        } : {}),
+      }),
+    });
+    if (!res.ok || !res.body) throw new Error('chat request failed');
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const json = line.slice(6).trim();
+        if (!json) continue;
+        let ev: any;
+        try { ev = JSON.parse(json); } catch { continue; }
+        if (ev.type === 'text') {
+          acc += ev.text;
+          useStore.getState().updateTurnInActiveWorkspaceThread(agentId, { text: acc, streaming: true });
+        } else if (ev.type === 'tool-call') {
+          const tid = newId('tl');
+          toolTurnIds[ev.id] = tid;
+          useStore.getState().addTurnToActiveWorkspaceThread({
+            id: tid,
+            kind: 'tools',
+            rows: [{ verb: 'EXEC', path: toolLabel(ev.name), filter: JSON.stringify(ev.input), status: '…', result: 'running' }],
+            pending: 0,
+          });
+        } else if (ev.type === 'tool-result') {
+          const tid = toolTurnIds[ev.id];
+          if (tid) {
+            useStore.getState().updateTurnInActiveWorkspaceThread(tid, {
+              rows: [{
+                verb: 'EXEC',
+                path: toolLabel(ev.name),
+                filter: JSON.stringify(ev.input),
+                status: ev.ok ? 'ok' : 'err',
+                result: ev.summary,
+              }],
+            } as Partial<Turn>);
+          }
+        } else if (ev.type === 'artifact') {
+          const artId = ev.kind === 'html'
+            ? `art_html_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
+            : `art_${ev.kind.replace('-', '_')}`;
+          useStore.getState().setArtifactsInActiveWorkspaceThread(prev =>
+            prev.find(p => p.id === artId) ? prev : [...prev, {
+              id: artId,
+              kind: ev.kind,
+              label: ev.label ?? ev.kind,
+              status: 'draft' as const,
+              version: 1,
+              createdBy: 'Coworker',
+              ...(ev.title ? { title: ev.title } : {}),
+              ...(ev.html ? { html: ev.html } : {}),
+              ...(ev.css ? { css: ev.css } : {}),
+              ...(ev.script ? { script: ev.script } : {}),
+              ...(ev.dataJson ? { dataJson: ev.dataJson } : {}),
+            }]
+          );
+          useStore.getState().setActiveArtifact(artId);
+          useStore.getState().addTurnToActiveWorkspaceThread({
+            id: newId('ac'),
+            kind: 'artifact-card',
+            artifactId: artId,
+            title: ev.title ?? ev.label ?? 'Artifact',
+            sub: (ev.sub ?? 'GENERATED').toUpperCase(),
+            meta: ev.meta ?? '',
+            icon: ev.icon ?? '◫',
+          });
+        } else if (ev.type === 'approval') {
+          const payload = ev.payload as ApprovalPayload;
+          useStore.getState().setApprovalPayloadInActiveWorkspaceThread(payload.batchId, payload);
+          useStore.getState().addTurnToActiveWorkspaceThread({
+            id: newId('ap'),
+            kind: 'approval',
+            payload,
+            simulated: ev.simulated === true,
+          });
+        } else if (ev.type === 'form-question') {
+          useStore.getState().updateTurnInActiveWorkspaceThread(agentId, { text: acc, streaming: false });
+          useStore.getState().addTurnToActiveWorkspaceThread({
+            id: newId('fq'),
+            kind: 'form-question',
+            question: ev.question,
+            options: ev.options,
+            multiSelect: ev.multiSelect,
+            freeText: ev.freeText,
+          });
+        } else if (ev.type === 'done') {
+          useStore.getState().updateTurnInActiveWorkspaceThread(agentId, { text: acc || ev.text || '', streaming: false });
+        } else if (ev.type === 'error') {
+          useStore.getState().updateTurnInActiveWorkspaceThread(agentId, {
+            text: (acc ? acc + '\n\n' : '') + formatErrorText(ev.message),
+            streaming: false,
+          });
+        }
+      }
+    }
+  } catch (e: any) {
+    useStore.getState().updateTurnInActiveWorkspaceThread(agentId, {
+      text: `_Couldn't reach the model. ${e?.message ?? 'unknown error'}. Set ANTHROPIC_API_KEY / GEMINI_API_KEY in .env.local and restart._`,
       streaming: false,
     });
   } finally {

@@ -6,6 +6,7 @@ import { CONNECTORS, SESSIONS } from '@/lib/data';
 import { useStore } from '@/lib/store';
 import { runFlow } from '@/lib/runtime';
 import { Icon } from './primitives/Icon';
+import { WorkspaceRailBody } from './WorkspaceRail';
 
 const DEMO_SANDBOX_ENV_ID = '__demo_sandbox__';
 
@@ -27,7 +28,9 @@ export function Rail({ onNewSession }: Props) {
   return (
     <aside className="rail">
       <div className="rail-top">
-        {mode === 'demo' ? (
+        {mode === 'workspace' ? (
+          <WorkspaceRailBody />
+        ) : mode === 'demo' ? (
           <DemoRailBody onNewSession={onNewSession} />
         ) : (
           <TestingRailBody />

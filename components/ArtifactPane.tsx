@@ -52,8 +52,12 @@ export function ArtifactPane() {
   const demoArtifacts = useStore(s => s.artifacts);
   const threads = useStore(s => s.testingThreads);
   const activeThreadId = useStore(s => s.activeTestingThreadId);
+  const workspaces = useStore(s => s.workspaces);
+  const activeWorkspaceId = useStore(s => s.activeWorkspaceId);
+  const activeWorkspaceThreadId = useStore(s => s.activeWorkspaceThreadId);
   const setDemoArtifacts = useStore(s => s.setArtifacts);
   const setThreadArtifacts = useStore(s => s.setArtifactsInActiveThread);
+  const setWsThreadArtifacts = useStore(s => s.setArtifactsInActiveWorkspaceThread);
 
   const active = useStore(s => s.activeArtifact);
   const setActive = useStore(s => s.setActiveArtifact);
@@ -63,7 +67,17 @@ export function ArtifactPane() {
   const [view, setView] = useState<ViewTab>('logic');
 
   const activeThread = threads.find(t => t.id === activeThreadId);
-  const artifacts = mode === 'testing' ? (activeThread?.artifacts ?? []) : demoArtifacts;
+  const activeWsThread = (() => {
+    if (!activeWorkspaceId || !activeWorkspaceThreadId) return undefined;
+    const ws = workspaces.find(w => w.id === activeWorkspaceId);
+    return ws?.threads.find(t => t.id === activeWorkspaceThreadId);
+  })();
+  const artifacts =
+    mode === 'workspace'
+      ? (activeWsThread?.artifacts ?? [])
+      : mode === 'testing'
+      ? (activeThread?.artifacts ?? [])
+      : demoArtifacts;
 
   const cur = artifacts.find(a => a.id === active);
   const isOpen = !!active;
@@ -74,7 +88,9 @@ export function ArtifactPane() {
   }, [active]);
 
   const closeOne = (id: string) => {
-    if (mode === 'testing') {
+    if (mode === 'workspace') {
+      setWsThreadArtifacts(prev => prev.filter(x => x.id !== id));
+    } else if (mode === 'testing') {
       setThreadArtifacts(prev => prev.filter(x => x.id !== id));
     } else {
       setDemoArtifacts(prev => prev.filter(x => x.id !== id));

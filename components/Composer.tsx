@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { DEMO_PROMPTS, LOGISTICS_DEMO_PROMPTS } from '@/lib/data';
 import { useStore } from '@/lib/store';
-import { runFlow, runLLM, runLLMTesting } from '@/lib/runtime';
+import { runFlow, runLLM, runLLMTesting, runLLMWorkspace } from '@/lib/runtime';
 import { ModelPicker } from './ModelPicker';
 import { matchSlashPrefix, parseSlash, type SlashCommand } from '@/lib/slashCommands';
 import { resolveComposerSubmit } from '@/lib/resolveComposerSubmit';
@@ -114,7 +114,7 @@ export function Composer() {
       body: composer,
       streaming,
       forcedCmd,
-      mode,
+      mode: mode === 'workspace' ? 'demo' : mode,
       demoDataset,
     });
 
@@ -128,7 +128,9 @@ export function Composer() {
       runFlow(action.flowId);
       return;
     }
-    if (mode === 'testing') {
+    if (mode === 'workspace') {
+      runLLMWorkspace(action.body, action.opts);
+    } else if (mode === 'testing') {
       runLLMTesting(action.body, action.opts);
     } else {
       runLLM(action.body, action.opts);

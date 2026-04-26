@@ -5,6 +5,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Turn } from './turns';
 import type { ArtifactKind, FlowStep } from './flows';
 import type { DatasetKey } from './data';
+import { SEED_WORKSPACES } from './data';
 import {
   DEFAULT_MODEL_ID,
   MODELS,
@@ -14,8 +15,27 @@ import {
   type Provider,
 } from './models';
 
-export type Mode = 'demo' | 'testing';
+export type Mode = 'demo' | 'testing' | 'workspace';
 export type BillProduct = 'ap' | 'se';
+export type WorkspaceView = 'workspaces' | 'history';
+
+export type WorkspaceFile = {
+  id: string;
+  name: string;
+  kind: 'spreadsheet' | 'document' | 'report' | 'analysis';
+  createdAt: number;
+  artifactId?: string;
+};
+
+export type Workspace = {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  createdAt: number;
+  threads: Thread[];
+  files: WorkspaceFile[];
+};
 
 // Shared approval state union. `undefined`/missing-key = no entry yet (pre-stage).
 // `'pending'` is set explicitly on rollback from `'submitting'`.
@@ -84,6 +104,12 @@ type State = {
   testingThreads: Thread[];
   activeTestingThreadId: string | null;
 
+  workspaces: Workspace[];
+  activeWorkspaceId: string | null;
+  activeWorkspaceThreadId: string | null;
+  workspaceView: WorkspaceView;
+  expandedWorkspaceIds: string[];
+
   setTweak: <K extends keyof Tweaks>(k: K, v: Tweaks[K]) => void;
   setSettingsStatus: (status: SettingsStatus | null) => void;
   setComposer: (s: string) => void;
@@ -112,6 +138,24 @@ type State = {
   setThreadBillEnv: (id: string, envId: string | undefined, product: BillProduct) => void;
   activateArtifact: (id: string) => void;
   acknowledgeArtifactDryRun: (id: string) => void;
+
+  setWorkspaceView: (v: WorkspaceView) => void;
+  newWorkspace: (name?: string) => string;
+  setActiveWorkspace: (id: string | null) => void;
+  deleteWorkspace: (id: string) => void;
+  renameWorkspace: (id: string, name: string) => void;
+  toggleWorkspaceExpanded: (id: string) => void;
+  newWorkspaceThread: (workspaceId: string, title?: string) => string;
+  setActiveWorkspaceThread: (workspaceId: string, threadId: string) => void;
+  addTurnToActiveWorkspaceThread: (t: Turn) => void;
+  updateTurnInActiveWorkspaceThread: (id: string, patch: Partial<Turn>) => void;
+  removeTurnsByKindInActiveWorkspaceThread: (kind: Turn['kind']) => void;
+  setArtifactsInActiveWorkspaceThread: (fn: (prev: Artifact[]) => Artifact[]) => void;
+  setApprovalInActiveWorkspaceThread: (batchId: string, state: ApprovalState) => void;
+  setApprovalPayloadInActiveWorkspaceThread: (batchId: string, payload: ApprovalPayload) => void;
+  deleteWorkspaceThread: (workspaceId: string, threadId: string) => void;
+  openWorkspaceArtifact: (workspaceId: string, threadId: string, artifactId: string) => void;
+  addWorkspaceFile: (workspaceId: string, file: WorkspaceFile) => void;
 };
 
 const WELCOME_TURN: Turn = {
@@ -163,9 +207,15 @@ export const useStore = create<State>()(
       composer: '',
       settingsStatus: null,
 
-      mode: 'demo',
+      mode: 'workspace',
       testingThreads: [],
       activeTestingThreadId: null,
+
+      workspaces: SEED_WORKSPACES,
+      activeWorkspaceId: null,
+      activeWorkspaceThreadId: null,
+      workspaceView: 'workspaces',
+      expandedWorkspaceIds: [],
 
       setTweak: (k, v) => set(s => ({ tweaks: { ...s.tweaks, [k]: v } })),
       setSettingsStatus: (settingsStatus) =>
@@ -314,6 +364,19 @@ export const useStore = create<State>()(
         set(s => {
           const patch = (a: Artifact) =>
             a.id === id ? { ...a, status: 'active' as ArtifactStatus, version: (a.version || 1) + 1 } : a;
+          if (s.mode === 'workspace' && s.activeWorkspaceId && s.activeWorkspaceThreadId) {
+            return {
+              workspaces: s.workspaces.map(w =>
+                w.id === s.activeWorkspaceId
+                  ? { ...w, threads: w.threads.map(th =>
+                      th.id === s.activeWorkspaceThreadId
+                        ? { ...th, artifacts: th.artifacts.map(patch) }
+                        : th
+                    ) }
+                  : w
+              ),
+            };
+          }
           if (s.mode === 'testing' && s.activeTestingThreadId) {
             return {
               testingThreads: s.testingThreads.map(th =>
@@ -330,6 +393,19 @@ export const useStore = create<State>()(
         set(s => {
           const patch = (a: Artifact) =>
             a.id === id ? { ...a, dryRunAcknowledged: true } : a;
+          if (s.mode === 'workspace' && s.activeWorkspaceId && s.activeWorkspaceThreadId) {
+            return {
+              workspaces: s.workspaces.map(w =>
+                w.id === s.activeWorkspaceId
+                  ? { ...w, threads: w.threads.map(th =>
+                      th.id === s.activeWorkspaceThreadId
+                        ? { ...th, artifacts: th.artifacts.map(patch) }
+                        : th
+                    ) }
+                  : w
+              ),
+            };
+          }
           if (s.mode === 'testing' && s.activeTestingThreadId) {
             return {
               testingThreads: s.testingThreads.map(th =>
@@ -341,11 +417,229 @@ export const useStore = create<State>()(
           }
           return { artifacts: s.artifacts.map(patch) };
         }),
+
+      setWorkspaceView: (workspaceView) => set({ workspaceView }),
+
+      newWorkspace: (name) => {
+        const id = `ws_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+        const ws: Workspace = {
+          id,
+          name: name?.trim() || 'New workspace',
+          icon: '📁',
+          color: 'oklch(0.78 0.06 195)',
+          createdAt: Date.now(),
+          threads: [],
+          files: [],
+        };
+        set(s => ({
+          workspaces: [...s.workspaces, ws],
+          activeWorkspaceId: id,
+          expandedWorkspaceIds: [...s.expandedWorkspaceIds, id],
+        }));
+        return id;
+      },
+
+      setActiveWorkspace: (id) =>
+        set({ activeWorkspaceId: id, activeWorkspaceThreadId: null, activeArtifact: null }),
+
+      deleteWorkspace: (id) =>
+        set(s => ({
+          workspaces: s.workspaces.filter(w => w.id !== id),
+          activeWorkspaceId: s.activeWorkspaceId === id ? null : s.activeWorkspaceId,
+          activeWorkspaceThreadId:
+            s.activeWorkspaceId === id ? null : s.activeWorkspaceThreadId,
+          expandedWorkspaceIds: s.expandedWorkspaceIds.filter(x => x !== id),
+        })),
+
+      renameWorkspace: (id, name) =>
+        set(s => ({
+          workspaces: s.workspaces.map(w =>
+            w.id === id ? { ...w, name: name.trim() || 'Untitled workspace' } : w
+          ),
+        })),
+
+      toggleWorkspaceExpanded: (id) =>
+        set(s => {
+          const has = s.expandedWorkspaceIds.includes(id);
+          return {
+            expandedWorkspaceIds: has
+              ? s.expandedWorkspaceIds.filter(x => x !== id)
+              : [...s.expandedWorkspaceIds, id],
+          };
+        }),
+
+      newWorkspaceThread: (workspaceId, title) => {
+        const thread = createThread(title);
+        set(s => ({
+          workspaces: s.workspaces.map(w =>
+            w.id === workspaceId ? { ...w, threads: [...w.threads, thread] } : w
+          ),
+          activeWorkspaceId: workspaceId,
+          activeWorkspaceThreadId: thread.id,
+          expandedWorkspaceIds: s.expandedWorkspaceIds.includes(workspaceId)
+            ? s.expandedWorkspaceIds
+            : [...s.expandedWorkspaceIds, workspaceId],
+        }));
+        return thread.id;
+      },
+
+      setActiveWorkspaceThread: (workspaceId, threadId) =>
+        set({
+          activeWorkspaceId: workspaceId,
+          activeWorkspaceThreadId: threadId,
+          activeArtifact: null,
+        }),
+
+      addTurnToActiveWorkspaceThread: (t) =>
+        set(s => {
+          if (!s.activeWorkspaceId || !s.activeWorkspaceThreadId) return s;
+          return {
+            workspaces: s.workspaces.map(w =>
+              w.id === s.activeWorkspaceId
+                ? {
+                    ...w,
+                    threads: w.threads.map(th =>
+                      th.id === s.activeWorkspaceThreadId
+                        ? { ...th, turns: [...th.turns, t] }
+                        : th
+                    ),
+                  }
+                : w
+            ),
+          };
+        }),
+
+      updateTurnInActiveWorkspaceThread: (id, patch) =>
+        set(s => {
+          if (!s.activeWorkspaceId || !s.activeWorkspaceThreadId) return s;
+          return {
+            workspaces: s.workspaces.map(w =>
+              w.id === s.activeWorkspaceId
+                ? {
+                    ...w,
+                    threads: w.threads.map(th =>
+                      th.id === s.activeWorkspaceThreadId
+                        ? {
+                            ...th,
+                            turns: th.turns.map(t =>
+                              t.id === id ? ({ ...t, ...patch } as Turn) : t
+                            ),
+                          }
+                        : th
+                    ),
+                  }
+                : w
+            ),
+          };
+        }),
+
+      removeTurnsByKindInActiveWorkspaceThread: (kind) =>
+        set(s => {
+          if (!s.activeWorkspaceId || !s.activeWorkspaceThreadId) return s;
+          return {
+            workspaces: s.workspaces.map(w =>
+              w.id === s.activeWorkspaceId
+                ? {
+                    ...w,
+                    threads: w.threads.map(th =>
+                      th.id === s.activeWorkspaceThreadId
+                        ? { ...th, turns: th.turns.filter(t => t.kind !== kind) }
+                        : th
+                    ),
+                  }
+                : w
+            ),
+          };
+        }),
+
+      setArtifactsInActiveWorkspaceThread: (fn) =>
+        set(s => {
+          if (!s.activeWorkspaceId || !s.activeWorkspaceThreadId) return s;
+          return {
+            workspaces: s.workspaces.map(w =>
+              w.id === s.activeWorkspaceId
+                ? {
+                    ...w,
+                    threads: w.threads.map(th =>
+                      th.id === s.activeWorkspaceThreadId
+                        ? { ...th, artifacts: fn(th.artifacts) }
+                        : th
+                    ),
+                  }
+                : w
+            ),
+          };
+        }),
+
+      setApprovalInActiveWorkspaceThread: (batchId, state) =>
+        set(s => {
+          if (!s.activeWorkspaceId || !s.activeWorkspaceThreadId) return s;
+          return {
+            workspaces: s.workspaces.map(w =>
+              w.id === s.activeWorkspaceId
+                ? {
+                    ...w,
+                    threads: w.threads.map(th =>
+                      th.id === s.activeWorkspaceThreadId
+                        ? { ...th, approvalStates: { ...(th.approvalStates ?? {}), [batchId]: state } }
+                        : th
+                    ),
+                  }
+                : w
+            ),
+          };
+        }),
+
+      setApprovalPayloadInActiveWorkspaceThread: (batchId, payload) =>
+        set(s => {
+          if (!s.activeWorkspaceId || !s.activeWorkspaceThreadId) return s;
+          return {
+            workspaces: s.workspaces.map(w =>
+              w.id === s.activeWorkspaceId
+                ? {
+                    ...w,
+                    threads: w.threads.map(th =>
+                      th.id === s.activeWorkspaceThreadId
+                        ? { ...th, approvalPayloads: { ...(th.approvalPayloads ?? {}), [batchId]: payload } }
+                        : th
+                    ),
+                  }
+                : w
+            ),
+          };
+        }),
+
+      deleteWorkspaceThread: (workspaceId, threadId) =>
+        set(s => ({
+          workspaces: s.workspaces.map(w =>
+            w.id === workspaceId
+              ? { ...w, threads: w.threads.filter(t => t.id !== threadId) }
+              : w
+          ),
+          activeWorkspaceThreadId:
+            s.activeWorkspaceId === workspaceId && s.activeWorkspaceThreadId === threadId
+              ? null
+              : s.activeWorkspaceThreadId,
+          activeArtifact:
+            s.activeWorkspaceId === workspaceId && s.activeWorkspaceThreadId === threadId
+              ? null
+              : s.activeArtifact,
+        })),
+
+      openWorkspaceArtifact: (workspaceId, threadId, artifactId) =>
+        set({ activeWorkspaceId: workspaceId, activeWorkspaceThreadId: threadId, activeArtifact: artifactId }),
+
+      addWorkspaceFile: (workspaceId, file) =>
+        set(s => ({
+          workspaces: s.workspaces.map(w =>
+            w.id === workspaceId ? { ...w, files: [...w.files, file] } : w
+          ),
+        })),
     }),
     {
       name: 'bcw:state',
       storage: createJSONStorage(() => localStorage),
-      version: 4,
+      version: 5,
       migrate: (persisted: any, fromVersion: number) => {
         if (persisted && fromVersion < 2) {
           persisted.tweaks = { ...DEFAULT_TWEAKS, ...(persisted.tweaks ?? {}) };
@@ -356,6 +650,15 @@ export const useStore = create<State>()(
           persisted.tweaks.modelId =
             legacy === 'gemini' ? (firstGemini ?? DEFAULT_MODEL_ID) : DEFAULT_MODEL_ID;
           delete persisted.tweaks.provider;
+        }
+        if (persisted && fromVersion < 5) {
+          // Workspace mode introduced at v5. Default new users into workspace mode.
+          persisted.mode = 'workspace';
+          persisted.workspaces = persisted.workspaces ?? [];
+          persisted.activeWorkspaceId = null;
+          persisted.activeWorkspaceThreadId = null;
+          persisted.workspaceView = 'workspaces';
+          persisted.expandedWorkspaceIds = [];
         }
         return persisted;
       },
@@ -371,6 +674,17 @@ export const useStore = create<State>()(
           return rest;
         }),
         activeTestingThreadId: s.activeTestingThreadId,
+        workspaces: s.workspaces.map(w => ({
+          ...w,
+          threads: w.threads.map(t => {
+            const { approvalPayloads: _strip, ...rest } = t;
+            return rest;
+          }),
+        })),
+        activeWorkspaceId: s.activeWorkspaceId,
+        activeWorkspaceThreadId: s.activeWorkspaceThreadId,
+        workspaceView: s.workspaceView,
+        expandedWorkspaceIds: s.expandedWorkspaceIds,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
@@ -382,6 +696,19 @@ export const useStore = create<State>()(
         }));
         // Root approvalPayloads is intentionally not persisted — rehydrate empty.
         state.approvalPayloads = state.approvalPayloads ?? {};
+        // Workspaces: rehydrate approvalPayloads on each thread, seed if empty.
+        const workspaces = (state.workspaces ?? []).map((w: any) => ({
+          ...w,
+          files: w.files ?? [],
+          threads: (w.threads ?? []).map((t: any) => ({
+            ...t,
+            approvalPayloads: t.approvalPayloads ?? {},
+            approvalStates: t.approvalStates ?? {},
+          })),
+        }));
+        state.workspaces = workspaces.length > 0 ? workspaces : SEED_WORKSPACES;
+        state.expandedWorkspaceIds = state.expandedWorkspaceIds ?? [];
+        state.workspaceView = state.workspaceView ?? 'workspaces';
       },
     }
   )
@@ -391,4 +718,17 @@ export function getActiveThread(): Thread | undefined {
   const s = useStore.getState();
   if (!s.activeTestingThreadId) return undefined;
   return s.testingThreads.find(t => t.id === s.activeTestingThreadId);
+}
+
+export function getActiveWorkspace(): Workspace | undefined {
+  const s = useStore.getState();
+  if (!s.activeWorkspaceId) return undefined;
+  return s.workspaces.find(w => w.id === s.activeWorkspaceId);
+}
+
+export function getActiveWorkspaceThread(): Thread | undefined {
+  const s = useStore.getState();
+  if (!s.activeWorkspaceId || !s.activeWorkspaceThreadId) return undefined;
+  const ws = s.workspaces.find(w => w.id === s.activeWorkspaceId);
+  return ws?.threads.find(t => t.id === s.activeWorkspaceThreadId);
 }

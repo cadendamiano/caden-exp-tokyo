@@ -1,3 +1,5 @@
+import type { Workspace } from './store';
+
 export type Vendor = {
   id: string;
   name: string;
@@ -840,3 +842,121 @@ export const LOGISTICS_DATA = {
 export function getDataset(d?: DatasetKey) {
   return d === 'logistics' ? LOGISTICS_DATA : DEFAULT_DATA;
 }
+
+const WS_SEED_BASE = 1714000000000;
+
+export const SEED_WORKSPACES: Workspace[] = [
+  {
+    id: 'ws_seed_q1_budget',
+    name: 'Q1 Budget Review',
+    icon: '📊',
+    color: 'oklch(0.78 0.10 195)',
+    createdAt: WS_SEED_BASE,
+    threads: [
+      {
+        id: 'thr_seed_q1_variance',
+        title: 'March variance analysis',
+        createdAt: WS_SEED_BASE + 1000,
+        turns: [],
+        artifacts: [{
+          id: 'art_seed_q1_chart',
+          kind: 'spend-chart',
+          label: 'Q1 Variance by Dept',
+          status: 'active',
+          version: 1,
+          createdBy: 'agent',
+        }],
+        selectedBills: [],
+        approvalStates: {},
+        approvalPayloads: {},
+        billProduct: 'ap',
+      },
+      {
+        id: 'thr_seed_q1_headcount',
+        title: 'Headcount cost model',
+        createdAt: WS_SEED_BASE + 2000,
+        turns: [],
+        artifacts: [],
+        selectedBills: [],
+        approvalStates: {},
+        approvalPayloads: {},
+        billProduct: 'ap',
+      },
+    ],
+    files: [
+      {
+        id: 'wsf_seed_q1_workbook',
+        name: 'Q1_Budget_Workbook.xlsx',
+        kind: 'spreadsheet',
+        createdAt: WS_SEED_BASE,
+      },
+    ],
+  },
+  {
+    id: 'ws_seed_ap_march',
+    name: 'AP – March Close',
+    icon: '📋',
+    color: 'oklch(0.80 0.08 70)',
+    createdAt: WS_SEED_BASE + 3000,
+    threads: [
+      {
+        id: 'thr_seed_ap_recon',
+        title: 'Vendor reconciliation',
+        createdAt: WS_SEED_BASE + 4000,
+        turns: [],
+        artifacts: [{
+          id: 'art_seed_ap_aging',
+          kind: 'ap-table',
+          label: 'AP Aging Report',
+          status: 'active',
+          version: 1,
+          createdBy: 'agent',
+        }],
+        selectedBills: [],
+        approvalStates: {},
+        approvalPayloads: {},
+        billProduct: 'ap',
+      },
+      {
+        id: 'thr_seed_ap_accruals',
+        title: 'Accruals review',
+        createdAt: WS_SEED_BASE + 5000,
+        turns: [],
+        artifacts: [],
+        selectedBills: [],
+        approvalStates: {},
+        approvalPayloads: {},
+        billProduct: 'ap',
+      },
+    ],
+    files: [
+      {
+        id: 'wsf_seed_ap_close',
+        name: 'March_AP_Close.xlsx',
+        kind: 'spreadsheet',
+        createdAt: WS_SEED_BASE + 3000,
+      },
+    ],
+  },
+  {
+    id: 'ws_seed_fpa_monthly',
+    name: 'FP&A Monthly',
+    icon: '📈',
+    color: 'oklch(0.80 0.10 155)',
+    createdAt: WS_SEED_BASE + 6000,
+    threads: [
+      {
+        id: 'thr_seed_fpa_revenue',
+        title: 'Revenue forecast update',
+        createdAt: WS_SEED_BASE + 7000,
+        turns: [],
+        artifacts: [],
+        selectedBills: [],
+        approvalStates: {},
+        approvalPayloads: {},
+        billProduct: 'ap',
+      },
+    ],
+    files: [],
+  },
+];

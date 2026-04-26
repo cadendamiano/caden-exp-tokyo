@@ -207,15 +207,15 @@ describe('removeTurnsByKind', () => {
 
 describe('setArtifacts', () => {
   it('appends a new artifact via updater function', () => {
-    useStore.getState().setArtifacts(prev => [...prev, { id: 'a1', kind: 'ap-table', label: 'Test' }]);
+    useStore.getState().setArtifacts(prev => [...prev, { id: 'a1', kind: 'ap-table', label: 'Test', status: 'active', version: 1, createdBy: 'agent' }]);
     expect(useStore.getState().artifacts).toHaveLength(1);
     expect(useStore.getState().artifacts[0].id).toBe('a1');
   });
 
   it('can filter artifacts via updater', () => {
     useStore.getState().setArtifacts(() => [
-      { id: 'a1', kind: 'ap-table', label: 'Keep' },
-      { id: 'a2', kind: 'spend-chart', label: 'Remove' },
+      { id: 'a1', kind: 'ap-table', label: 'Keep', status: 'active', version: 1, createdBy: 'agent' },
+      { id: 'a2', kind: 'spend-chart', label: 'Remove', status: 'active', version: 1, createdBy: 'agent' },
     ]);
     useStore.getState().setArtifacts(prev => prev.filter(a => a.id !== 'a2'));
     expect(useStore.getState().artifacts).toHaveLength(1);
@@ -439,7 +439,7 @@ describe('rehydrate normalizer', () => {
 describe('reset', () => {
   it('clears turns, artifacts, selections, and approvals', () => {
     useStore.getState().addTurn({ id: 'u1', kind: 'user', text: 'msg' });
-    useStore.getState().setArtifacts(() => [{ id: 'a1', kind: 'ap-table', label: 'x' }]);
+    useStore.getState().setArtifacts(() => [{ id: 'a1', kind: 'ap-table', label: 'x', status: 'active', version: 1, createdBy: 'agent' }]);
     useStore.getState().toggleBill('bll_001');
     useStore.getState().setApproval('btch_001', 'approved');
     useStore.getState().setStreaming(true);

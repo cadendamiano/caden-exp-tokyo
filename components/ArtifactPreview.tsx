@@ -228,7 +228,7 @@ export function ArtifactPreview({ artifact }: Props) {
   useEffect(() => {
     setLoading(true);
     const thread = getActiveThread();
-    fetchPreview(artifact.kind, mode, thread?.billEnvId, thread?.billProduct, demoDataset)
+    fetchPreview(artifact.kind, mode === 'workspace' ? 'demo' : mode, thread?.billEnvId, thread?.billProduct, demoDataset)
       .then(r => {
         setResult(r);
         setLoading(false);
