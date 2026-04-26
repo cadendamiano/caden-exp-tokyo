@@ -2,13 +2,15 @@ import { matchFlow } from './flows';
 import type { DatasetKey } from './data';
 import type { SlashCommand } from './slashCommands';
 import type { ForcedArtifact } from './runtime';
+import { isShortcut, expandPrompt, buildShortcutSystemPrompt, type Shortcut } from './shortcuts';
 
 export type ComposerSubmitState = {
   body: string;
   streaming: boolean;
-  forcedCmd: SlashCommand | null;
+  forcedCmd: SlashCommand | Shortcut | null;
   mode: 'demo' | 'testing';
   demoDataset: DatasetKey;
+  variableValues?: Record<string, string>;
 };
 
 export type ComposerSubmitAction =
@@ -33,19 +35,35 @@ export function resolveComposerSubmit(s: ComposerSubmitState): ComposerSubmitAct
 
   const body = s.body.trim();
 
+  if (s.forcedCmd && isShortcut(s.forcedCmd)) {
+    const sc = s.forcedCmd;
+    const expanded = expandPrompt(sc.prompt, s.variableValues ?? {});
+    const sysPrompt = buildShortcutSystemPrompt(sc, expanded);
+    return {
+      kind: 'llm',
+      body: body || expanded,
+      opts: {
+        commandName: sc.name,
+        shortcutAllowedTools: sc.allowedTools.length > 0 ? sc.allowedTools : undefined,
+        shortcutSystemPrompt: sysPrompt,
+      },
+    };
+  }
+
   if (s.forcedCmd) {
+    const cmd = s.forcedCmd as SlashCommand;
     const forceLlm =
-      s.forcedCmd.name === 'dataviz' && wantsCustomViz(body);
+      cmd.name === 'dataviz' && wantsCustomViz(body);
     if (s.mode === 'demo' && !forceLlm) {
-      return { kind: 'flow', flowId: s.forcedCmd.demoFlowId };
+      return { kind: 'flow', flowId: cmd.demoFlowId };
     }
     return {
       kind: 'llm',
       body,
       opts: {
-        forcedKind: s.forcedCmd.kind,
-        requirements: s.forcedCmd.requirements,
-        commandName: s.forcedCmd.name,
+        forcedKind: cmd.kind,
+        requirements: cmd.requirements,
+        commandName: cmd.name,
       },
     };
   }

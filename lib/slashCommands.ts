@@ -1,4 +1,5 @@
 import type { ArtifactKind, FlowId } from './flows';
+import type { Shortcut } from './shortcuts';
 
 export type SlashCommand = {
   name: string;
@@ -107,7 +108,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
   },
 ] as const;
 
-const SLASH_REGEX = /^\/([a-z0-9]+)(?:\s+([\s\S]*))?$/i;
+const SLASH_REGEX = /^\/([a-z0-9-]+)(?:\s+([\s\S]*))?$/i;
 
 function findByNameOrAlias(token: string): SlashCommand | undefined {
   const low = token.toLowerCase();
@@ -134,6 +135,34 @@ export function matchSlashPrefix(token: string): SlashCommand[] {
       c.name.startsWith(low) ||
       c.aliases.some(a => a.startsWith(low))
   );
+}
+
+export function parseSlashWithShortcuts(
+  text: string,
+  shortcuts: Shortcut[]
+): { cmd: SlashCommand | Shortcut; body: string } | null {
+  if (!text) return null;
+  const match = SLASH_REGEX.exec(text);
+  if (!match) return null;
+  const low = match[1].toLowerCase();
+  const builtin = findByNameOrAlias(low);
+  const body = (match[2] ?? '').trim();
+  if (builtin) return { cmd: builtin, body };
+  const sc = shortcuts.find(s => s.name === low);
+  if (sc) return { cmd: sc, body };
+  return null;
+}
+
+export function matchSlashPrefixWithShortcuts(
+  token: string,
+  shortcuts: Shortcut[]
+): (SlashCommand | Shortcut)[] {
+  const builtin = matchSlashPrefix(token);
+  const low = token.toLowerCase();
+  const scMatches = !low
+    ? [...shortcuts]
+    : shortcuts.filter(s => s.name.startsWith(low));
+  return [...builtin, ...scMatches];
 }
 
 export function requirementsPrompt(cmd: SlashCommand): string {
