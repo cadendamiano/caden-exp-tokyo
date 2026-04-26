@@ -207,8 +207,8 @@ function getSubmitContext(batchId: string): SubmitContext {
   return {
     mode: s.mode,
     payload: wsThread?.approvalPayloads?.[batchId],
-    billEnvId: wsThread?.billEnvId,
-    billProduct: wsThread?.billProduct,
+    billEnvId: wsThread?.billEnvId ?? s.tweaks.defaultBillEnvId,
+    billProduct: wsThread?.billProduct ?? s.tweaks.defaultBillProduct,
     demoDataset: s.tweaks.demoDataset,
   };
 }
@@ -355,12 +355,15 @@ export async function runLLM(userText: string, opts?: ForcedArtifact) {
     ? `/${opts.commandName}${userText ? ' ' + userText : ''}`
     : userText;
 
-  if (s.mode === 'testing' && !wsThread.billEnvId) {
+  const effectiveBillEnvId = wsThread.billEnvId ?? s.tweaks.defaultBillEnvId;
+  const effectiveBillProduct = wsThread.billProduct ?? s.tweaks.defaultBillProduct;
+
+  if (s.mode === 'testing' && !effectiveBillEnvId) {
     s.addTurnToActiveWorkspaceThread({ id: newId('u'), kind: 'user', text: displayText });
     s.addTurnToActiveWorkspaceThread({
       id: newId('a'),
       kind: 'agent',
-      text: 'Pick a Bill environment for this thread in the Rail before sending a prompt.',
+      text: 'No Bill environment configured. Set a default sandbox in Settings (Cmd+K) or pick one for this thread in the Rail.',
     });
     return;
   }
@@ -387,8 +390,8 @@ export async function runLLM(userText: string, opts?: ForcedArtifact) {
         ...(s.mode === 'testing'
           ? {
               mode: 'testing',
-              billEnvId: wsThread.billEnvId,
-              billProduct: wsThread.billProduct ?? 'ap',
+              billEnvId: effectiveBillEnvId,
+              billProduct: effectiveBillProduct ?? 'ap',
             }
           : {}),
         ...(opts ? {
@@ -501,7 +504,7 @@ export async function runLLM(userText: string, opts?: ForcedArtifact) {
     }
   } catch (e: any) {
     useStore.getState().updateTurnInActiveWorkspaceThread(agentId, {
-      text: `_Couldn't reach the model: ${e?.message ?? 'unknown error'}. Check your API key in Settings._`,
+      text: `_Couldn't reach the model. ${e?.message ?? 'unknown error'}. Set ANTHROPIC_API_KEY / GEMINI_API_KEY in .env.local and restart._`,
       streaming: false,
     });
   } finally {

@@ -81,9 +81,6 @@ function toDraft(env: BillEnvView): BillDraft {
   };
 }
 
-type TestState = { status: 'idle' | 'testing' | 'ok' | 'error'; message?: string };
-
-const IDLE_TEST: TestState = { status: 'idle' };
 
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const mode = useStore(s => s.mode);
@@ -107,8 +104,6 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
-  const [anthropicTest, setAnthropicTest] = useState<TestState>(IDLE_TEST);
-  const [geminiTest, setGeminiTest] = useState<TestState>(IDLE_TEST);
 
   useEffect(() => {
     let cancelled = false;
@@ -170,8 +165,6 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
       setView(next);
       setDrafts(next.billEnvironments.map(toDraft));
       publishStatus(next);
-      if (anthropicInput.length > 0) setAnthropicTest(IDLE_TEST);
-      if (geminiInput.length > 0) setGeminiTest(IDLE_TEST);
       setAnthropicInput('');
       setGeminiInput('');
       setSavedAt(Date.now());
@@ -179,26 +172,6 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
       setError(e?.message ?? 'Save failed');
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function testProvider(which: 'anthropic' | 'gemini') {
-    const setter = which === 'anthropic' ? setAnthropicTest : setGeminiTest;
-    setter({ status: 'testing' });
-    try {
-      const res = await fetch('/api/settings/test', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ provider: which }),
-      });
-      const data = (await res.json()) as { ok: boolean; error?: string };
-      if (data.ok) {
-        setter({ status: 'ok', message: 'Connected' });
-      } else {
-        setter({ status: 'error', message: data.error ?? 'Failed' });
-      }
-    } catch (e: any) {
-      setter({ status: 'error', message: e?.message ?? 'Failed' });
     }
   }
 
@@ -216,13 +189,8 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
       const next = (await res.json()) as SettingsView;
       setView(next);
       publishStatus(next);
-      if (which === 'anthropic') {
-        setAnthropicInput('');
-        setAnthropicTest(IDLE_TEST);
-      } else {
-        setGeminiInput('');
-        setGeminiTest(IDLE_TEST);
-      }
+      if (which === 'anthropic') setAnthropicInput('');
+      else setGeminiInput('');
     } catch (e: any) {
       setError(e?.message ?? 'Clear failed');
     } finally {
@@ -347,23 +315,13 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                 spellCheck={false}
               />
               {view.anthropic.configured && (
-                <div className="settings-actions">
-                  <button
-                    className="settings-link"
-                    onClick={() => testProvider('anthropic')}
-                    disabled={saving || anthropicTest.status === 'testing'}
-                  >
-                    {anthropicTest.status === 'testing' ? 'Testing…' : 'Test'}
-                  </button>
-                  <button
-                    className="settings-link"
-                    onClick={() => clearProvider('anthropic')}
-                    disabled={saving}
-                  >
-                    Clear
-                  </button>
-                  <TestResult state={anthropicTest} />
-                </div>
+                <button
+                  className="settings-link"
+                  onClick={() => clearProvider('anthropic')}
+                  disabled={saving}
+                >
+                  Clear
+                </button>
               )}
             </section>
 
@@ -382,23 +340,13 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                 spellCheck={false}
               />
               {view.gemini.configured && (
-                <div className="settings-actions">
-                  <button
-                    className="settings-link"
-                    onClick={() => testProvider('gemini')}
-                    disabled={saving || geminiTest.status === 'testing'}
-                  >
-                    {geminiTest.status === 'testing' ? 'Testing…' : 'Test'}
-                  </button>
-                  <button
-                    className="settings-link"
-                    onClick={() => clearProvider('gemini')}
-                    disabled={saving}
-                  >
-                    Clear
-                  </button>
-                  <TestResult state={geminiTest} />
-                </div>
+                <button
+                  className="settings-link"
+                  onClick={() => clearProvider('gemini')}
+                  disabled={saving}
+                >
+                  Clear
+                </button>
               )}
             </section>
 
@@ -552,12 +500,3 @@ function StatusPill({ configured }: { configured: boolean }) {
   );
 }
 
-function TestResult({ state }: { state: TestState }) {
-  if (state.status === 'ok') {
-    return <span className="settings-test-ok">{state.message ?? 'Connected'}</span>;
-  }
-  if (state.status === 'error') {
-    return <span className="settings-test-error">{state.message ?? 'Failed'}</span>;
-  }
-  return null;
-}
