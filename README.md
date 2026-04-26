@@ -1,4 +1,4 @@
-# caden-exp-tokyo
+# exp-tokyo
 
 Personal experiment, tinkering in progress.
 
