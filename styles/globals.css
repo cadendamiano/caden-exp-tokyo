@@ -1044,6 +1044,17 @@ input, textarea, select{ font-family: inherit; color: inherit; }
 }
 .settings-link:disabled{ opacity: 0.5; cursor: default; }
 .settings-link:hover:not(:disabled){ text-decoration: underline; }
+.settings-actions{
+  display: flex; align-items: center; gap: 10px;
+  flex-wrap: wrap;
+}
+.settings-test-ok{
+  font-family: var(--mono); font-size: 10.5px; color: var(--pos);
+}
+.settings-test-error{
+  font-family: var(--mono); font-size: 10.5px; color: var(--neg);
+  white-space: normal; overflow-wrap: anywhere;
+}
 .settings-empty{
   font-family: var(--mono); font-size: 11px; color: var(--ink-4);
   padding: 4px 2px;
