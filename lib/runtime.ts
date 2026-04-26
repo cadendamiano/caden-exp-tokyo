@@ -35,9 +35,11 @@ function buildHistory(turns: Turn[], maxTurns = 10): HistoryTurn[] {
 }
 
 export type ForcedArtifact = {
-  forcedKind: ArtifactKind;
-  requirements: string[];
+  forcedKind?: ArtifactKind;
+  requirements?: string[];
   commandName: string;
+  shortcutAllowedTools?: string[];
+  shortcutSystemPrompt?: string;
 };
 
 function speedMult(s: 'fast' | 'normal' | 'slow') {
@@ -415,6 +417,8 @@ export async function runLLM(userText: string, opts?: ForcedArtifact) {
           forcedKind: opts.forcedKind,
           requirements: opts.requirements,
           commandName: opts.commandName,
+          shortcutAllowedTools: opts.shortcutAllowedTools,
+          shortcutSystemPrompt: opts.shortcutSystemPrompt,
         } : {}),
       }),
     });
@@ -582,6 +586,8 @@ export async function runLLMTesting(userText: string, opts?: ForcedArtifact) {
           forcedKind: opts.forcedKind,
           requirements: opts.requirements,
           commandName: opts.commandName,
+          shortcutAllowedTools: opts.shortcutAllowedTools,
+          shortcutSystemPrompt: opts.shortcutSystemPrompt,
         } : {}),
       }),
     });
@@ -729,6 +735,8 @@ export async function runLLMWorkspace(userText: string, opts?: ForcedArtifact) {
           forcedKind: opts.forcedKind,
           requirements: opts.requirements,
           commandName: opts.commandName,
+          shortcutAllowedTools: opts.shortcutAllowedTools,
+          shortcutSystemPrompt: opts.shortcutSystemPrompt,
         } : {}),
       }),
     });

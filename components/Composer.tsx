@@ -5,11 +5,12 @@ import { DEMO_PROMPTS, LOGISTICS_DEMO_PROMPTS } from '@/lib/data';
 import { useStore } from '@/lib/store';
 import { runFlow, runLLM, runLLMTesting, runLLMWorkspace } from '@/lib/runtime';
 import { ModelPicker } from './ModelPicker';
-import { matchSlashPrefix, parseSlash, type SlashCommand } from '@/lib/slashCommands';
+import { matchSlashPrefixWithShortcuts, parseSlashWithShortcuts } from '@/lib/slashCommands';
+import { isShortcut, type MenuItem } from '@/lib/shortcuts';
 import { resolveComposerSubmit } from '@/lib/resolveComposerSubmit';
 import { SlashMenu } from './SlashMenu';
 
-const SLASH_PREFIX_RE = /^\/([a-z0-9]*)$/i;
+const SLASH_PREFIX_RE = /^\/([a-z0-9-]*)$/i;
 
 export function Composer() {
   const composer = useStore(s => s.composer);
@@ -22,9 +23,10 @@ export function Composer() {
   const setSettingsStatus = useStore(s => s.setSettingsStatus);
   const setTweak = useStore(s => s.setTweak);
   const activeTestingThreadId = useStore(s => s.activeTestingThreadId);
+  const shortcuts = useStore(s => s.shortcuts);
   const ref = useRef<HTMLTextAreaElement>(null);
 
-  const [forcedCmd, setForcedCmd] = useState<SlashCommand | null>(null);
+  const [forcedCmd, setForcedCmd] = useState<MenuItem | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuQuery, setMenuQuery] = useState('');
   const [menuIndex, setMenuIndex] = useState(0);
@@ -87,7 +89,7 @@ export function Composer() {
     }
 
     // Space after a recognized slash → lock in the command.
-    const parsed = parseSlash(value);
+    const parsed = parseSlashWithShortcuts(value, shortcuts);
     if (parsed && / /.test(value)) {
       setForcedCmd(parsed.cmd);
       setMenuOpen(false);
@@ -98,7 +100,7 @@ export function Composer() {
     setMenuOpen(false);
   };
 
-  const selectCommand = (cmd: SlashCommand) => {
+  const selectCommand = (cmd: MenuItem) => {
     setForcedCmd(cmd);
     setMenuOpen(false);
     setComposer('');
@@ -139,7 +141,7 @@ export function Composer() {
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (menuOpen) {
-      const matches = matchSlashPrefix(menuQuery);
+      const matches = matchSlashPrefixWithShortcuts(menuQuery, shortcuts);
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         if (matches.length > 0) setMenuIndex(i => (i + 1) % matches.length);
@@ -218,7 +220,9 @@ export function Composer() {
                 ×
               </button>
             </span>
-            <span className="composer-forced-hint">{forcedCmd.hint}</span>
+            <span className="composer-forced-hint">
+              {isShortcut(forcedCmd) ? forcedCmd.description : forcedCmd.hint}
+            </span>
           </div>
         )}
         <textarea

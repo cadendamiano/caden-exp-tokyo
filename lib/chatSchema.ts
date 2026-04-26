@@ -39,6 +39,12 @@ Requirements:
 ${lines}${dvExtra}`;
 }
 
+export function filterToolsByAllowlist(tools: ToolDef[], allowlist: string[]): ToolDef[] {
+  if (!allowlist.length) return tools;
+  const allowed = new Set(allowlist);
+  return tools.filter(t => allowed.has(t.name));
+}
+
 export function coerceArtifactKind(
   modelKind: unknown,
   forcedKind: ArtifactKind | undefined
