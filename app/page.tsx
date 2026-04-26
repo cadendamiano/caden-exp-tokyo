@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '@/lib/store';
-import { handleApprove, handleReject, handleFormAnswer } from '@/lib/runtime';
+import { handleApprove, handleReject, handleFormAnswer, runFlow } from '@/lib/runtime';
+import { SESSION_FLOW_MAP } from '@/lib/data';
 import { TopBar } from '@/components/TopBar';
 import { Rail } from '@/components/Rail';
 import { Composer } from '@/components/Composer';
@@ -13,19 +14,13 @@ import { DevConfigPanel } from '@/components/DevConfigPanel';
 
 export default function Page() {
   const mode = useStore(s => s.mode);
-  const demoTurns = useStore(s => s.turns);
-  const testingThreads = useStore(s => s.testingThreads);
-  const activeTestingThreadId = useStore(s => s.activeTestingThreadId);
   const workspaces = useStore(s => s.workspaces);
   const activeWorkspaceId = useStore(s => s.activeWorkspaceId);
   const activeWorkspaceThreadId = useStore(s => s.activeWorkspaceThreadId);
   const activeArtifact = useStore(s => s.activeArtifact);
   const setActiveArtifact = useStore(s => s.setActiveArtifact);
   const setComposer = useStore(s => s.setComposer);
-  const demoApprovals = useStore(s => s.approvalStates);
   const accentHue = useStore(s => s.tweaks.accentHue);
-  const reset = useStore(s => s.reset);
-  const newThread = useStore(s => s.newThread);
   const newWorkspaceThread = useStore(s => s.newWorkspaceThread);
 
   const [tweaksOpen, setTweaksOpen] = useState(false);
@@ -33,29 +28,18 @@ export default function Page() {
   const [convoW, setConvoW] = useState(480);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const activeThread = useMemo(
-    () => testingThreads.find(t => t.id === activeTestingThreadId),
-    [testingThreads, activeTestingThreadId]
-  );
-
   const activeWsThread = useMemo(() => {
     if (!activeWorkspaceId || !activeWorkspaceThreadId) return undefined;
     const ws = workspaces.find(w => w.id === activeWorkspaceId);
     return ws?.threads.find(t => t.id === activeWorkspaceThreadId);
   }, [workspaces, activeWorkspaceId, activeWorkspaceThreadId]);
 
-  const turns =
-    mode === 'workspace'
-      ? (activeWsThread?.turns ?? [])
-      : mode === 'testing'
-      ? (activeThread?.turns ?? [])
-      : demoTurns;
-  const approvalStates =
-    mode === 'workspace'
-      ? (activeWsThread?.approvalStates ?? {})
-      : mode === 'testing'
-      ? (activeThread?.approvalStates ?? {})
-      : demoApprovals;
+  const turns = activeWsThread?.turns ?? [];
+  const approvalStates = activeWsThread?.approvalStates ?? {};
+  const starterFlowId =
+    mode === 'demo' && activeWsThread && turns.length === 0
+      ? SESSION_FLOW_MAP[activeWsThread.id]
+      : undefined;
 
   useEffect(() => {
     document.documentElement.style.setProperty('--hue', String(accentHue));
@@ -69,18 +53,12 @@ export default function Page() {
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
         e.preventDefault();
-        if (mode === 'workspace') {
-          if (activeWorkspaceId) newWorkspaceThread(activeWorkspaceId);
-        } else if (mode === 'testing') {
-          newThread();
-        } else {
-          reset();
-        }
+        if (activeWorkspaceId) newWorkspaceThread(activeWorkspaceId);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [reset, mode, newThread, newWorkspaceThread, activeWorkspaceId]);
+  }, [newWorkspaceThread, activeWorkspaceId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -90,37 +68,36 @@ export default function Page() {
     <div className="app" style={{ '--rail-w': railW + 'px', '--convo-w': convoW + 'px' } as React.CSSProperties}>
       <TopBar />
 
-      <Rail
-        onNewSession={
-          mode === 'workspace'
-            ? () => activeWorkspaceId && newWorkspaceThread(activeWorkspaceId)
-            : mode === 'testing'
-            ? () => newThread()
-            : reset
-        }
-      />
+      <Rail />
 
       <ResizeHandle onDelta={d => setRailW(w => Math.max(160, w + d))} />
 
       <main className="convo">
         <div className="convo-stream">
-          {mode === 'testing' && !activeThread && (
-            <div className="testing-empty">
-              <div>
-                <div className="glyph" style={{ fontSize: 42, color: 'var(--ink-4)' }}>◦</div>
-                <div style={{ marginTop: 10 }}>
-                  Create a thread in the Rail to start testing against a real Bill sandbox.
-                </div>
-              </div>
-            </div>
-          )}
-          {mode === 'workspace' && !activeWsThread && (
+          {!activeWsThread && (
             <div className="testing-empty">
               <div>
                 <div className="glyph" style={{ fontSize: 42, color: 'var(--ink-4)' }}>◦</div>
                 <div style={{ marginTop: 10 }}>
                   Pick a workspace thread to start, or create a new one.
                 </div>
+              </div>
+            </div>
+          )}
+          {activeWsThread && turns.length === 0 && starterFlowId && (
+            <div className="testing-empty">
+              <div>
+                <div className="glyph" style={{ fontSize: 42, color: 'var(--ink-4)' }}>◦</div>
+                <div style={{ marginTop: 10 }}>
+                  Starter thread for <em>{activeWsThread.title}</em>.
+                </div>
+                <button
+                  className="mode-toggle-btn"
+                  style={{ marginTop: 12 }}
+                  onClick={() => runFlow(starterFlowId)}
+                >
+                  Run starter flow
+                </button>
               </div>
             </div>
           )}

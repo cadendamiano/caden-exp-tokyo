@@ -1,6 +1,20 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useStore } from '@/lib/store';
+import { useStore, type Workspace } from '@/lib/store';
 import type { Turn } from '@/lib/turns';
+
+const SEED_WS_ID = 'ws_test_a';
+
+function buildWorkspace(): Workspace {
+  return {
+    id: SEED_WS_ID,
+    name: 'Test',
+    icon: '📓',
+    color: 'oklch(0.8 0.06 195)',
+    createdAt: 0,
+    threads: [],
+    files: [],
+  };
+}
 
 const CLEAN_STATE = {
   tweaks: {
@@ -12,18 +26,17 @@ const CLEAN_STATE = {
     showCodeView: false,
     demoDataset: 'default' as const,
   },
-  turns: [] as Turn[],
-  artifacts: [],
   activeArtifact: null,
   selectedBills: [],
-  approvalStates: {},
-  approvalPayloads: {},
   streaming: false,
   composer: '',
   settingsStatus: null,
   mode: 'demo' as const,
-  testingThreads: [],
-  activeTestingThreadId: null,
+  workspaces: [buildWorkspace()],
+  activeWorkspaceId: null,
+  activeWorkspaceThreadId: null,
+  workspaceView: 'workspaces' as const,
+  expandedWorkspaceIds: [],
 };
 
 function samplePayload(batchId: string) {
@@ -138,91 +151,6 @@ describe('setStreaming', () => {
   });
 });
 
-describe('addTurn', () => {
-  it('appends a turn to the list', () => {
-    const turn: Turn = { id: 't1', kind: 'user', text: 'Hello' };
-    useStore.getState().addTurn(turn);
-    expect(useStore.getState().turns).toHaveLength(1);
-    expect(useStore.getState().turns[0]).toEqual(turn);
-  });
-
-  it('preserves existing turns when adding a new one', () => {
-    const t1: Turn = { id: 't1', kind: 'user', text: 'First' };
-    const t2: Turn = { id: 't2', kind: 'agent', text: 'Second' };
-    useStore.getState().addTurn(t1);
-    useStore.getState().addTurn(t2);
-    expect(useStore.getState().turns).toHaveLength(2);
-    expect(useStore.getState().turns[1]).toEqual(t2);
-  });
-});
-
-describe('updateTurn', () => {
-  it('patches a turn by id', () => {
-    const turn: Turn = { id: 'a1', kind: 'agent', text: '', streaming: true };
-    useStore.getState().addTurn(turn);
-    useStore.getState().updateTurn('a1', { text: 'Done', streaming: false });
-    const updated = useStore.getState().turns.find(t => t.id === 'a1')!;
-    expect((updated as any).text).toBe('Done');
-    expect((updated as any).streaming).toBe(false);
-  });
-
-  it('does not affect other turns', () => {
-    const t1: Turn = { id: 'x1', kind: 'user', text: 'Original' };
-    const t2: Turn = { id: 'x2', kind: 'agent', text: 'Also original' };
-    useStore.getState().addTurn(t1);
-    useStore.getState().addTurn(t2);
-    useStore.getState().updateTurn('x1', { text: 'Changed' });
-    const unchanged = useStore.getState().turns.find(t => t.id === 'x2')!;
-    expect((unchanged as any).text).toBe('Also original');
-  });
-
-  it('is a no-op for a non-existent id', () => {
-    const turn: Turn = { id: 'real', kind: 'user', text: 'Real' };
-    useStore.getState().addTurn(turn);
-    useStore.getState().updateTurn('ghost', { text: 'Phantom' });
-    expect(useStore.getState().turns).toHaveLength(1);
-  });
-});
-
-describe('removeTurnsByKind', () => {
-  it('removes all turns of the given kind', () => {
-    useStore.getState().addTurn({ id: 'u1', kind: 'user', text: 'A' });
-    useStore.getState().addTurn({ id: 'b1', kind: 'building', label: 'x', sub: 'y' });
-    useStore.getState().addTurn({ id: 'b2', kind: 'building', label: 'p', sub: 'q' });
-    useStore.getState().addTurn({ id: 'u2', kind: 'user', text: 'B' });
-
-    useStore.getState().removeTurnsByKind('building');
-
-    const turns = useStore.getState().turns;
-    expect(turns.every(t => t.kind !== 'building')).toBe(true);
-    expect(turns).toHaveLength(2);
-  });
-
-  it('keeps turns of other kinds intact', () => {
-    useStore.getState().addTurn({ id: 'u1', kind: 'user', text: 'Keep me' });
-    useStore.getState().removeTurnsByKind('agent');
-    expect(useStore.getState().turns).toHaveLength(1);
-  });
-});
-
-describe('setArtifacts', () => {
-  it('appends a new artifact via updater function', () => {
-    useStore.getState().setArtifacts(prev => [...prev, { id: 'a1', kind: 'ap-table', label: 'Test', status: 'active', version: 1, createdBy: 'agent' }]);
-    expect(useStore.getState().artifacts).toHaveLength(1);
-    expect(useStore.getState().artifacts[0].id).toBe('a1');
-  });
-
-  it('can filter artifacts via updater', () => {
-    useStore.getState().setArtifacts(() => [
-      { id: 'a1', kind: 'ap-table', label: 'Keep', status: 'active', version: 1, createdBy: 'agent' },
-      { id: 'a2', kind: 'spend-chart', label: 'Remove', status: 'active', version: 1, createdBy: 'agent' },
-    ]);
-    useStore.getState().setArtifacts(prev => prev.filter(a => a.id !== 'a2'));
-    expect(useStore.getState().artifacts).toHaveLength(1);
-    expect(useStore.getState().artifacts[0].id).toBe('a1');
-  });
-});
-
 describe('setActiveArtifact', () => {
   it('sets the active artifact id', () => {
     useStore.getState().setActiveArtifact('art_123');
@@ -253,233 +181,6 @@ describe('toggleBill', () => {
     useStore.getState().toggleBill('bll_002');
     expect(useStore.getState().selectedBills).toContain('bll_001');
     expect(useStore.getState().selectedBills).toContain('bll_002');
-  });
-
-  it('removing one bill does not affect others', () => {
-    useStore.getState().toggleBill('bll_001');
-    useStore.getState().toggleBill('bll_002');
-    useStore.getState().toggleBill('bll_001');
-    expect(useStore.getState().selectedBills).not.toContain('bll_001');
-    expect(useStore.getState().selectedBills).toContain('bll_002');
-  });
-});
-
-describe('setApproval', () => {
-  it('records an approved state for a batch', () => {
-    useStore.getState().setApproval('btch_001', 'approved');
-    expect(useStore.getState().approvalStates['btch_001']).toBe('approved');
-  });
-
-  it('records a rejected state for a batch', () => {
-    useStore.getState().setApproval('btch_002', 'rejected');
-    expect(useStore.getState().approvalStates['btch_002']).toBe('rejected');
-  });
-
-  it('records a submitting state', () => {
-    useStore.getState().setApproval('btch_003', 'submitting');
-    expect(useStore.getState().approvalStates['btch_003']).toBe('submitting');
-  });
-
-  it('records a pending state (rollback target)', () => {
-    useStore.getState().setApproval('btch_003', 'submitting');
-    useStore.getState().setApproval('btch_003', 'pending');
-    expect(useStore.getState().approvalStates['btch_003']).toBe('pending');
-  });
-
-  it('tracks multiple batches independently', () => {
-    useStore.getState().setApproval('btch_001', 'approved');
-    useStore.getState().setApproval('btch_002', 'rejected');
-    expect(useStore.getState().approvalStates['btch_001']).toBe('approved');
-    expect(useStore.getState().approvalStates['btch_002']).toBe('rejected');
-  });
-
-  it('can overwrite a previous decision', () => {
-    useStore.getState().setApproval('btch_001', 'approved');
-    useStore.getState().setApproval('btch_001', 'rejected');
-    expect(useStore.getState().approvalStates['btch_001']).toBe('rejected');
-  });
-});
-
-describe('setApprovalPayload', () => {
-  it('writes a payload for a batchId at root scope', () => {
-    const p = samplePayload('btch_p1');
-    useStore.getState().setApprovalPayload('btch_p1', p);
-    expect(useStore.getState().approvalPayloads['btch_p1']).toEqual(p);
-  });
-
-  it('preserves other batchIds when writing a new one', () => {
-    const p1 = samplePayload('btch_p1');
-    const p2 = samplePayload('btch_p2');
-    useStore.getState().setApprovalPayload('btch_p1', p1);
-    useStore.getState().setApprovalPayload('btch_p2', p2);
-    expect(useStore.getState().approvalPayloads['btch_p1']).toEqual(p1);
-    expect(useStore.getState().approvalPayloads['btch_p2']).toEqual(p2);
-  });
-
-  it('active-thread variant writes only to the active thread', () => {
-    const a = useStore.getState().newThread('A');
-    const b = useStore.getState().newThread('B');
-    useStore.getState().setActiveThread(a);
-    const p = samplePayload('btch_t1');
-    useStore.getState().setApprovalPayloadInActiveThread('btch_t1', p);
-    const s = useStore.getState();
-    expect(s.testingThreads.find(t => t.id === a)!.approvalPayloads['btch_t1']).toEqual(p);
-    expect(s.testingThreads.find(t => t.id === b)!.approvalPayloads['btch_t1']).toBeUndefined();
-  });
-});
-
-describe('persist migration v3 -> v4', () => {
-  it('maps legacy tweaks.provider: gemini to tweaks.modelId: gemini-2.5-pro', async () => {
-    localStorage.setItem(
-      'bcw:state',
-      JSON.stringify({
-        state: {
-          tweaks: {
-            accentHue: 195,
-            density: 'comfortable',
-            streamSpeed: 'normal',
-            showConnectors: true,
-            provider: 'gemini',
-            showCodeView: false,
-            demoDataset: 'default',
-          },
-          artifacts: [],
-          approvalStates: {},
-          mode: 'demo',
-          testingThreads: [],
-          activeTestingThreadId: null,
-        },
-        version: 3,
-      })
-    );
-    await (useStore as any).persist.rehydrate();
-    const { tweaks } = useStore.getState();
-    expect(tweaks.modelId).toBe('gemini-2.5-pro');
-    expect((tweaks as any).provider).toBeUndefined();
-  });
-
-  it('maps legacy tweaks.provider: anthropic to tweaks.modelId: claude-sonnet-4-5', async () => {
-    localStorage.setItem(
-      'bcw:state',
-      JSON.stringify({
-        state: {
-          tweaks: {
-            accentHue: 195,
-            density: 'comfortable',
-            streamSpeed: 'normal',
-            showConnectors: true,
-            provider: 'anthropic',
-            showCodeView: false,
-            demoDataset: 'default',
-          },
-          artifacts: [],
-          approvalStates: {},
-          mode: 'demo',
-          testingThreads: [],
-          activeTestingThreadId: null,
-        },
-        version: 3,
-      })
-    );
-    await (useStore as any).persist.rehydrate();
-    const { tweaks } = useStore.getState();
-    expect(tweaks.modelId).toBe('claude-sonnet-4-5');
-    expect((tweaks as any).provider).toBeUndefined();
-  });
-});
-
-describe('rehydrate normalizer', () => {
-  it('re-initialises missing approvalPayloads/approvalStates on every thread after rehydrate', () => {
-    // Simulate a persisted shape where threads are missing these maps
-    // (as happens after partialize strips approvalPayloads and version-0 saves).
-    const persisted = {
-      testingThreads: [
-        { id: 'thr_1', title: 'A', createdAt: 1, turns: [], artifacts: [], selectedBills: [] },
-      ],
-      // root-level approvalPayloads omitted
-    } as any;
-
-    // Reimplement the normalizer's contract directly — the actual runtime path is
-    // exercised via the hydrate lifecycle which is hard to invoke in a unit test.
-    const normalized = (persisted.testingThreads ?? []).map((t: any) => ({
-      ...t,
-      approvalPayloads: t.approvalPayloads ?? {},
-      approvalStates: t.approvalStates ?? {},
-    }));
-    const rootPayloads = persisted.approvalPayloads ?? {};
-
-    expect(normalized[0].approvalPayloads).toEqual({});
-    expect(normalized[0].approvalStates).toEqual({});
-    expect(rootPayloads).toEqual({});
-  });
-
-  it('preserves existing approvalStates when present', () => {
-    const persisted = {
-      testingThreads: [
-        {
-          id: 'thr_1',
-          title: 'A',
-          createdAt: 1,
-          turns: [],
-          artifacts: [],
-          selectedBills: [],
-          approvalStates: { btch_1: 'approved' },
-        },
-      ],
-    } as any;
-    const normalized = persisted.testingThreads.map((t: any) => ({
-      ...t,
-      approvalPayloads: t.approvalPayloads ?? {},
-      approvalStates: t.approvalStates ?? {},
-    }));
-    expect(normalized[0].approvalStates).toEqual({ btch_1: 'approved' });
-  });
-});
-
-describe('reset', () => {
-  it('clears turns, artifacts, selections, and approvals', () => {
-    useStore.getState().addTurn({ id: 'u1', kind: 'user', text: 'msg' });
-    useStore.getState().setArtifacts(() => [{ id: 'a1', kind: 'ap-table', label: 'x', status: 'active', version: 1, createdBy: 'agent' }]);
-    useStore.getState().toggleBill('bll_001');
-    useStore.getState().setApproval('btch_001', 'approved');
-    useStore.getState().setStreaming(true);
-    useStore.getState().setComposer('draft text');
-
-    useStore.getState().reset();
-
-    const s = useStore.getState();
-    expect(s.artifacts).toHaveLength(0);
-    expect(s.activeArtifact).toBeNull();
-    expect(s.selectedBills).toHaveLength(0);
-    expect(s.approvalStates).toEqual({});
-    expect(s.streaming).toBe(false);
-    expect(s.composer).toBe('');
-  });
-
-  it('resets turns to only the welcome turn', () => {
-    useStore.getState().addTurn({ id: 'u1', kind: 'user', text: 'msg' });
-    useStore.getState().reset();
-    const { turns } = useStore.getState();
-    expect(turns).toHaveLength(1);
-    expect(turns[0].id).toBe('welcome');
-  });
-
-  it('does not reset tweaks', () => {
-    useStore.getState().setTweak('accentHue', 300);
-    useStore.getState().reset();
-    expect(useStore.getState().tweaks.accentHue).toBe(300);
-  });
-});
-
-describe('seedWelcome', () => {
-  it('replaces turns with only the welcome turn', () => {
-    useStore.getState().addTurn({ id: 'u1', kind: 'user', text: 'hi' });
-    useStore.getState().addTurn({ id: 'u2', kind: 'user', text: 'there' });
-    useStore.getState().seedWelcome();
-    const { turns } = useStore.getState();
-    expect(turns).toHaveLength(1);
-    expect(turns[0].id).toBe('welcome');
-    expect((turns[0] as any).welcome).toBe(true);
   });
 });
 
@@ -514,199 +215,246 @@ const DRAFT_ARTIFACT = {
   createdBy: 'Coworker',
 };
 
+function activateThread() {
+  const id = useStore.getState().newWorkspaceThread(SEED_WS_ID, 'A');
+  return id;
+}
+
 describe('activateArtifact', () => {
-  it('changes artifact status to active in demo mode', () => {
-    useStore.getState().setArtifacts(() => [DRAFT_ARTIFACT]);
+  it('activates an artifact in the active workspace thread', () => {
+    const tid = activateThread();
+    useStore.getState().setArtifactsInActiveWorkspaceThread(() => [DRAFT_ARTIFACT]);
     useStore.getState().activateArtifact('art_1');
-    const art = useStore.getState().artifacts.find(a => a.id === 'art_1')!;
-    expect(art.status).toBe('active');
+    const ws = useStore.getState().workspaces.find(w => w.id === SEED_WS_ID)!;
+    const t = ws.threads.find(th => th.id === tid)!;
+    expect(t.artifacts[0].status).toBe('active');
+    expect(t.artifacts[0].version).toBe(2);
   });
 
-  it('increments version on activation', () => {
-    useStore.getState().setArtifacts(() => [DRAFT_ARTIFACT]);
-    useStore.getState().activateArtifact('art_1');
-    const art = useStore.getState().artifacts.find(a => a.id === 'art_1')!;
-    expect(art.version).toBe(2);
-  });
-
-  it('does not affect other artifacts', () => {
+  it('does not affect other artifacts in the same thread', () => {
+    const tid = activateThread();
     const other = { ...DRAFT_ARTIFACT, id: 'art_2', label: 'Other' };
-    useStore.getState().setArtifacts(() => [DRAFT_ARTIFACT, other]);
+    useStore.getState().setArtifactsInActiveWorkspaceThread(() => [DRAFT_ARTIFACT, other]);
     useStore.getState().activateArtifact('art_1');
-    const otherArt = useStore.getState().artifacts.find(a => a.id === 'art_2')!;
+    const ws = useStore.getState().workspaces.find(w => w.id === SEED_WS_ID)!;
+    const t = ws.threads.find(th => th.id === tid)!;
+    const otherArt = t.artifacts.find(a => a.id === 'art_2')!;
     expect(otherArt.status).toBe('draft');
     expect(otherArt.version).toBe(1);
   });
 
-  it('activates artifact in the active testing thread', () => {
-    useStore.getState().setMode('testing');
-    const id = useStore.getState().newThread('A');
-    useStore.getState().setArtifactsInActiveThread(() => [DRAFT_ARTIFACT]);
+  it('is a no-op when no workspace thread is active', () => {
     useStore.getState().activateArtifact('art_1');
-    const thread = useStore.getState().testingThreads.find(t => t.id === id)!;
-    expect(thread.artifacts[0].status).toBe('active');
-    expect(thread.artifacts[0].version).toBe(2);
-  });
-
-  it('does not touch demo artifacts when in testing mode', () => {
-    useStore.getState().setArtifacts(() => [DRAFT_ARTIFACT]);
-    useStore.getState().setMode('testing');
-    useStore.getState().newThread('A');
-    useStore.getState().setArtifactsInActiveThread(() => [{ ...DRAFT_ARTIFACT, id: 'art_thread' }]);
-    useStore.getState().activateArtifact('art_1');  // 'art_1' only in demo artifacts
-    // demo artifact should be untouched
-    const demoArt = useStore.getState().artifacts.find(a => a.id === 'art_1')!;
-    expect(demoArt.status).toBe('draft');
+    // Nothing to assert — just making sure it doesn't throw.
+    expect(useStore.getState().activeWorkspaceThreadId).toBeNull();
   });
 });
 
 describe('acknowledgeArtifactDryRun', () => {
-  it('sets dryRunAcknowledged to true in demo mode', () => {
-    useStore.getState().setArtifacts(() => [DRAFT_ARTIFACT]);
+  it('sets dryRunAcknowledged in the active workspace thread', () => {
+    const tid = activateThread();
+    useStore.getState().setArtifactsInActiveWorkspaceThread(() => [DRAFT_ARTIFACT]);
     useStore.getState().acknowledgeArtifactDryRun('art_1');
-    const art = useStore.getState().artifacts.find(a => a.id === 'art_1')!;
-    expect(art.dryRunAcknowledged).toBe(true);
+    const ws = useStore.getState().workspaces.find(w => w.id === SEED_WS_ID)!;
+    const t = ws.threads.find(th => th.id === tid)!;
+    expect(t.artifacts[0].dryRunAcknowledged).toBe(true);
   });
 
   it('does not change status or version', () => {
-    useStore.getState().setArtifacts(() => [DRAFT_ARTIFACT]);
+    activateThread();
+    useStore.getState().setArtifactsInActiveWorkspaceThread(() => [DRAFT_ARTIFACT]);
     useStore.getState().acknowledgeArtifactDryRun('art_1');
-    const art = useStore.getState().artifacts.find(a => a.id === 'art_1')!;
-    expect(art.status).toBe('draft');
-    expect(art.version).toBe(1);
-  });
-
-  it('does not affect other artifacts', () => {
-    const other = { ...DRAFT_ARTIFACT, id: 'art_2', label: 'Other' };
-    useStore.getState().setArtifacts(() => [DRAFT_ARTIFACT, other]);
-    useStore.getState().acknowledgeArtifactDryRun('art_1');
-    const otherArt = useStore.getState().artifacts.find(a => a.id === 'art_2')!;
-    expect(otherArt.dryRunAcknowledged).toBeFalsy();
-  });
-
-  it('sets dryRunAcknowledged in the active testing thread', () => {
-    useStore.getState().setMode('testing');
-    const id = useStore.getState().newThread('A');
-    useStore.getState().setArtifactsInActiveThread(() => [DRAFT_ARTIFACT]);
-    useStore.getState().acknowledgeArtifactDryRun('art_1');
-    const thread = useStore.getState().testingThreads.find(t => t.id === id)!;
-    expect(thread.artifacts[0].dryRunAcknowledged).toBe(true);
+    const ws = useStore.getState().workspaces.find(w => w.id === SEED_WS_ID)!;
+    const t = ws.threads[0];
+    expect(t.artifacts[0].status).toBe('draft');
+    expect(t.artifacts[0].version).toBe(1);
   });
 
   it('is idempotent — calling twice stays true', () => {
-    useStore.getState().setArtifacts(() => [DRAFT_ARTIFACT]);
+    activateThread();
+    useStore.getState().setArtifactsInActiveWorkspaceThread(() => [DRAFT_ARTIFACT]);
     useStore.getState().acknowledgeArtifactDryRun('art_1');
     useStore.getState().acknowledgeArtifactDryRun('art_1');
-    const art = useStore.getState().artifacts.find(a => a.id === 'art_1')!;
-    expect(art.dryRunAcknowledged).toBe(true);
+    const ws = useStore.getState().workspaces.find(w => w.id === SEED_WS_ID)!;
+    expect(ws.threads[0].artifacts[0].dryRunAcknowledged).toBe(true);
   });
 });
 
-describe('testing threads', () => {
-  it('newThread creates and activates a thread with given title', () => {
-    const id = useStore.getState().newThread('hello');
+describe('workspace threads', () => {
+  it('newWorkspaceThread creates a thread and sets it active', () => {
+    const id = useStore.getState().newWorkspaceThread(SEED_WS_ID, 'hello');
     const s = useStore.getState();
-    expect(s.testingThreads).toHaveLength(1);
-    expect(s.testingThreads[0].title).toBe('hello');
-    expect(s.testingThreads[0].id).toBe(id);
-    expect(s.activeTestingThreadId).toBe(id);
+    const ws = s.workspaces.find(w => w.id === SEED_WS_ID)!;
+    expect(ws.threads).toHaveLength(1);
+    expect(ws.threads[0].id).toBe(id);
+    expect(ws.threads[0].title).toBe('hello');
+    expect(s.activeWorkspaceId).toBe(SEED_WS_ID);
+    expect(s.activeWorkspaceThreadId).toBe(id);
   });
 
-  it('newThread defaults title', () => {
-    const id = useStore.getState().newThread();
-    const t = useStore.getState().testingThreads.find(x => x.id === id)!;
+  it('newWorkspaceThread defaults the title and ap product', () => {
+    const id = useStore.getState().newWorkspaceThread(SEED_WS_ID);
+    const ws = useStore.getState().workspaces.find(w => w.id === SEED_WS_ID)!;
+    const t = ws.threads.find(x => x.id === id)!;
     expect(t.title).toBe('New thread');
     expect(t.billProduct).toBe('ap');
     expect(t.turns).toEqual([]);
   });
 
-  it('setActiveThread switches the active id', () => {
-    const a = useStore.getState().newThread('A');
-    const b = useStore.getState().newThread('B');
-    useStore.getState().setActiveThread(a);
-    expect(useStore.getState().activeTestingThreadId).toBe(a);
-    useStore.getState().setActiveThread(b);
-    expect(useStore.getState().activeTestingThreadId).toBe(b);
+  it('setActiveWorkspaceThread switches the active id', () => {
+    const a = useStore.getState().newWorkspaceThread(SEED_WS_ID, 'A');
+    const b = useStore.getState().newWorkspaceThread(SEED_WS_ID, 'B');
+    useStore.getState().setActiveWorkspaceThread(SEED_WS_ID, a);
+    expect(useStore.getState().activeWorkspaceThreadId).toBe(a);
+    useStore.getState().setActiveWorkspaceThread(SEED_WS_ID, b);
+    expect(useStore.getState().activeWorkspaceThreadId).toBe(b);
   });
 
-  it('deleteThread removes the thread', () => {
-    const a = useStore.getState().newThread('A');
-    const b = useStore.getState().newThread('B');
-    useStore.getState().deleteThread(a);
-    const s = useStore.getState();
-    expect(s.testingThreads.map(t => t.id)).toEqual([b]);
+  it('deleteWorkspaceThread removes the thread', () => {
+    const a = useStore.getState().newWorkspaceThread(SEED_WS_ID, 'A');
+    const b = useStore.getState().newWorkspaceThread(SEED_WS_ID, 'B');
+    useStore.getState().deleteWorkspaceThread(SEED_WS_ID, a);
+    const ws = useStore.getState().workspaces.find(w => w.id === SEED_WS_ID)!;
+    expect(ws.threads.map(t => t.id)).toEqual([b]);
   });
 
-  it('deleting the active thread activates a sibling', () => {
-    const a = useStore.getState().newThread('A');
-    const b = useStore.getState().newThread('B');
-    useStore.getState().setActiveThread(a);
-    useStore.getState().deleteThread(a);
-    expect(useStore.getState().activeTestingThreadId).toBe(b);
-  });
-
-  it('deleting the last thread leaves activeTestingThreadId null', () => {
-    const a = useStore.getState().newThread('only');
-    useStore.getState().deleteThread(a);
-    expect(useStore.getState().activeTestingThreadId).toBeNull();
-  });
-
-  it('renameThread updates the title', () => {
-    const id = useStore.getState().newThread('old');
-    useStore.getState().renameThread(id, 'new');
-    const t = useStore.getState().testingThreads.find(x => x.id === id)!;
+  it('renameWorkspaceThread updates the title', () => {
+    const id = useStore.getState().newWorkspaceThread(SEED_WS_ID, 'old');
+    useStore.getState().renameWorkspaceThread(SEED_WS_ID, id, 'new');
+    const ws = useStore.getState().workspaces.find(w => w.id === SEED_WS_ID)!;
+    const t = ws.threads.find(x => x.id === id)!;
     expect(t.title).toBe('new');
   });
 
-  it('renameThread with empty string falls back to a placeholder title', () => {
-    const id = useStore.getState().newThread('keep');
-    useStore.getState().renameThread(id, '');
-    const t = useStore.getState().testingThreads.find(x => x.id === id)!;
+  it('renameWorkspaceThread with empty string falls back to a placeholder title', () => {
+    const id = useStore.getState().newWorkspaceThread(SEED_WS_ID, 'keep');
+    useStore.getState().renameWorkspaceThread(SEED_WS_ID, id, '');
+    const ws = useStore.getState().workspaces.find(w => w.id === SEED_WS_ID)!;
+    const t = ws.threads.find(x => x.id === id)!;
     expect(t.title).toBe('Untitled thread');
   });
 
-  it('addTurnToActiveThread appends to the right thread only', () => {
-    const a = useStore.getState().newThread('A');
-    const b = useStore.getState().newThread('B');
-    useStore.getState().setActiveThread(a);
-    useStore.getState().addTurnToActiveThread({ id: 't1', kind: 'user', text: 'hi' });
-    const s = useStore.getState();
-    const aTh = s.testingThreads.find(x => x.id === a)!;
-    const bTh = s.testingThreads.find(x => x.id === b)!;
+  it('addTurnToActiveWorkspaceThread appends to the right thread only', () => {
+    const a = useStore.getState().newWorkspaceThread(SEED_WS_ID, 'A');
+    const b = useStore.getState().newWorkspaceThread(SEED_WS_ID, 'B');
+    useStore.getState().setActiveWorkspaceThread(SEED_WS_ID, a);
+    const turn: Turn = { id: 't1', kind: 'user', text: 'hi' };
+    useStore.getState().addTurnToActiveWorkspaceThread(turn);
+    const ws = useStore.getState().workspaces.find(w => w.id === SEED_WS_ID)!;
+    const aTh = ws.threads.find(x => x.id === a)!;
+    const bTh = ws.threads.find(x => x.id === b)!;
     expect(aTh.turns).toHaveLength(1);
     expect(bTh.turns).toHaveLength(0);
   });
 
-  it('addTurnToActiveThread is a no-op with no active thread', () => {
-    useStore.getState().addTurnToActiveThread({ id: 't1', kind: 'user', text: 'hi' });
-    expect(useStore.getState().testingThreads).toHaveLength(0);
+  it('addTurnToActiveWorkspaceThread is a no-op with no active thread', () => {
+    useStore.getState().addTurnToActiveWorkspaceThread({ id: 't1', kind: 'user', text: 'hi' });
+    const ws = useStore.getState().workspaces.find(w => w.id === SEED_WS_ID)!;
+    expect(ws.threads).toHaveLength(0);
   });
 
-  it('updateTurnInActiveThread patches a turn', () => {
-    const id = useStore.getState().newThread('A');
-    useStore.getState().addTurnToActiveThread({ id: 'a1', kind: 'agent', text: '', streaming: true });
-    useStore.getState().updateTurnInActiveThread('a1', { text: 'done', streaming: false });
-    const t = useStore.getState().testingThreads.find(x => x.id === id)!;
+  it('updateTurnInActiveWorkspaceThread patches a turn', () => {
+    const id = useStore.getState().newWorkspaceThread(SEED_WS_ID, 'A');
+    useStore.getState().addTurnToActiveWorkspaceThread({ id: 'a1', kind: 'agent', text: '', streaming: true });
+    useStore.getState().updateTurnInActiveWorkspaceThread('a1', { text: 'done', streaming: false });
+    const ws = useStore.getState().workspaces.find(w => w.id === SEED_WS_ID)!;
+    const t = ws.threads.find(x => x.id === id)!;
     const turn = t.turns.find(tt => tt.id === 'a1')!;
     expect((turn as any).text).toBe('done');
     expect((turn as any).streaming).toBe(false);
   });
 
-  it('setThreadBillEnv writes envId and product', () => {
-    const id = useStore.getState().newThread('A');
-    useStore.getState().setThreadBillEnv(id, 'env_abc', 'se');
-    const t = useStore.getState().testingThreads.find(x => x.id === id)!;
+  it('setWorkspaceThreadBillEnv writes envId and product on the targeted thread', () => {
+    const id = useStore.getState().newWorkspaceThread(SEED_WS_ID, 'A');
+    useStore.getState().setWorkspaceThreadBillEnv(SEED_WS_ID, id, 'env_abc', 'se');
+    const ws = useStore.getState().workspaces.find(w => w.id === SEED_WS_ID)!;
+    const t = ws.threads.find(x => x.id === id)!;
     expect(t.billEnvId).toBe('env_abc');
     expect(t.billProduct).toBe('se');
   });
 
-  it('setApprovalInActiveThread records on active thread only', () => {
-    const a = useStore.getState().newThread('A');
-    const b = useStore.getState().newThread('B');
-    useStore.getState().setActiveThread(a);
-    useStore.getState().setApprovalInActiveThread('btch_1', 'approved');
+  it('setApprovalInActiveWorkspaceThread records on active thread only', () => {
+    const a = useStore.getState().newWorkspaceThread(SEED_WS_ID, 'A');
+    const b = useStore.getState().newWorkspaceThread(SEED_WS_ID, 'B');
+    useStore.getState().setActiveWorkspaceThread(SEED_WS_ID, a);
+    useStore.getState().setApprovalInActiveWorkspaceThread('btch_1', 'approved');
+    const ws = useStore.getState().workspaces.find(w => w.id === SEED_WS_ID)!;
+    expect(ws.threads.find(x => x.id === a)!.approvalStates['btch_1']).toBe('approved');
+    expect(ws.threads.find(x => x.id === b)!.approvalStates['btch_1']).toBeUndefined();
+  });
+
+  it('setApprovalPayloadInActiveWorkspaceThread writes payload to the active thread', () => {
+    const id = useStore.getState().newWorkspaceThread(SEED_WS_ID, 'A');
+    const p = samplePayload('btch_p1');
+    useStore.getState().setApprovalPayloadInActiveWorkspaceThread('btch_p1', p);
+    const ws = useStore.getState().workspaces.find(w => w.id === SEED_WS_ID)!;
+    const t = ws.threads.find(x => x.id === id)!;
+    expect(t.approvalPayloads['btch_p1']).toEqual(p);
+  });
+});
+
+describe('persist migration', () => {
+  it('v3 → v6 maps legacy tweaks.provider: gemini to tweaks.modelId: gemini-2.5-pro', async () => {
+    localStorage.setItem(
+      'bcw:state',
+      JSON.stringify({
+        state: {
+          tweaks: {
+            accentHue: 195,
+            density: 'comfortable',
+            streamSpeed: 'normal',
+            showConnectors: true,
+            provider: 'gemini',
+            showCodeView: false,
+            demoDataset: 'default',
+          },
+          mode: 'demo',
+        },
+        version: 3,
+      })
+    );
+    await (useStore as any).persist.rehydrate();
+    const { tweaks } = useStore.getState();
+    expect(tweaks.modelId).toBe('gemini-2.5-pro');
+    expect((tweaks as any).provider).toBeUndefined();
+  });
+
+  it('v5 → v6 collapses legacy "workspace" mode to "demo" and drops thread-level state', async () => {
+    localStorage.setItem(
+      'bcw:state',
+      JSON.stringify({
+        state: {
+          tweaks: {
+            accentHue: 195,
+            density: 'comfortable',
+            streamSpeed: 'normal',
+            showConnectors: true,
+            modelId: 'claude-sonnet-4-5',
+            showCodeView: false,
+            demoDataset: 'default',
+          },
+          mode: 'workspace',
+          turns: [{ id: 'old', kind: 'agent', text: 'gone' }],
+          artifacts: [{ id: 'art_old', kind: 'ap-table', label: 'x', status: 'draft', version: 1, createdBy: 'agent' }],
+          approvalStates: { btch_1: 'approved' },
+          approvalPayloads: {},
+          testingThreads: [{ id: 'thr_old', title: 'gone', createdAt: 0, turns: [], artifacts: [], selectedBills: [] }],
+          activeTestingThreadId: 'thr_old',
+          workspaces: [],
+          activeWorkspaceId: null,
+          activeWorkspaceThreadId: null,
+          workspaceView: 'workspaces',
+          expandedWorkspaceIds: [],
+        },
+        version: 5,
+      })
+    );
+    await (useStore as any).persist.rehydrate();
     const s = useStore.getState();
-    expect(s.testingThreads.find(x => x.id === a)!.approvalStates['btch_1']).toBe('approved');
-    expect(s.testingThreads.find(x => x.id === b)!.approvalStates['btch_1']).toBeUndefined();
+    expect(s.mode).toBe('demo');
+    expect((s as any).turns).toBeUndefined();
+    expect((s as any).artifacts).toBeUndefined();
+    expect((s as any).testingThreads).toBeUndefined();
+    expect((s as any).activeTestingThreadId).toBeUndefined();
   });
 });

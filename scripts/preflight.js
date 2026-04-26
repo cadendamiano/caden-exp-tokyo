@@ -7,8 +7,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
-const REQUIRED_KEYS = ['GEMINI_API_KEY'];
-const OPTIONAL_KEYS = ['ANTHROPIC_API_KEY'];
+const REQUIRED_KEYS = [];
+const OPTIONAL_KEYS = ['GEMINI_API_KEY', 'ANTHROPIC_API_KEY'];
 
 const red = (s) => `\x1b[31m${s}\x1b[0m`;
 const yellow = (s) => `\x1b[33m${s}\x1b[0m`;

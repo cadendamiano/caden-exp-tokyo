@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { DEMO_PROMPTS, LOGISTICS_DEMO_PROMPTS } from '@/lib/data';
 import { useStore } from '@/lib/store';
-import { runFlow, runLLM, runLLMTesting, runLLMWorkspace } from '@/lib/runtime';
+import { runFlow, runLLM } from '@/lib/runtime';
 import { ModelPicker } from './ModelPicker';
 import { matchSlashPrefix, parseSlash, type SlashCommand } from '@/lib/slashCommands';
 import { resolveComposerSubmit } from '@/lib/resolveComposerSubmit';
@@ -21,7 +21,7 @@ export function Composer() {
   const settingsStatus = useStore(s => s.settingsStatus);
   const setSettingsStatus = useStore(s => s.setSettingsStatus);
   const setTweak = useStore(s => s.setTweak);
-  const activeTestingThreadId = useStore(s => s.activeTestingThreadId);
+  const activeWorkspaceThreadId = useStore(s => s.activeWorkspaceThreadId);
   const ref = useRef<HTMLTextAreaElement>(null);
 
   const [forcedCmd, setForcedCmd] = useState<SlashCommand | null>(null);
@@ -59,11 +59,11 @@ export function Composer() {
     setMenuOpen(false);
   }, [mode]);
 
-  // Clear forced command when active testing thread changes.
+  // Clear forced command when active workspace thread changes.
   useEffect(() => {
     setForcedCmd(null);
     setMenuOpen(false);
-  }, [activeTestingThreadId]);
+  }, [activeWorkspaceThreadId]);
 
   const openMenuFor = (query: string) => {
     setMenuQuery(query);
@@ -114,7 +114,7 @@ export function Composer() {
       body: composer,
       streaming,
       forcedCmd,
-      mode: mode === 'workspace' ? 'demo' : mode,
+      mode,
       demoDataset,
     });
 
@@ -128,13 +128,7 @@ export function Composer() {
       runFlow(action.flowId);
       return;
     }
-    if (mode === 'workspace') {
-      runLLMWorkspace(action.body, action.opts);
-    } else if (mode === 'testing') {
-      runLLMTesting(action.body, action.opts);
-    } else {
-      runLLM(action.body, action.opts);
-    }
+    runLLM(action.body, action.opts);
   };
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

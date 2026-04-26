@@ -2,7 +2,7 @@
 
 import { FLOWS, LOGISTICS_FLOWS, type ArtifactKind, type Flow, type FlowStep } from './flows';
 import { newId, type Turn } from './turns';
-import { useStore, getActiveThread, getActiveWorkspaceThread, type ApprovalPayload } from './store';
+import { useStore, getActiveWorkspaceThread, type ApprovalPayload } from './store';
 import { MODEL_TOOLS, INTERNAL_TOOLS } from './tools';
 
 const ALL_TOOLS = [...MODEL_TOOLS, ...INTERNAL_TOOLS];
@@ -67,24 +67,14 @@ export function runFlow(flowId: string) {
 }
 
 function getFlowActions(s: ReturnType<typeof useStore.getState>) {
-  if (s.mode === 'workspace') {
-    const wsThread = getActiveWorkspaceThread();
-    return {
-      addTurn: s.addTurnToActiveWorkspaceThread,
-      updateTurn: s.updateTurnInActiveWorkspaceThread,
-      removeTurnsByKind: s.removeTurnsByKindInActiveWorkspaceThread,
-      setArtifacts: s.setArtifactsInActiveWorkspaceThread,
-      setApprovalPayload: s.setApprovalPayloadInActiveWorkspaceThread,
-      findTurn: (id: string) => wsThread?.turns.find(t => t.id === id),
-    };
-  }
+  const wsThread = getActiveWorkspaceThread();
   return {
-    addTurn: s.addTurn,
-    updateTurn: s.updateTurn,
-    removeTurnsByKind: s.removeTurnsByKind,
-    setArtifacts: s.setArtifacts,
-    setApprovalPayload: s.setApprovalPayload,
-    findTurn: (id: string) => s.turns.find(t => t.id === id),
+    addTurn: s.addTurnToActiveWorkspaceThread,
+    updateTurn: s.updateTurnInActiveWorkspaceThread,
+    removeTurnsByKind: s.removeTurnsByKindInActiveWorkspaceThread,
+    setArtifacts: s.setArtifactsInActiveWorkspaceThread,
+    setApprovalPayload: s.setApprovalPayloadInActiveWorkspaceThread,
+    findTurn: (id: string) => wsThread?.turns.find(t => t.id === id),
   };
 }
 
@@ -202,7 +192,7 @@ function executeStep(flow: Flow, step: FlowStep, mult: number) {
 // ─── Approval submission helpers ──────────────────────────────────────
 
 type SubmitContext = {
-  mode: 'demo' | 'testing' | 'workspace';
+  mode: 'demo' | 'testing';
   payload: ApprovalPayload | undefined;
   billEnvId?: string;
   billProduct?: 'ap' | 'se';
@@ -211,51 +201,27 @@ type SubmitContext = {
 
 function getSubmitContext(batchId: string): SubmitContext {
   const s = useStore.getState();
-  if (s.mode === 'workspace') {
-    const wsThread = getActiveWorkspaceThread();
-    return {
-      mode: 'workspace',
-      payload: wsThread?.approvalPayloads?.[batchId],
-      demoDataset: s.tweaks.demoDataset,
-    };
-  }
-  if (s.mode === 'testing') {
-    const thread = getActiveThread();
-    return {
-      mode: 'testing',
-      payload: thread?.approvalPayloads?.[batchId],
-      billEnvId: thread?.billEnvId,
-      billProduct: thread?.billProduct,
-      demoDataset: s.tweaks.demoDataset,
-    };
-  }
+  const wsThread = getActiveWorkspaceThread();
   return {
-    mode: 'demo',
-    payload: s.approvalPayloads[batchId],
+    mode: s.mode,
+    payload: wsThread?.approvalPayloads?.[batchId],
+    billEnvId: wsThread?.billEnvId,
+    billProduct: wsThread?.billProduct,
     demoDataset: s.tweaks.demoDataset,
   };
 }
 
-function getApprovalActions(s: ReturnType<typeof useStore.getState>, mode: SubmitContext['mode']) {
-  if (mode === 'workspace') {
-    return {
-      addTurn: s.addTurnToActiveWorkspaceThread,
-      setApproval: s.setApprovalInActiveWorkspaceThread,
-    };
-  }
-  if (mode === 'testing') {
-    return {
-      addTurn: s.addTurnToActiveThread,
-      setApproval: s.setApprovalInActiveThread,
-    };
-  }
-  return { addTurn: s.addTurn, setApproval: s.setApproval };
+function getApprovalActions(s: ReturnType<typeof useStore.getState>) {
+  return {
+    addTurn: s.addTurnToActiveWorkspaceThread,
+    setApproval: s.setApprovalInActiveWorkspaceThread,
+  };
 }
 
 export async function handleApprove(batchId: string) {
   const ctx = getSubmitContext(batchId);
   const s = useStore.getState();
-  const { addTurn, setApproval } = getApprovalActions(s, ctx.mode);
+  const { addTurn, setApproval } = getApprovalActions(s);
 
   if (!ctx.payload) {
     addTurn({
@@ -334,9 +300,8 @@ export async function handleApprove(batchId: string) {
 }
 
 export function handleReject(batchId: string) {
-  const ctx = getSubmitContext(batchId);
   const s = useStore.getState();
-  const { addTurn, setApproval } = getApprovalActions(s, ctx.mode);
+  const { addTurn, setApproval } = getApprovalActions(s);
 
   setApproval(batchId, 'rejected');
   addTurn({
@@ -356,13 +321,7 @@ export function handleFormAnswer(
   const s = useStore.getState();
 
   const patch = { answered: true, selected, freeTextValue: freeText };
-  if (s.mode === 'workspace') {
-    s.updateTurnInActiveWorkspaceThread(turnId, patch as any);
-  } else if (s.mode === 'testing') {
-    s.updateTurnInActiveThread(turnId, patch as any);
-  } else {
-    s.updateTurn(turnId, patch as any);
-  }
+  s.updateTurnInActiveWorkspaceThread(turnId, patch as any);
 
   const parts = labels.filter(Boolean);
   let submission: string;
@@ -374,328 +333,16 @@ export function handleFormAnswer(
     submission = parts.join(', ');
   }
 
-  if (s.mode === 'workspace') {
-    void runLLMWorkspace(submission);
-  } else if (s.mode === 'testing') {
-    void runLLMTesting(submission);
-  } else {
-    void runLLM(submission);
-  }
+  void runLLM(submission);
 }
 
 // ─── Free-text LLM path ─────────────────────────────────────────────────
+//
+// Always writes turns/artifacts/approvals into the active workspace thread.
+// In `testing` mode, the active thread's `billEnvId`/`billProduct` are sent
+// to /api/chat so the backend hits a real Bill sandbox; if no env is picked,
+// we short-circuit with an inline prompt to choose one in the rail.
 export async function runLLM(userText: string, opts?: ForcedArtifact) {
-  const s = useStore.getState();
-  if (s.streaming) return;
-
-  const displayText = opts
-    ? `/${opts.commandName}${userText ? ' ' + userText : ''}`
-    : userText;
-  // Capture history BEFORE we push the new user turn, so it isn't duplicated.
-  const history = buildHistory(s.turns);
-  s.addTurn({ id: newId('u'), kind: 'user', text: displayText });
-  s.setStreaming(true);
-
-  const agentId = newId('a');
-  s.addTurn({ id: agentId, kind: 'agent', text: '', streaming: true });
-
-  let acc = '';
-  const toolTurnIds: Record<string, string> = {};
-
-  try {
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: s.tweaks.modelId,
-        userMessage: userText,
-        demoDataset: s.tweaks.demoDataset,
-        history,
-        ...(opts ? {
-          forcedKind: opts.forcedKind,
-          requirements: opts.requirements,
-          commandName: opts.commandName,
-        } : {}),
-      }),
-    });
-    if (!res.ok || !res.body) throw new Error('chat request failed');
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let buf = '';
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      const lines = buf.split('\n');
-      buf = lines.pop() ?? '';
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const json = line.slice(6).trim();
-        if (!json) continue;
-        let ev: any;
-        try { ev = JSON.parse(json); } catch { continue; }
-        if (ev.type === 'text') {
-          acc += ev.text;
-          useStore.getState().updateTurn(agentId, { text: acc, streaming: true });
-        } else if (ev.type === 'tool-call') {
-          const tid = newId('tl');
-          toolTurnIds[ev.id] = tid;
-          useStore.getState().addTurn({
-            id: tid,
-            kind: 'tools',
-            rows: [{ verb: 'EXEC', path: toolLabel(ev.name), filter: JSON.stringify(ev.input), status: '…', result: 'running' }],
-            pending: 0,
-          });
-        } else if (ev.type === 'tool-result') {
-          const tid = toolTurnIds[ev.id];
-          if (tid) {
-            useStore.getState().updateTurn(tid, {
-              rows: [{
-                verb: 'EXEC',
-                path: toolLabel(ev.name),
-                filter: JSON.stringify(ev.input),
-                status: ev.ok ? 'ok' : 'err',
-                result: ev.summary,
-              }],
-            } as Partial<Turn>);
-          }
-        } else if (ev.type === 'artifact') {
-          const artId = ev.kind === 'html'
-            ? `art_html_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
-            : `art_${ev.kind.replace('-', '_')}`;
-          useStore.getState().setArtifacts(prev =>
-            prev.find(p => p.id === artId) ? prev : [...prev, {
-              id: artId,
-              kind: ev.kind,
-              label: ev.label ?? ev.kind,
-              status: 'draft' as const,
-              version: 1,
-              createdBy: 'Coworker',
-              ...(ev.title ? { title: ev.title } : {}),
-              ...(ev.html ? { html: ev.html } : {}),
-              ...(ev.css ? { css: ev.css } : {}),
-              ...(ev.script ? { script: ev.script } : {}),
-              ...(ev.dataJson ? { dataJson: ev.dataJson } : {}),
-            }]
-          );
-          useStore.getState().setActiveArtifact(artId);
-          useStore.getState().addTurn({
-            id: newId('ac'),
-            kind: 'artifact-card',
-            artifactId: artId,
-            title: ev.title ?? ev.label ?? 'Artifact',
-            sub: (ev.sub ?? 'GENERATED').toUpperCase(),
-            meta: ev.meta ?? '',
-            icon: ev.icon ?? '◫',
-          });
-        } else if (ev.type === 'approval') {
-          const payload = ev.payload as ApprovalPayload;
-          useStore.getState().setApprovalPayload(payload.batchId, payload);
-          useStore.getState().addTurn({
-            id: newId('ap'),
-            kind: 'approval',
-            payload,
-            simulated: ev.simulated === true,
-          });
-        } else if (ev.type === 'form-question') {
-          useStore.getState().updateTurn(agentId, { text: acc, streaming: false });
-          useStore.getState().addTurn({
-            id: newId('fq'),
-            kind: 'form-question',
-            question: ev.question,
-            options: ev.options,
-            multiSelect: ev.multiSelect,
-            freeText: ev.freeText,
-          });
-        } else if (ev.type === 'done') {
-          useStore.getState().updateTurn(agentId, { text: acc || ev.text || '', streaming: false });
-        } else if (ev.type === 'error') {
-          useStore.getState().updateTurn(agentId, {
-            text: (acc ? acc + '\n\n' : '') + formatErrorText(ev.message),
-            streaming: false,
-          });
-        }
-      }
-    }
-  } catch (e: any) {
-    useStore.getState().updateTurn(agentId, {
-      text: `_Couldn't reach the model. ${e?.message ?? 'unknown error'}. Set ANTHROPIC_API_KEY / GEMINI_API_KEY in .env.local and restart._`,
-      streaming: false,
-    });
-  } finally {
-    useStore.getState().setStreaming(false);
-  }
-}
-
-// ─── Testing mode: real Bill sandbox ────────────────────────────────────
-export async function runLLMTesting(userText: string, opts?: ForcedArtifact) {
-  const s = useStore.getState();
-  if (s.streaming) return;
-
-  const thread = getActiveThread();
-  if (!thread) {
-    // Seed a thread on the fly so "first send" just works.
-    const id = s.newThread('New thread');
-    void id;
-  }
-
-  const active = getActiveThread();
-  if (!active) return;
-
-  const displayText = opts
-    ? `/${opts.commandName}${userText ? ' ' + userText : ''}`
-    : userText;
-
-  if (!active.billEnvId) {
-    s.addTurnToActiveThread({ id: newId('u'), kind: 'user', text: displayText });
-    s.addTurnToActiveThread({
-      id: newId('a'),
-      kind: 'agent',
-      text: 'Pick a Bill environment for this thread in the Rail before sending a prompt.',
-    });
-    return;
-  }
-
-  const history = buildHistory(active.turns ?? []);
-  s.addTurnToActiveThread({ id: newId('u'), kind: 'user', text: displayText });
-  s.setStreaming(true);
-
-  const agentId = newId('a');
-  s.addTurnToActiveThread({ id: agentId, kind: 'agent', text: '', streaming: true });
-
-  let acc = '';
-  const toolTurnIds: Record<string, string> = {};
-
-  try {
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: s.tweaks.modelId,
-        userMessage: userText,
-        mode: 'testing',
-        billEnvId: active.billEnvId,
-        billProduct: active.billProduct ?? 'ap',
-        demoDataset: s.tweaks.demoDataset,
-        history,
-        ...(opts ? {
-          forcedKind: opts.forcedKind,
-          requirements: opts.requirements,
-          commandName: opts.commandName,
-        } : {}),
-      }),
-    });
-    if (!res.ok || !res.body) throw new Error('chat request failed');
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let buf = '';
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      const lines = buf.split('\n');
-      buf = lines.pop() ?? '';
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const json = line.slice(6).trim();
-        if (!json) continue;
-        let ev: any;
-        try { ev = JSON.parse(json); } catch { continue; }
-        if (ev.type === 'text') {
-          acc += ev.text;
-          useStore.getState().updateTurnInActiveThread(agentId, { text: acc, streaming: true });
-        } else if (ev.type === 'tool-call') {
-          const tid = newId('tl');
-          toolTurnIds[ev.id] = tid;
-          useStore.getState().addTurnToActiveThread({
-            id: tid,
-            kind: 'tools',
-            rows: [{ verb: 'EXEC', path: toolLabel(ev.name), filter: JSON.stringify(ev.input), status: '…', result: 'running' }],
-            pending: 0,
-          });
-        } else if (ev.type === 'tool-result') {
-          const tid = toolTurnIds[ev.id];
-          if (tid) {
-            useStore.getState().updateTurnInActiveThread(tid, {
-              rows: [{
-                verb: 'EXEC',
-                path: toolLabel(ev.name),
-                filter: JSON.stringify(ev.input),
-                status: ev.ok ? 'ok' : 'err',
-                result: ev.summary,
-              }],
-            } as Partial<Turn>);
-          }
-        } else if (ev.type === 'artifact') {
-          const artId = ev.kind === 'html'
-            ? `art_html_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
-            : `art_${ev.kind.replace('-', '_')}`;
-          useStore.getState().setArtifactsInActiveThread(prev =>
-            prev.find(p => p.id === artId) ? prev : [...prev, {
-              id: artId,
-              kind: ev.kind,
-              label: ev.label ?? ev.kind,
-              status: 'draft' as const,
-              version: 1,
-              createdBy: 'Coworker',
-              ...(ev.title ? { title: ev.title } : {}),
-              ...(ev.html ? { html: ev.html } : {}),
-              ...(ev.css ? { css: ev.css } : {}),
-              ...(ev.script ? { script: ev.script } : {}),
-              ...(ev.dataJson ? { dataJson: ev.dataJson } : {}),
-            }]
-          );
-          useStore.getState().setActiveArtifact(artId);
-          useStore.getState().addTurnToActiveThread({
-            id: newId('ac'),
-            kind: 'artifact-card',
-            artifactId: artId,
-            title: ev.title ?? ev.label ?? 'Artifact',
-            sub: (ev.sub ?? 'GENERATED').toUpperCase(),
-            meta: ev.meta ?? '',
-            icon: ev.icon ?? '◫',
-          });
-        } else if (ev.type === 'approval') {
-          const payload = ev.payload as ApprovalPayload;
-          useStore.getState().setApprovalPayloadInActiveThread(payload.batchId, payload);
-          useStore.getState().addTurnToActiveThread({
-            id: newId('ap'),
-            kind: 'approval',
-            payload,
-            simulated: ev.simulated === true,
-          });
-        } else if (ev.type === 'form-question') {
-          useStore.getState().updateTurnInActiveThread(agentId, { text: acc, streaming: false });
-          useStore.getState().addTurnToActiveThread({
-            id: newId('fq'),
-            kind: 'form-question',
-            question: ev.question,
-            options: ev.options,
-            multiSelect: ev.multiSelect,
-            freeText: ev.freeText,
-          });
-        } else if (ev.type === 'done') {
-          useStore.getState().updateTurnInActiveThread(agentId, { text: acc || ev.text || '', streaming: false });
-        } else if (ev.type === 'error') {
-          useStore.getState().updateTurnInActiveThread(agentId, {
-            text: (acc ? acc + '\n\n' : '') + formatErrorText(ev.message),
-            streaming: false,
-          });
-        }
-      }
-    }
-  } catch (e: any) {
-    useStore.getState().updateTurnInActiveThread(agentId, {
-      text: `_Couldn't reach the model. ${e?.message ?? 'unknown error'}._`,
-      streaming: false,
-    });
-  } finally {
-    useStore.getState().setStreaming(false);
-  }
-}
-
-// ─── Workspace mode: demo-like LLM but turns go to workspace thread ─────
-export async function runLLMWorkspace(userText: string, opts?: ForcedArtifact) {
   const s = useStore.getState();
   if (s.streaming) return;
 
@@ -705,6 +352,16 @@ export async function runLLMWorkspace(userText: string, opts?: ForcedArtifact) {
   const displayText = opts
     ? `/${opts.commandName}${userText ? ' ' + userText : ''}`
     : userText;
+
+  if (s.mode === 'testing' && !wsThread.billEnvId) {
+    s.addTurnToActiveWorkspaceThread({ id: newId('u'), kind: 'user', text: displayText });
+    s.addTurnToActiveWorkspaceThread({
+      id: newId('a'),
+      kind: 'agent',
+      text: 'Pick a Bill environment for this thread in the Rail before sending a prompt.',
+    });
+    return;
+  }
 
   const history = buildHistory(wsThread.turns);
   s.addTurnToActiveWorkspaceThread({ id: newId('u'), kind: 'user', text: displayText });
@@ -725,6 +382,13 @@ export async function runLLMWorkspace(userText: string, opts?: ForcedArtifact) {
         userMessage: userText,
         demoDataset: s.tweaks.demoDataset,
         history,
+        ...(s.mode === 'testing'
+          ? {
+              mode: 'testing',
+              billEnvId: wsThread.billEnvId,
+              billProduct: wsThread.billProduct ?? 'ap',
+            }
+          : {}),
         ...(opts ? {
           forcedKind: opts.forcedKind,
           requirements: opts.requirements,

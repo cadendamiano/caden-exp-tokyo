@@ -1,8 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useStore, type Workspace, type Artifact } from '@/lib/store';
 import { Icon } from './primitives/Icon';
+
+const DEMO_SANDBOX_ENV_ID = '__demo_sandbox__';
+
+type EnvView = {
+  id: string;
+  name: string;
+  product: 'ap' | 'se' | 'both';
+};
 
 const Clock = () => (
   <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -45,8 +53,101 @@ const Folder = () => (
 export function WorkspaceRailBody() {
   const view = useStore(s => s.workspaceView);
   const setView = useStore(s => s.setWorkspaceView);
+  const mode = useStore(s => s.mode);
 
-  return view === 'history' ? <WorkspaceHistory onBack={() => setView('workspaces')} /> : <WorkspaceList />;
+  return (
+    <>
+      {view === 'history' ? <WorkspaceHistory onBack={() => setView('workspaces')} /> : <WorkspaceList />}
+      {mode === 'testing' && view === 'workspaces' && <WorkspaceBillEnvPicker />}
+    </>
+  );
+}
+
+function WorkspaceBillEnvPicker() {
+  const activeWorkspaceId = useStore(s => s.activeWorkspaceId);
+  const activeThreadId = useStore(s => s.activeWorkspaceThreadId);
+  const workspaces = useStore(s => s.workspaces);
+  const setWorkspaceThreadBillEnv = useStore(s => s.setWorkspaceThreadBillEnv);
+
+  const [envs, setEnvs] = useState<EnvView[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/settings', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setEnvs(
+          (data.billEnvironments ?? []).map((e: any) => ({
+            id: e.id,
+            name: e.name,
+            product: e.product ?? 'ap',
+          }))
+        );
+      } catch {
+        if (!cancelled) setEnvs([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!activeWorkspaceId || !activeThreadId) return null;
+  const ws = workspaces.find(w => w.id === activeWorkspaceId);
+  const active = ws?.threads.find(t => t.id === activeThreadId);
+  if (!active) return null;
+
+  return (
+    <div className="rail-mini">
+      <div className="rail-section-label">Bill env for this thread</div>
+      <select
+        className="rail-env-select"
+        value={active.billEnvId ?? ''}
+        onChange={e => {
+          const envId = e.target.value || undefined;
+          if (envId === DEMO_SANDBOX_ENV_ID) {
+            setWorkspaceThreadBillEnv(activeWorkspaceId, active.id, envId, 'ap');
+          } else {
+            setWorkspaceThreadBillEnv(activeWorkspaceId, active.id, envId, active.billProduct ?? 'ap');
+          }
+        }}
+      >
+        <option value="">— pick an env —</option>
+        <option value={DEMO_SANDBOX_ENV_ID}>Demo Sandbox · fake data</option>
+        {(envs ?? []).map(env => (
+          <option key={env.id} value={env.id}>
+            {env.name} · {env.product}
+          </option>
+        ))}
+      </select>
+      {active.billEnvId !== DEMO_SANDBOX_ENV_ID && (
+        <div className="rail-product-toggle">
+          {(['ap', 'se'] as const).map(p => (
+            <button
+              key={p}
+              className={
+                'rail-product-btn' +
+                ((active.billProduct ?? 'ap') === p ? ' active' : '')
+              }
+              onClick={() =>
+                setWorkspaceThreadBillEnv(activeWorkspaceId, active.id, active.billEnvId, p)
+              }
+            >
+              {p === 'ap' ? 'AP' : 'S&E'}
+            </button>
+          ))}
+        </div>
+      )}
+      {envs && envs.length === 0 && active.billEnvId !== DEMO_SANDBOX_ENV_ID && (
+        <div className="rail-empty" style={{ marginTop: 8 }}>
+          No real sandbox envs configured. Pick Demo Sandbox above or add one in Settings.
+        </div>
+      )}
+    </div>
+  );
 }
 
 function WorkspaceList() {
