@@ -608,6 +608,25 @@ export const FORM_TOOLS: ToolDef[] = [
       required: ['question', 'options'],
     },
   },
+  {
+    name: 'render_spreadsheet_artifact',
+    label: 'Open spreadsheet',
+    description:
+      'Open an editable multi-sheet spreadsheet in the artifact panel. Use when the user asks to create a spreadsheet, turn a table into a spreadsheet, or requests tabular data with formula editing. Do NOT use for ap-table, spend-chart, or other fixed artifact kinds.',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Display title for the artifact tab.' },
+        sub: { type: 'string', description: 'Short uppercase subtitle, e.g. "SPREADSHEET · EDITABLE".' },
+        meta: { type: 'string', description: 'Short summary with markdown bold supported.' },
+        dataJson: {
+          type: 'string',
+          description: 'JSON string describing the workbook. Shape: {"sheets":[{"name":"Tab label","headers":["Col A","Col B"],"rows":[["cell","cell"]]}]}. Include one sheet object per logical grouping. Use numbers (not strings) for amounts so currency formatting applies.',
+        },
+      },
+      required: ['title', 'dataJson'],
+    },
+  },
 ];
 
 export const WRITE_TOOLS: ToolDef[] = [
@@ -1145,6 +1164,9 @@ async function runRealTool(
     if (name === 'render_html_artifact') {
       return { ok: true, summary: 'html artifact opened in UI', data: input };
     }
+    if (name === 'render_spreadsheet_artifact') {
+      return { ok: true, summary: 'spreadsheet artifact opened in UI', data: input };
+    }
     if (name === 'ask_question') {
       return { ok: true, summary: 'question presented to user', data: { __awaiting_input: true } };
     }
@@ -1585,6 +1607,9 @@ async function runMockTool(
     if (name === 'render_html_artifact') {
       return { ok: true, summary: 'html artifact opened in UI', data: input };
     }
+    if (name === 'render_spreadsheet_artifact') {
+      return { ok: true, summary: 'spreadsheet artifact opened in UI', data: input };
+    }
     if (name === 'ask_question') {
       return { ok: true, summary: 'question presented to user', data: { __awaiting_input: true } };
     }
@@ -1987,6 +2012,7 @@ Style:
 - Be concise, professional, and precise. Short paragraphs. Markdown **bold** and \`inline code\` are supported.
 - When you need data, call tools rather than guessing. You can call multiple tools per turn.
 - When the user asks to visualize or open an interactive view (AP list, spend chart, Net-15 rule, CRM flow, cash runway, sweep rule, report/document), call \`render_artifact\` with the right kind. Kinds: ap-table, spend-chart, rule-net15, crm-flow, document, liquidity-burndown, sweep-rule.
+- When the user asks to "create a spreadsheet", "turn this into a spreadsheet", "open as spreadsheet", or requests tabular data they can edit with formulas — call \`render_spreadsheet_artifact\`. First call the appropriate read tool (e.g. \`list_bills\`, \`get_category_spend\`) to get the data, then pass it as \`dataJson\` in the format \`{"sheets":[{"name":"Tab name","headers":[...],"rows":[[...]]}]}\`. Use one sheet per logical grouping. Use numbers (not strings) for currency amounts.
 - To stage a payment, call \`stage_payment_batch\` with the bill IDs — the UI will render an approval card with a typed-confirmation gate. Do not fabricate approvals. Wait for the user's approve/reject before describing an outcome.
 
 Tool groups available:
