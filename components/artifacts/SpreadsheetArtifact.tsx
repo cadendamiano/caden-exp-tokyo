@@ -4,6 +4,7 @@ import '@univerjs/design/lib/index.css';
 import '@univerjs/ui/lib/index.css';
 import '@univerjs/sheets-ui/lib/index.css';
 import '@univerjs/sheets-formula-ui/lib/index.css';
+import '@univerjs/docs-ui/lib/index.css';
 
 import { useEffect, useRef } from 'react';
 import { transformToUniver } from '@/lib/spreadsheetData';
@@ -39,6 +40,8 @@ export function SpreadsheetArtifact({ artifact }: Props) {
         { UniverRenderEnginePlugin },
         { UniverFormulaEnginePlugin },
         { UniverUIPlugin },
+        { UniverDocsPlugin },
+        { UniverDocsUIPlugin },
         { UniverSheetsPlugin },
         { UniverSheetsUIPlugin },
         { UniverSheetsFormulaPlugin },
@@ -46,12 +49,15 @@ export function SpreadsheetArtifact({ artifact }: Props) {
         SheetsUILocale,
         UILocale,
         SheetsFormulaUILocale,
+        DocsUILocale,
       ] = await Promise.all([
         import('@univerjs/core'),
         import('@univerjs/themes'),
         import('@univerjs/engine-render'),
         import('@univerjs/engine-formula'),
         import('@univerjs/ui'),
+        import('@univerjs/docs'),
+        import('@univerjs/docs-ui'),
         import('@univerjs/sheets'),
         import('@univerjs/sheets-ui'),
         import('@univerjs/sheets-formula'),
@@ -59,6 +65,7 @@ export function SpreadsheetArtifact({ artifact }: Props) {
         import('@univerjs/sheets-ui/locale/en-US'),
         import('@univerjs/ui/locale/en-US'),
         import('@univerjs/sheets-formula-ui/locale/en-US'),
+        import('@univerjs/docs-ui/locale/en-US'),
       ]);
 
       if (cancelled || !containerRef.current) return;
@@ -71,6 +78,7 @@ export function SpreadsheetArtifact({ artifact }: Props) {
         locales: {
           [LocaleType.EN_US]: {
             ...(UILocale.default ?? UILocale),
+            ...(DocsUILocale.default ?? DocsUILocale),
             ...(SheetsUILocale.default ?? SheetsUILocale),
             ...(SheetsFormulaUILocale.default ?? SheetsFormulaUILocale),
           },
@@ -80,6 +88,8 @@ export function SpreadsheetArtifact({ artifact }: Props) {
       univer.registerPlugin(UniverRenderEnginePlugin);
       univer.registerPlugin(UniverFormulaEnginePlugin);
       univer.registerPlugin(UniverUIPlugin, { container: containerRef.current });
+      univer.registerPlugin(UniverDocsPlugin);
+      univer.registerPlugin(UniverDocsUIPlugin);
       univer.registerPlugin(UniverSheetsPlugin);
       univer.registerPlugin(UniverSheetsUIPlugin);
       univer.registerPlugin(UniverSheetsFormulaPlugin);
