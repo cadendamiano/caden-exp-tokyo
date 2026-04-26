@@ -1,6 +1,6 @@
 import type { DatasetKey } from './data';
 
-export type ArtifactKind = 'ap-table' | 'spend-chart' | 'rule-net15' | 'crm-flow' | 'html' | 'document' | 'liquidity-burndown' | 'sweep-rule';
+export type ArtifactKind = 'ap-table' | 'spreadsheet' | 'spend-chart' | 'rule-net15' | 'crm-flow' | 'html' | 'document' | 'liquidity-burndown' | 'sweep-rule';
 
 export type ToolRowSpec = {
   verb: 'GET' | 'POST' | 'EXEC';

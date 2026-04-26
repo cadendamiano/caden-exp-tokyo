@@ -39,13 +39,20 @@ Requirements:
 ${lines}${dvExtra}`;
 }
 
+export function filterToolsByAllowlist(tools: ToolDef[], allowlist: string[]): ToolDef[] {
+  if (!allowlist.length) return tools;
+  const allowed = new Set(allowlist);
+  return tools.filter(t => allowed.has(t.name));
+}
+
 export function coerceArtifactKind(
   modelKind: unknown,
   forcedKind: ArtifactKind | undefined
 ): string {
   if (!forcedKind) return String(modelKind);
-  // 'html' is a legitimate escape hatch via render_html_artifact — never coerce it away.
+  // 'html' and 'spreadsheet' are legitimate escape hatches — never coerce them away.
   if (modelKind === 'html') return 'html';
+  if (modelKind === 'spreadsheet') return 'spreadsheet';
   if (modelKind !== forcedKind) {
     console.warn(
       `[chat] model emitted artifact kind=${String(modelKind)} but forced kind=${forcedKind}; coercing`

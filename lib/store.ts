@@ -6,6 +6,7 @@ import type { Turn } from './turns';
 import type { ArtifactKind, FlowStep } from './flows';
 import type { DatasetKey } from './data';
 import { SEED_WORKSPACES } from './data';
+import type { Shortcut } from './shortcuts';
 import {
   DEFAULT_MODEL_ID,
   MODELS,
@@ -104,6 +105,11 @@ type State = {
   workspaceView: WorkspaceView;
   expandedWorkspaceIds: string[];
 
+  shortcuts: Shortcut[];
+  addShortcut: (shortcut: Shortcut) => void;
+  updateShortcut: (id: string, patch: Partial<Omit<Shortcut, 'id' | 'createdAt'>>) => void;
+  deleteShortcut: (id: string) => void;
+
   setTweak: <K extends keyof Tweaks>(k: K, v: Tweaks[K]) => void;
   setSettingsStatus: (status: SettingsStatus | null) => void;
   setComposer: (s: string) => void;
@@ -182,6 +188,18 @@ export const useStore = create<State>()(
       activeWorkspaceThreadId: null,
       workspaceView: 'workspaces',
       expandedWorkspaceIds: [],
+
+      shortcuts: [],
+      addShortcut: (shortcut) =>
+        set(s => ({ shortcuts: [...s.shortcuts, shortcut] })),
+      updateShortcut: (id, patch) =>
+        set(s => ({
+          shortcuts: s.shortcuts.map(sc =>
+            sc.id === id ? { ...sc, ...patch, updatedAt: Date.now() } : sc
+          ),
+        })),
+      deleteShortcut: (id) =>
+        set(s => ({ shortcuts: s.shortcuts.filter(sc => sc.id !== id) })),
 
       setTweak: (k, v) => set(s => ({ tweaks: { ...s.tweaks, [k]: v } })),
       setSettingsStatus: (settingsStatus) =>
@@ -517,8 +535,6 @@ export const useStore = create<State>()(
           persisted.expandedWorkspaceIds = [];
         }
         if (persisted && fromVersion < 6) {
-          // v6: drop legacy 'workspace' mode and old root-level thread state.
-          // The workspace UX is now unconditional; mode is just a behavior switch.
           if (persisted.mode === 'workspace') persisted.mode = 'demo';
           if (persisted.mode !== 'demo' && persisted.mode !== 'testing') {
             persisted.mode = 'demo';
@@ -529,6 +545,7 @@ export const useStore = create<State>()(
           delete persisted.approvalPayloads;
           delete persisted.testingThreads;
           delete persisted.activeTestingThreadId;
+          persisted.shortcuts = persisted.shortcuts ?? [];
         }
         return persisted;
       },
@@ -547,6 +564,7 @@ export const useStore = create<State>()(
         activeWorkspaceThreadId: s.activeWorkspaceThreadId,
         workspaceView: s.workspaceView,
         expandedWorkspaceIds: s.expandedWorkspaceIds,
+        shortcuts: s.shortcuts,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
@@ -563,6 +581,7 @@ export const useStore = create<State>()(
         state.workspaces = workspaces.length > 0 ? workspaces : SEED_WORKSPACES;
         state.expandedWorkspaceIds = state.expandedWorkspaceIds ?? [];
         state.workspaceView = state.workspaceView ?? 'workspaces';
+        state.shortcuts = state.shortcuts ?? [];
       },
     }
   )

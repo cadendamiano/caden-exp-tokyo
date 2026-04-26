@@ -6,7 +6,7 @@ import type { DatasetKey } from '@/lib/data';
 import type { ArtifactKind } from '@/lib/flows';
 import { getAnthropicKey, getGeminiKey, readSecrets } from '@/lib/secrets';
 import { providerOf } from '@/lib/models';
-import { buildModelTools, buildRequirementsBlock, coerceArtifactKind } from '@/lib/chatSchema';
+import { buildModelTools, buildRequirementsBlock, coerceArtifactKind, filterToolsByAllowlist } from '@/lib/chatSchema';
 import { recordSpan, type ToolCallRecord } from '@/lib/spanBuffer';
 import { sseEncode, jsonSchemaToGemini, type Event, type ChatHistoryTurn, type ApprovalPayload } from '@/lib/chatRouteHelpers';
 
@@ -24,6 +24,8 @@ export async function POST(req: NextRequest) {
     forcedKind?: ArtifactKind;
     requirements?: string[];
     commandName?: string;
+    shortcutAllowedTools?: string[];
+    shortcutSystemPrompt?: string;
     history?: ChatHistoryTurn[];
   };
   const { model, userMessage } = body;
@@ -46,14 +48,20 @@ export async function POST(req: NextRequest) {
     ctx.mode === 'testing'
       ? (testingOverride || TESTING_SYSTEM_PROMPT)
       : (demoOverride || SYSTEM_PROMPT);
-  const systemPrompt =
+  const withRequirements =
     body.forcedKind && body.commandName
       ? `${baseSystem}\n\n${buildRequirementsBlock(body.commandName, body.forcedKind, body.requirements ?? [])}`
       : baseSystem;
+  const systemPrompt = body.shortcutSystemPrompt
+    ? `${withRequirements}\n\n${body.shortcutSystemPrompt}`
+    : withRequirements;
   const allTools = buildModelTools(body.forcedKind);
-  const tools = disabledTools.size > 0
+  const afterDisabled = disabledTools.size > 0
     ? allTools.filter(t => !disabledTools.has(t.name))
     : allTools;
+  const tools = body.shortcutAllowedTools?.length
+    ? filterToolsByAllowlist(afterDisabled, body.shortcutAllowedTools)
+    : afterDisabled;
 
   // Span accumulator for observability
   const spanId = `span_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
@@ -218,6 +226,18 @@ async function runAnthropic(
           dataJson: inp.dataJson,
         });
       }
+      if (tu.name === 'render_spreadsheet_artifact') {
+        const inp = tu.input as any;
+        send({
+          type: 'artifact',
+          kind: 'spreadsheet',
+          title: inp.title,
+          sub: inp.sub,
+          meta: inp.meta,
+          label: inp.title,
+          dataJson: inp.dataJson,
+        });
+      }
       if (tu.name === 'stage_payment_batch' && res.data && (res.data as any).approvalPayload) {
         const d = res.data as { approvalPayload: ApprovalPayload; simulated?: boolean };
         send({ type: 'approval', payload: d.approvalPayload, simulated: d.simulated === true });
@@ -353,6 +373,18 @@ async function runGemini(
           html: inp.html,
           css: inp.css,
           script: inp.script,
+          dataJson: inp.dataJson,
+        });
+      }
+      if (tc.name === 'render_spreadsheet_artifact') {
+        const inp = tc.input as any;
+        send({
+          type: 'artifact',
+          kind: 'spreadsheet',
+          title: inp.title,
+          sub: inp.sub,
+          meta: inp.meta,
+          label: inp.title,
           dataJson: inp.dataJson,
         });
       }
