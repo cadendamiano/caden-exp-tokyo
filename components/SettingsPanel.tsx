@@ -87,8 +87,6 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const showCodeView = useStore(s => s.tweaks.showCodeView);
   const demoDataset = useStore(s => s.tweaks.demoDataset);
   const setTweak = useStore(s => s.setTweak);
-  const newThread = useStore(s => s.newThread);
-  const testingThreads = useStore(s => s.testingThreads);
   const setSettingsStatus = useStore(s => s.setSettingsStatus);
 
   function publishStatus(next: SettingsView) {
@@ -127,11 +125,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   }, []);
 
   function toggleMode() {
-    const next = mode === 'demo' ? 'testing' : 'demo';
-    setMode(next);
-    if (next === 'testing' && testingThreads.length === 0) {
-      newThread('First thread');
-    }
+    setMode(mode === 'demo' ? 'testing' : 'demo');
     onClose();
   }
 

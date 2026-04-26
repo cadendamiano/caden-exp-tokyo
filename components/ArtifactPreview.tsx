@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useStore, getActiveThread } from '@/lib/store';
+import { useStore, getActiveWorkspaceThread } from '@/lib/store';
 import { getDataset, type DatasetKey, type ProjectionPoint } from '@/lib/data';
 import { fmtMoney, fmtMoneyShort, fmtDate } from '@/lib/format';
 import type { ArtifactKind } from '@/lib/flows';
@@ -227,8 +227,8 @@ export function ArtifactPreview({ artifact }: Props) {
 
   useEffect(() => {
     setLoading(true);
-    const thread = getActiveThread();
-    fetchPreview(artifact.kind, mode === 'workspace' ? 'demo' : mode, thread?.billEnvId, thread?.billProduct, demoDataset)
+    const thread = getActiveWorkspaceThread();
+    fetchPreview(artifact.kind, mode, thread?.billEnvId, thread?.billProduct, demoDataset)
       .then(r => {
         setResult(r);
         setLoading(false);

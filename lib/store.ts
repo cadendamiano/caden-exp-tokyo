@@ -16,7 +16,7 @@ import {
   type Provider,
 } from './models';
 
-export type Mode = 'demo' | 'testing' | 'workspace';
+export type Mode = 'demo' | 'testing';
 export type BillProduct = 'ap' | 'se';
 export type WorkspaceView = 'workspaces' | 'history';
 
@@ -91,19 +91,13 @@ export type Thread = {
 
 type State = {
   tweaks: Tweaks;
-  turns: Turn[];
-  artifacts: Artifact[];
   activeArtifact: string | null;
   selectedBills: string[];
-  approvalStates: Record<string, ApprovalState>;
-  approvalPayloads: Record<string, ApprovalPayload>;
   streaming: boolean;
   composer: string;
   settingsStatus: SettingsStatus | null;
 
   mode: Mode;
-  testingThreads: Thread[];
-  activeTestingThreadId: string | null;
 
   workspaces: Workspace[];
   activeWorkspaceId: string | null;
@@ -120,28 +114,10 @@ type State = {
   setSettingsStatus: (status: SettingsStatus | null) => void;
   setComposer: (s: string) => void;
   setStreaming: (b: boolean) => void;
-  addTurn: (t: Turn) => void;
-  updateTurn: (id: string, patch: Partial<Turn>) => void;
-  removeTurnsByKind: (kind: Turn['kind']) => void;
-  setArtifacts: (fn: (prev: Artifact[]) => Artifact[]) => void;
   setActiveArtifact: (id: string | null) => void;
   toggleBill: (id: string) => void;
-  setApproval: (batchId: string, state: ApprovalState) => void;
-  setApprovalPayload: (batchId: string, payload: ApprovalPayload) => void;
-  reset: () => void;
-  seedWelcome: () => void;
 
   setMode: (m: Mode) => void;
-  newThread: (title?: string) => string;
-  setActiveThread: (id: string) => void;
-  deleteThread: (id: string) => void;
-  renameThread: (id: string, title: string) => void;
-  addTurnToActiveThread: (t: Turn) => void;
-  updateTurnInActiveThread: (id: string, patch: Partial<Turn>) => void;
-  setArtifactsInActiveThread: (fn: (prev: Artifact[]) => Artifact[]) => void;
-  setApprovalInActiveThread: (batchId: string, state: ApprovalState) => void;
-  setApprovalPayloadInActiveThread: (batchId: string, payload: ApprovalPayload) => void;
-  setThreadBillEnv: (id: string, envId: string | undefined, product: BillProduct) => void;
   activateArtifact: (id: string) => void;
   acknowledgeArtifactDryRun: (id: string) => void;
 
@@ -160,19 +136,15 @@ type State = {
   setApprovalInActiveWorkspaceThread: (batchId: string, state: ApprovalState) => void;
   setApprovalPayloadInActiveWorkspaceThread: (batchId: string, payload: ApprovalPayload) => void;
   deleteWorkspaceThread: (workspaceId: string, threadId: string) => void;
+  renameWorkspaceThread: (workspaceId: string, threadId: string, title: string) => void;
+  setWorkspaceThreadBillEnv: (
+    workspaceId: string,
+    threadId: string,
+    envId: string | undefined,
+    product: BillProduct
+  ) => void;
   openWorkspaceArtifact: (workspaceId: string, threadId: string, artifactId: string) => void;
   addWorkspaceFile: (workspaceId: string, file: WorkspaceFile) => void;
-};
-
-const WELCOME_TURN: Turn = {
-  id: 'welcome',
-  kind: 'agent',
-  text: `I'm connected to your BILL workspace (\`meridian-ops\`). I can read any AP/AR/Payment record, draft payments for your approval, build automations on BILL events, and generate artifacts from your data.
-
-Every action that moves money requires a human approval gate. I'll never pay a bill or change a vendor record without showing you the exact payload first.
-
-Try one of the demo prompts below, or type anything. Use \`/\` for slash commands.`,
-  welcome: true,
 };
 
 const DEFAULT_TWEAKS: Tweaks = {
@@ -201,21 +173,15 @@ function createThread(title?: string): Thread {
 
 export const useStore = create<State>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       tweaks: DEFAULT_TWEAKS,
-      turns: [WELCOME_TURN],
-      artifacts: [],
       activeArtifact: null,
       selectedBills: [],
-      approvalStates: {},
-      approvalPayloads: {},
       streaming: false,
       composer: '',
       settingsStatus: null,
 
-      mode: 'workspace',
-      testingThreads: [],
-      activeTestingThreadId: null,
+      mode: 'demo',
 
       workspaces: SEED_WORKSPACES,
       activeWorkspaceId: null,
@@ -254,186 +220,50 @@ export const useStore = create<State>()(
         }),
       setComposer: (composer) => set({ composer }),
       setStreaming: (streaming) => set({ streaming }),
-      addTurn: (t) => set(s => ({ turns: [...s.turns, t] })),
-      updateTurn: (id, patch) =>
-        set(s => ({ turns: s.turns.map(t => (t.id === id ? ({ ...t, ...patch } as Turn) : t)) })),
-      removeTurnsByKind: (kind) => set(s => ({ turns: s.turns.filter(t => t.kind !== kind) })),
-      setArtifacts: (fn) => set(s => ({ artifacts: fn(s.artifacts) })),
       setActiveArtifact: (id) => set({ activeArtifact: id }),
       toggleBill: (id) =>
         set(s => {
           const has = s.selectedBills.includes(id);
           return { selectedBills: has ? s.selectedBills.filter(x => x !== id) : [...s.selectedBills, id] };
         }),
-      setApproval: (batchId, state) =>
-        set(s => ({ approvalStates: { ...s.approvalStates, [batchId]: state } })),
-      setApprovalPayload: (batchId, payload) =>
-        set(s => ({ approvalPayloads: { ...s.approvalPayloads, [batchId]: payload } })),
-      reset: () =>
-        set({
-          turns: [WELCOME_TURN],
-          artifacts: [],
-          activeArtifact: null,
-          selectedBills: [],
-          approvalStates: {},
-          approvalPayloads: {},
-          streaming: false,
-          composer: '',
-        }),
-      seedWelcome: () => set({ turns: [WELCOME_TURN] }),
 
       setMode: (mode) =>
         set({ mode, streaming: false, composer: '', activeArtifact: null }),
-
-      newThread: (title) => {
-        const thread = createThread(title);
-        set(s => ({
-          testingThreads: [...s.testingThreads, thread],
-          activeTestingThreadId: thread.id,
-        }));
-        return thread.id;
-      },
-
-      setActiveThread: (id) => set({ activeTestingThreadId: id, activeArtifact: null }),
-
-      deleteThread: (id) =>
-        set(s => {
-          const remaining = s.testingThreads.filter(t => t.id !== id);
-          const stillActive = s.activeTestingThreadId === id
-            ? (remaining[0]?.id ?? null)
-            : s.activeTestingThreadId;
-          return { testingThreads: remaining, activeTestingThreadId: stillActive };
-        }),
-
-      renameThread: (id, title) =>
-        set(s => ({
-          testingThreads: s.testingThreads.map(t =>
-            t.id === id ? { ...t, title: title || 'Untitled thread' } : t
-          ),
-        })),
-
-      addTurnToActiveThread: (t) =>
-        set(s => {
-          if (!s.activeTestingThreadId) return s;
-          return {
-            testingThreads: s.testingThreads.map(th =>
-              th.id === s.activeTestingThreadId ? { ...th, turns: [...th.turns, t] } : th
-            ),
-          };
-        }),
-
-      updateTurnInActiveThread: (id, patch) =>
-        set(s => {
-          if (!s.activeTestingThreadId) return s;
-          return {
-            testingThreads: s.testingThreads.map(th =>
-              th.id === s.activeTestingThreadId
-                ? {
-                    ...th,
-                    turns: th.turns.map(t => (t.id === id ? ({ ...t, ...patch } as Turn) : t)),
-                  }
-                : th
-            ),
-          };
-        }),
-
-      setArtifactsInActiveThread: (fn) =>
-        set(s => {
-          if (!s.activeTestingThreadId) return s;
-          return {
-            testingThreads: s.testingThreads.map(th =>
-              th.id === s.activeTestingThreadId ? { ...th, artifacts: fn(th.artifacts) } : th
-            ),
-          };
-        }),
-
-      setApprovalInActiveThread: (batchId, state) =>
-        set(s => {
-          if (!s.activeTestingThreadId) return s;
-          return {
-            testingThreads: s.testingThreads.map(th =>
-              th.id === s.activeTestingThreadId
-                ? { ...th, approvalStates: { ...(th.approvalStates ?? {}), [batchId]: state } }
-                : th
-            ),
-          };
-        }),
-
-      setApprovalPayloadInActiveThread: (batchId, payload) =>
-        set(s => {
-          if (!s.activeTestingThreadId) return s;
-          return {
-            testingThreads: s.testingThreads.map(th =>
-              th.id === s.activeTestingThreadId
-                ? { ...th, approvalPayloads: { ...(th.approvalPayloads ?? {}), [batchId]: payload } }
-                : th
-            ),
-          };
-        }),
-
-      setThreadBillEnv: (id, envId, product) =>
-        set(s => ({
-          testingThreads: s.testingThreads.map(t =>
-            t.id === id ? { ...t, billEnvId: envId, billProduct: product } : t
-          ),
-        })),
 
       activateArtifact: (id) =>
         set(s => {
           const patch = (a: Artifact) =>
             a.id === id ? { ...a, status: 'active' as ArtifactStatus, version: (a.version || 1) + 1 } : a;
-          if (s.mode === 'workspace' && s.activeWorkspaceId && s.activeWorkspaceThreadId) {
-            return {
-              workspaces: s.workspaces.map(w =>
-                w.id === s.activeWorkspaceId
-                  ? { ...w, threads: w.threads.map(th =>
-                      th.id === s.activeWorkspaceThreadId
-                        ? { ...th, artifacts: th.artifacts.map(patch) }
-                        : th
-                    ) }
-                  : w
-              ),
-            };
-          }
-          if (s.mode === 'testing' && s.activeTestingThreadId) {
-            return {
-              testingThreads: s.testingThreads.map(th =>
-                th.id === s.activeTestingThreadId
-                  ? { ...th, artifacts: th.artifacts.map(patch) }
-                  : th
-              ),
-            };
-          }
-          return { artifacts: s.artifacts.map(patch) };
+          if (!s.activeWorkspaceId || !s.activeWorkspaceThreadId) return s;
+          return {
+            workspaces: s.workspaces.map(w =>
+              w.id === s.activeWorkspaceId
+                ? { ...w, threads: w.threads.map(th =>
+                    th.id === s.activeWorkspaceThreadId
+                      ? { ...th, artifacts: th.artifacts.map(patch) }
+                      : th
+                  ) }
+                : w
+            ),
+          };
         }),
 
       acknowledgeArtifactDryRun: (id) =>
         set(s => {
           const patch = (a: Artifact) =>
             a.id === id ? { ...a, dryRunAcknowledged: true } : a;
-          if (s.mode === 'workspace' && s.activeWorkspaceId && s.activeWorkspaceThreadId) {
-            return {
-              workspaces: s.workspaces.map(w =>
-                w.id === s.activeWorkspaceId
-                  ? { ...w, threads: w.threads.map(th =>
-                      th.id === s.activeWorkspaceThreadId
-                        ? { ...th, artifacts: th.artifacts.map(patch) }
-                        : th
-                    ) }
-                  : w
-              ),
-            };
-          }
-          if (s.mode === 'testing' && s.activeTestingThreadId) {
-            return {
-              testingThreads: s.testingThreads.map(th =>
-                th.id === s.activeTestingThreadId
-                  ? { ...th, artifacts: th.artifacts.map(patch) }
-                  : th
-              ),
-            };
-          }
-          return { artifacts: s.artifacts.map(patch) };
+          if (!s.activeWorkspaceId || !s.activeWorkspaceThreadId) return s;
+          return {
+            workspaces: s.workspaces.map(w =>
+              w.id === s.activeWorkspaceId
+                ? { ...w, threads: w.threads.map(th =>
+                    th.id === s.activeWorkspaceThreadId
+                      ? { ...th, artifacts: th.artifacts.map(patch) }
+                      : th
+                  ) }
+                : w
+            ),
+          };
         }),
 
       setWorkspaceView: (workspaceView) => set({ workspaceView }),
@@ -644,6 +474,34 @@ export const useStore = create<State>()(
               : s.activeArtifact,
         })),
 
+      renameWorkspaceThread: (workspaceId, threadId, title) =>
+        set(s => ({
+          workspaces: s.workspaces.map(w =>
+            w.id === workspaceId
+              ? {
+                  ...w,
+                  threads: w.threads.map(t =>
+                    t.id === threadId ? { ...t, title: title.trim() || 'Untitled thread' } : t
+                  ),
+                }
+              : w
+          ),
+        })),
+
+      setWorkspaceThreadBillEnv: (workspaceId, threadId, envId, product) =>
+        set(s => ({
+          workspaces: s.workspaces.map(w =>
+            w.id === workspaceId
+              ? {
+                  ...w,
+                  threads: w.threads.map(t =>
+                    t.id === threadId ? { ...t, billEnvId: envId, billProduct: product } : t
+                  ),
+                }
+              : w
+          ),
+        })),
+
       openWorkspaceArtifact: (workspaceId, threadId, artifactId) =>
         set({ activeWorkspaceId: workspaceId, activeWorkspaceThreadId: threadId, activeArtifact: artifactId }),
 
@@ -670,8 +528,6 @@ export const useStore = create<State>()(
           delete persisted.tweaks.provider;
         }
         if (persisted && fromVersion < 5) {
-          // Workspace mode introduced at v5. Default new users into workspace mode.
-          persisted.mode = 'workspace';
           persisted.workspaces = persisted.workspaces ?? [];
           persisted.activeWorkspaceId = null;
           persisted.activeWorkspaceThreadId = null;
@@ -679,22 +535,24 @@ export const useStore = create<State>()(
           persisted.expandedWorkspaceIds = [];
         }
         if (persisted && fromVersion < 6) {
+          if (persisted.mode === 'workspace') persisted.mode = 'demo';
+          if (persisted.mode !== 'demo' && persisted.mode !== 'testing') {
+            persisted.mode = 'demo';
+          }
+          delete persisted.turns;
+          delete persisted.artifacts;
+          delete persisted.approvalStates;
+          delete persisted.approvalPayloads;
+          delete persisted.testingThreads;
+          delete persisted.activeTestingThreadId;
           persisted.shortcuts = persisted.shortcuts ?? [];
         }
         return persisted;
       },
       partialize: (s) => ({
         tweaks: s.tweaks,
-        artifacts: s.artifacts,
         activeArtifact: s.activeArtifact,
-        approvalStates: s.approvalStates,
-        // approvalPayloads (root): intentionally omitted — regenerate on next run.
         mode: s.mode,
-        testingThreads: s.testingThreads.map(t => {
-          const { approvalPayloads: _strip, ...rest } = t;
-          return rest;
-        }),
-        activeTestingThreadId: s.activeTestingThreadId,
         workspaces: s.workspaces.map(w => ({
           ...w,
           threads: w.threads.map(t => {
@@ -710,14 +568,6 @@ export const useStore = create<State>()(
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
-        // Every load: ensure each thread has approvalPayloads, since partialize strips it.
-        state.testingThreads = (state.testingThreads ?? []).map((t: any) => ({
-          ...t,
-          approvalPayloads: t.approvalPayloads ?? {},
-          approvalStates: t.approvalStates ?? {},
-        }));
-        // Root approvalPayloads is intentionally not persisted — rehydrate empty.
-        state.approvalPayloads = state.approvalPayloads ?? {};
         // Workspaces: rehydrate approvalPayloads on each thread, seed if empty.
         const workspaces = (state.workspaces ?? []).map((w: any) => ({
           ...w,
@@ -736,12 +586,6 @@ export const useStore = create<State>()(
     }
   )
 );
-
-export function getActiveThread(): Thread | undefined {
-  const s = useStore.getState();
-  if (!s.activeTestingThreadId) return undefined;
-  return s.testingThreads.find(t => t.id === s.activeTestingThreadId);
-}
 
 export function getActiveWorkspace(): Workspace | undefined {
   const s = useStore.getState();

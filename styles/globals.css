@@ -150,6 +150,7 @@ input, textarea, select{ font-family: inherit; color: inherit; }
   padding-top: 10px;
   border-top: 1px solid var(--line);
   padding-left: 2px; padding-right: 2px;
+  display: flex; flex-direction: column; gap: 2px;
 }
 .rail-settings{
   width: 100%;
@@ -167,6 +168,13 @@ input, textarea, select{ font-family: inherit; color: inherit; }
 .rail-settings:hover{ background: rgba(15,20,25,0.05); color: var(--ink); }
 .rail-settings-icon{ display: inline-flex; color: var(--ink-3); }
 .rail-settings:hover .rail-settings-icon{ color: var(--ink); }
+.rail-mode-pill{
+  display: inline-flex; align-self: flex-start;
+  margin: 0 8px 6px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.rail-mode-pill:hover{ filter: brightness(0.97); }
 .rail-section-label{
   font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.08em;
   font-size: 10px; color: var(--ink-4); padding: 0 6px 6px;

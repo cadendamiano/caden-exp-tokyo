@@ -51,16 +51,10 @@ function timeAgo(ts: number | undefined): string {
 }
 
 export function ArtifactPane() {
-  const mode = useStore(s => s.mode);
   const showCodeView = useStore(s => s.tweaks.showCodeView);
-  const demoArtifacts = useStore(s => s.artifacts);
-  const threads = useStore(s => s.testingThreads);
-  const activeThreadId = useStore(s => s.activeTestingThreadId);
   const workspaces = useStore(s => s.workspaces);
   const activeWorkspaceId = useStore(s => s.activeWorkspaceId);
   const activeWorkspaceThreadId = useStore(s => s.activeWorkspaceThreadId);
-  const setDemoArtifacts = useStore(s => s.setArtifacts);
-  const setThreadArtifacts = useStore(s => s.setArtifactsInActiveThread);
   const setWsThreadArtifacts = useStore(s => s.setArtifactsInActiveWorkspaceThread);
 
   const active = useStore(s => s.activeArtifact);
@@ -70,18 +64,12 @@ export function ArtifactPane() {
 
   const [view, setView] = useState<ViewTab>('logic');
 
-  const activeThread = threads.find(t => t.id === activeThreadId);
   const activeWsThread = (() => {
     if (!activeWorkspaceId || !activeWorkspaceThreadId) return undefined;
     const ws = workspaces.find(w => w.id === activeWorkspaceId);
     return ws?.threads.find(t => t.id === activeWorkspaceThreadId);
   })();
-  const artifacts =
-    mode === 'workspace'
-      ? (activeWsThread?.artifacts ?? [])
-      : mode === 'testing'
-      ? (activeThread?.artifacts ?? [])
-      : demoArtifacts;
+  const artifacts = activeWsThread?.artifacts ?? [];
 
   const cur = artifacts.find(a => a.id === active);
   const isOpen = !!active;
@@ -92,13 +80,7 @@ export function ArtifactPane() {
   }, [active]);
 
   const closeOne = (id: string) => {
-    if (mode === 'workspace') {
-      setWsThreadArtifacts(prev => prev.filter(x => x.id !== id));
-    } else if (mode === 'testing') {
-      setThreadArtifacts(prev => prev.filter(x => x.id !== id));
-    } else {
-      setDemoArtifacts(prev => prev.filter(x => x.id !== id));
-    }
+    setWsThreadArtifacts(prev => prev.filter(x => x.id !== id));
     if (active === id) setActive(null);
   };
 
@@ -113,14 +95,7 @@ export function ArtifactPane() {
       createdBy: 'Coworker',
       dataJson: billsToSpreadsheetJson(BILLS, VENDORS),
     };
-    const add = (prev: Artifact[]) => [...prev, newArtifact];
-    if (mode === 'workspace') {
-      setWsThreadArtifacts(add);
-    } else if (mode === 'testing') {
-      setThreadArtifacts(add);
-    } else {
-      setDemoArtifacts(add);
-    }
+    setWsThreadArtifacts(prev => [...prev, newArtifact]);
     setActive(newId);
   };
 

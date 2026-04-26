@@ -845,110 +845,50 @@ export function getDataset(d?: DatasetKey) {
 
 const WS_SEED_BASE = 1714000000000;
 
+export const DEMO_WORKSPACE_ID = 'ws_seed_demo';
+export const WORKBOOK_WORKSPACE_ID = 'ws_seed_workbook';
+
+// Maps a seeded demo thread id to the flow it should run when the user
+// clicks the empty-state "Run starter flow" affordance.
+export const SESSION_FLOW_MAP: Record<string, string> = {
+  thr_seed_demo_s1: 'pay_batch',
+  thr_seed_demo_s2: 'chart_spend',
+  thr_seed_demo_s3: 'automate_net15',
+  thr_seed_demo_s4: 'dupe_sweep',
+  thr_seed_demo_s5: 'chart_spend',
+};
+
 export const SEED_WORKSPACES: Workspace[] = [
   {
-    id: 'ws_seed_q1_budget',
-    name: 'Q1 Budget Review',
-    icon: '📊',
-    color: 'oklch(0.78 0.10 195)',
+    id: DEMO_WORKSPACE_ID,
+    name: 'Demo',
+    icon: '📓',
+    color: 'oklch(0.80 0.09 195)',
     createdAt: WS_SEED_BASE,
-    threads: [
-      {
-        id: 'thr_seed_q1_variance',
-        title: 'March variance analysis',
-        createdAt: WS_SEED_BASE + 1000,
-        turns: [],
-        artifacts: [{
-          id: 'art_seed_q1_chart',
-          kind: 'spend-chart',
-          label: 'Q1 Variance by Dept',
-          status: 'active',
-          version: 1,
-          createdBy: 'agent',
-        }],
-        selectedBills: [],
-        approvalStates: {},
-        approvalPayloads: {},
-        billProduct: 'ap',
-      },
-      {
-        id: 'thr_seed_q1_headcount',
-        title: 'Headcount cost model',
-        createdAt: WS_SEED_BASE + 2000,
-        turns: [],
-        artifacts: [],
-        selectedBills: [],
-        approvalStates: {},
-        approvalPayloads: {},
-        billProduct: 'ap',
-      },
-    ],
-    files: [
-      {
-        id: 'wsf_seed_q1_workbook',
-        name: 'Q1_Budget_Workbook.xlsx',
-        kind: 'spreadsheet',
-        createdAt: WS_SEED_BASE,
-      },
-    ],
+    threads: SESSIONS.map((s, i) => ({
+      id: `thr_seed_demo_${s.id}`,
+      title: s.title,
+      createdAt: WS_SEED_BASE + (i + 1) * 1000,
+      turns: [],
+      artifacts: [],
+      selectedBills: [],
+      approvalStates: {},
+      approvalPayloads: {},
+      billProduct: 'ap' as const,
+    })),
+    files: [],
   },
   {
-    id: 'ws_seed_ap_march',
-    name: 'AP – March Close',
-    icon: '📋',
-    color: 'oklch(0.80 0.08 70)',
-    createdAt: WS_SEED_BASE + 3000,
+    id: WORKBOOK_WORKSPACE_ID,
+    name: 'Workbook',
+    icon: '🧪',
+    color: 'oklch(0.82 0.08 70)',
+    createdAt: WS_SEED_BASE + 100000,
     threads: [
       {
-        id: 'thr_seed_ap_recon',
-        title: 'Vendor reconciliation',
-        createdAt: WS_SEED_BASE + 4000,
-        turns: [],
-        artifacts: [{
-          id: 'art_seed_ap_aging',
-          kind: 'ap-table',
-          label: 'AP Aging Report',
-          status: 'active',
-          version: 1,
-          createdBy: 'agent',
-        }],
-        selectedBills: [],
-        approvalStates: {},
-        approvalPayloads: {},
-        billProduct: 'ap',
-      },
-      {
-        id: 'thr_seed_ap_accruals',
-        title: 'Accruals review',
-        createdAt: WS_SEED_BASE + 5000,
-        turns: [],
-        artifacts: [],
-        selectedBills: [],
-        approvalStates: {},
-        approvalPayloads: {},
-        billProduct: 'ap',
-      },
-    ],
-    files: [
-      {
-        id: 'wsf_seed_ap_close',
-        name: 'March_AP_Close.xlsx',
-        kind: 'spreadsheet',
-        createdAt: WS_SEED_BASE + 3000,
-      },
-    ],
-  },
-  {
-    id: 'ws_seed_fpa_monthly',
-    name: 'FP&A Monthly',
-    icon: '📈',
-    color: 'oklch(0.80 0.10 155)',
-    createdAt: WS_SEED_BASE + 6000,
-    threads: [
-      {
-        id: 'thr_seed_fpa_revenue',
-        title: 'Revenue forecast update',
-        createdAt: WS_SEED_BASE + 7000,
+        id: 'thr_seed_workbook_scratch',
+        title: 'Sandbox scratch',
+        createdAt: WS_SEED_BASE + 101000,
         turns: [],
         artifacts: [],
         selectedBills: [],
