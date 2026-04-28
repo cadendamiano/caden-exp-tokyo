@@ -238,6 +238,30 @@ async function runAnthropic(
           dataJson: inp.dataJson,
         });
       }
+      if (tu.name === 'render_document_artifact') {
+        const inp = tu.input as any;
+        send({
+          type: 'artifact',
+          kind: 'document',
+          title: inp.title,
+          sub: inp.sub,
+          meta: inp.meta,
+          label: inp.title,
+          dataJson: inp.dataJson,
+        });
+      }
+      if (tu.name === 'render_slides_artifact') {
+        const inp = tu.input as any;
+        send({
+          type: 'artifact',
+          kind: 'slides',
+          title: inp.title,
+          sub: inp.sub,
+          meta: inp.meta,
+          label: inp.title,
+          dataJson: inp.dataJson,
+        });
+      }
       if (tu.name === 'stage_payment_batch' && res.data && (res.data as any).approvalPayload) {
         const d = res.data as { approvalPayload: ApprovalPayload; simulated?: boolean };
         send({ type: 'approval', payload: d.approvalPayload, simulated: d.simulated === true });

@@ -106,6 +106,23 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
       'Tone: narrative prose vs. bullet-heavy',
     ],
   },
+  {
+    name: 'slides',
+    aliases: ['deck', 'presentation', 'slidedeck'],
+    kind: 'slides',
+    label: 'slides',
+    hint: 'Build a slide deck (questionnaire-driven, then generate)',
+    demoFlowId: 'slides_demo',
+    requirements: [
+      'Audience and purpose (who is the deck for, what decision are they making)',
+      'Core message / narrative arc (3–5 sentence storyline)',
+      'Slide count target (rough — e.g. 6–10 slides)',
+      'Format preferences (title-heavy, bullet-heavy, two-column, image placeholders)',
+      'Tone (executive, technical, persuasive, narrative)',
+      'Source data to ground the deck (bills, spend, runway, custom)',
+      'Branding constraints (colors, footer text, anything to include verbatim)',
+    ],
+  },
 ] as const;
 
 const SLASH_REGEX = /^\/([a-z0-9-]+)(?:\s+([\s\S]*))?$/i;

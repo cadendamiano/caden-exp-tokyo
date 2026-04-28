@@ -532,7 +532,7 @@ export const READ_TOOLS: ToolDef[] = [
       properties: {
         kind: {
           type: 'string',
-          enum: ['spend-chart', 'rule-net15', 'crm-flow', 'document', 'liquidity-burndown', 'sweep-rule'],
+          enum: ['spend-chart', 'rule-net15', 'crm-flow', 'liquidity-burndown', 'sweep-rule'],
         },
         title: { type: 'string' },
         sub: { type: 'string', description: 'Short uppercase subtitle, e.g. "TABLE · INTERACTIVE"' },
@@ -622,6 +622,44 @@ export const FORM_TOOLS: ToolDef[] = [
         dataJson: {
           type: 'string',
           description: 'JSON string describing the workbook. Shape: {"sheets":[{"name":"Tab label","headers":["Col A","Col B"],"rows":[["cell","cell"]]}]}. Include one sheet object per logical grouping. Use numbers (not strings) for amounts so currency formatting applies.',
+        },
+      },
+      required: ['title', 'dataJson'],
+    },
+  },
+  {
+    name: 'render_document_artifact',
+    label: 'Open document',
+    description:
+      'Open an editable rich-text document in the artifact panel. Use when the user asks for a report, one-pager, memo, narrative summary, or any prose-and-structured-content document. The user can edit the document inline; their edits are persisted automatically.',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Display title for the artifact tab.' },
+        sub: { type: 'string', description: 'Short uppercase subtitle, e.g. "DOCUMENT · DRAFT".' },
+        meta: { type: 'string', description: 'Short summary with markdown bold supported.' },
+        dataJson: {
+          type: 'string',
+          description: 'JSON string describing the document. Shape: {"title":"Report title","subtitle":"optional metadata line","sections":[{"heading":"Section heading","paragraphs":["A prose paragraph."],"bullets":["Bullet item"]}]}. Use one section per logical chunk. heading, paragraphs, bullets are all optional inside a section.',
+        },
+      },
+      required: ['title', 'dataJson'],
+    },
+  },
+  {
+    name: 'render_slides_artifact',
+    label: 'Open slide deck',
+    description:
+      'Open an editable slide-deck presentation in the artifact panel. Use ONLY when the user has invoked /slides AND has explicitly confirmed they are ready to generate the deck after the questionnaire. Do not call this tool to fulfil any other request.',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Display title for the artifact tab.' },
+        sub: { type: 'string', description: 'Short uppercase subtitle, e.g. "DECK · DRAFT".' },
+        meta: { type: 'string', description: 'Short summary with markdown bold supported.' },
+        dataJson: {
+          type: 'string',
+          description: 'JSON string describing the deck. Shape: {"title":"Deck title","slides":[{"title":"Slide title","layout":"title|bullets|two-col|image","bullets":["..."],"body":"...","rightColumn":["..."],"notes":"speaker notes"}]}. layout defaults to "bullets" when bullets are present, otherwise "title". Include one slide object per page.',
         },
       },
       required: ['title', 'dataJson'],
@@ -1167,6 +1205,12 @@ async function runRealTool(
     if (name === 'render_spreadsheet_artifact') {
       return { ok: true, summary: 'spreadsheet artifact opened in UI', data: input };
     }
+    if (name === 'render_document_artifact') {
+      return { ok: true, summary: 'document artifact opened in UI', data: input };
+    }
+    if (name === 'render_slides_artifact') {
+      return { ok: true, summary: 'slides artifact opened in UI', data: input };
+    }
     if (name === 'ask_question') {
       return { ok: true, summary: 'question presented to user', data: { __awaiting_input: true } };
     }
@@ -1610,6 +1654,12 @@ async function runMockTool(
     if (name === 'render_spreadsheet_artifact') {
       return { ok: true, summary: 'spreadsheet artifact opened in UI', data: input };
     }
+    if (name === 'render_document_artifact') {
+      return { ok: true, summary: 'document artifact opened in UI', data: input };
+    }
+    if (name === 'render_slides_artifact') {
+      return { ok: true, summary: 'slides artifact opened in UI', data: input };
+    }
     if (name === 'ask_question') {
       return { ok: true, summary: 'question presented to user', data: { __awaiting_input: true } };
     }
@@ -1994,7 +2044,9 @@ const DYNAMIC_ARTIFACT_GUIDANCE = `
 Rendering artifacts:
 - **Tabular data is always shown as a spreadsheet.** When the user asks to see data (bills, vendors, expenses, aging, spend breakdown, or any list), call \`render_spreadsheet_artifact\`. This is the primary artifact for all tabular output — do NOT use ap-table.
 - **Data summary + nudge pattern:** Before calling \`render_spreadsheet_artifact\`, write a short prose summary in your reply (e.g. totals, top items, key trends — 2–4 sentences). End with a sentence nudging the user toward a visualization if the data has a trend or comparison angle, e.g. "Want me to chart this by category?" or "I can turn this into a bar chart comparing vendors."
-- For curated non-table kinds (Q1 spend donut+bar, Net-15 automation rule, CRM flow, cash runway, sweep rule, report/document), call \`render_artifact\` with kind spend-chart, rule-net15, crm-flow, document, liquidity-burndown, or sweep-rule.
+- For prose reports / one-pagers / memos, call \`render_document_artifact\` with a structured \`dataJson\` body. Do NOT use \`render_artifact\` for documents.
+- For slide decks / presentations, call \`render_slides_artifact\` — but ONLY after the user has invoked /slides AND confirmed they are ready to generate. Otherwise gather requirements through conversation first.
+- For curated non-table kinds (Q1 spend donut+bar, Net-15 automation rule, CRM flow, cash runway, sweep rule), call \`render_artifact\` with kind spend-chart, rule-net15, crm-flow, liquidity-burndown, or sweep-rule.
 - For ANYTHING else — line graphs, treemaps, heatmaps, sunburst, sankey, scatter, radar, custom dashboards, KPI cards, annotated layouts, or anything the user describes that does not exactly match one of those fixed kinds — call \`render_html_artifact\`. Do NOT try to fit a bespoke request into the fixed kinds.
 - \`render_html_artifact\` renders inside a sandboxed iframe with three libraries preloaded as globals: \`echarts\` (v5), \`d3\` (v7), and \`Chart\` (Chart.js v4). Prefer ECharts for treemap / sunburst / sankey / heatmap / complex multi-series charts. D3 is available for bespoke work; Chart.js for quick line/bar/pie.
 - Data flow: first call the appropriate read tool (e.g. \`get_category_spend\`, \`list_bills\`, \`get_aging_summary\`, \`list_expenses\`). Then pass the JSON-stringified \`data\` field as \`dataJson\`. Reference it in the script as \`window.__DATA\`.
@@ -2014,7 +2066,8 @@ Style:
 - Be concise, professional, and precise. Short paragraphs. Markdown **bold** and \`inline code\` are supported.
 - When you need data, call tools rather than guessing. You can call multiple tools per turn.
 - When the user asks to see any list or tabular data (AP, vendors, expenses, aging, spend breakdown), call \`render_spreadsheet_artifact\` — spreadsheet is the primary data artifact. First write a 2–4 sentence prose summary of what you found, then call \`render_spreadsheet_artifact\` with the data. End your reply with a one-sentence nudge offering a chart or visualization if the data has trends (e.g. "Want me to chart this by vendor?").
-- When the user asks to visualize or open an interactive view (spend chart, Net-15 rule, CRM flow, cash runway, sweep rule, report/document), call \`render_artifact\` with the right kind. Kinds: spend-chart, rule-net15, crm-flow, document, liquidity-burndown, sweep-rule.
+- When the user asks for a prose report, one-pager, memo, or narrative summary, call \`render_document_artifact\`. For slide decks call \`render_slides_artifact\` (only after /slides and an explicit user go-ahead).
+- When the user asks to visualize or open an interactive view (spend chart, Net-15 rule, CRM flow, cash runway, sweep rule), call \`render_artifact\` with the right kind. Kinds: spend-chart, rule-net15, crm-flow, liquidity-burndown, sweep-rule.
 - When the user asks to "create a spreadsheet", "turn this into a spreadsheet", "open as spreadsheet", or requests tabular data they can edit with formulas — call \`render_spreadsheet_artifact\`. First call the appropriate read tool (e.g. \`list_bills\`, \`get_category_spend\`) to get the data, then pass it as \`dataJson\` in the format \`{"sheets":[{"name":"Tab name","headers":[...],"rows":[[...]]}]}\`. Use one sheet per logical grouping. Use numbers (not strings) for currency amounts.
 - To stage a payment, call \`stage_payment_batch\` with the bill IDs — the UI will render an approval card with a typed-confirmation gate. Do not fabricate approvals. Wait for the user's approve/reject before describing an outcome.
 

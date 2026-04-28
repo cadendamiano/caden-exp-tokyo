@@ -38,6 +38,8 @@
     "@univerjs/sheets-formula": "^0.21.1",
     "@univerjs/sheets-formula-ui": "^0.21.1",
     "@univerjs/sheets-ui": "^0.21.1",
+    "@univerjs/slides": "^0.21.1",
+    "@univerjs/slides-ui": "^0.21.1",
     "@univerjs/ui": "^0.21.1",
     "braintrust": "^3.9.0",
     "electron-store": "^8.2.0",
