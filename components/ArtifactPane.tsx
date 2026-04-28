@@ -79,6 +79,18 @@ export function ArtifactPane() {
     setView('logic');
   }, [active]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setActive(null);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isOpen, setActive]);
+
   const closeOne = (id: string) => {
     setWsThreadArtifacts(prev => prev.filter(x => x.id !== id));
     if (active === id) setActive(null);
@@ -156,6 +168,14 @@ export function ArtifactPane() {
             )}
             <button className="icon-btn" title="Copy as link">↗</button>
             <button className="icon-btn" title="Download">⤓</button>
+            <button
+              className="icon-btn artifact-drawer-close"
+              title="Close panel (Esc)"
+              aria-label="Close artifact panel"
+              onClick={() => setActive(null)}
+            >
+              <Icon.Close />
+            </button>
           </div>
         </div>
 

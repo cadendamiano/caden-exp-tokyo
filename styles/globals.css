@@ -1165,9 +1165,11 @@ input, textarea, select{ font-family: inherit; color: inherit; }
     transition: opacity 0.18s ease;
   }
   .artifact-scrim.open{ opacity: 1; pointer-events: auto; }
+  .artifact-drawer-close{ display: flex; }
 }
 @media (min-width: 1181px){
   .artifact-scrim{ display: none; }
+  .artifact-drawer-close{ display: none; }
 }
 
 /* fade-in animation for streamed content */
