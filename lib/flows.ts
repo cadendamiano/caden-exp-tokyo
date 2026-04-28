@@ -1,5 +1,6 @@
 import type { DatasetKey } from './data';
 
+/** @deprecated 'ap-table' is superseded by 'spreadsheet'. Kept for legacy artifact rendering only — do not create new ap-table artifacts. */
 export type ArtifactKind = 'ap-table' | 'spreadsheet' | 'spend-chart' | 'rule-net15' | 'crm-flow' | 'html' | 'document' | 'liquidity-burndown' | 'sweep-rule';
 
 export type ToolRowSpec = {
