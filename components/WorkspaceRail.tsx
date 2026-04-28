@@ -1,15 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useStore, type Workspace, type Artifact } from '@/lib/store';
-import { DEMO_SANDBOX_ENV_ID } from '@/lib/tools';
 import { Icon } from './primitives/Icon';
-
-type EnvView = {
-  id: string;
-  name: string;
-  product: 'ap' | 'se' | 'both';
-};
 
 const Clock = () => (
   <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -52,110 +45,11 @@ const Folder = () => (
 export function WorkspaceRailBody() {
   const view = useStore(s => s.workspaceView);
   const setView = useStore(s => s.setWorkspaceView);
-  const mode = useStore(s => s.mode);
 
   return (
     <>
       {view === 'history' ? <WorkspaceHistory onBack={() => setView('workspaces')} /> : <WorkspaceList />}
-      {mode === 'testing' && view === 'workspaces' && <WorkspaceBillEnvPicker />}
     </>
-  );
-}
-
-function WorkspaceBillEnvPicker() {
-  const activeWorkspaceId = useStore(s => s.activeWorkspaceId);
-  const activeThreadId = useStore(s => s.activeWorkspaceThreadId);
-  const workspaces = useStore(s => s.workspaces);
-  const setWorkspaceThreadBillEnv = useStore(s => s.setWorkspaceThreadBillEnv);
-  const defaultBillEnvId = useStore(s => s.tweaks.defaultBillEnvId);
-  const defaultBillProduct = useStore(s => s.tweaks.defaultBillProduct);
-
-  const [envs, setEnvs] = useState<EnvView[] | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch('/api/settings', { cache: 'no-store' });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (cancelled) return;
-        setEnvs(
-          (data.billEnvironments ?? []).map((e: any) => ({
-            id: e.id,
-            name: e.name,
-            product: e.product ?? 'ap',
-          }))
-        );
-      } catch {
-        if (!cancelled) setEnvs([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (!activeWorkspaceId || !activeThreadId) return null;
-  const ws = workspaces.find(w => w.id === activeWorkspaceId);
-  const active = ws?.threads.find(t => t.id === activeThreadId);
-  if (!active) return null;
-
-  const usingDefault = active.billEnvId === undefined;
-  const effectiveEnvId = active.billEnvId ?? defaultBillEnvId;
-  const effectiveProduct = active.billProduct ?? defaultBillProduct;
-  const defaultSuffix = (id: string) => (usingDefault && id === defaultBillEnvId ? ' (default)' : '');
-
-  return (
-    <div className="rail-mini">
-      <div className="rail-section-label">Sandbox override</div>
-      <select
-        className="rail-env-select"
-        value={effectiveEnvId ?? ''}
-        style={usingDefault ? { opacity: 0.7 } : undefined}
-        onChange={e => {
-          const envId = e.target.value || undefined;
-          if (envId === DEMO_SANDBOX_ENV_ID) {
-            setWorkspaceThreadBillEnv(activeWorkspaceId, active.id, envId, 'ap');
-          } else {
-            setWorkspaceThreadBillEnv(activeWorkspaceId, active.id, envId, effectiveProduct ?? 'ap');
-          }
-        }}
-      >
-        <option value="">— pick an env —</option>
-        <option value={DEMO_SANDBOX_ENV_ID}>
-          Demo Sandbox · fake data{defaultSuffix(DEMO_SANDBOX_ENV_ID)}
-        </option>
-        {(envs ?? []).map(env => (
-          <option key={env.id} value={env.id}>
-            {env.name} · {env.product}{defaultSuffix(env.id)}
-          </option>
-        ))}
-      </select>
-      {effectiveEnvId !== DEMO_SANDBOX_ENV_ID && effectiveEnvId && (
-        <div className="rail-product-toggle">
-          {(['ap', 'se'] as const).map(p => (
-            <button
-              key={p}
-              className={
-                'rail-product-btn' +
-                ((effectiveProduct ?? 'ap') === p ? ' active' : '')
-              }
-              onClick={() =>
-                setWorkspaceThreadBillEnv(activeWorkspaceId, active.id, effectiveEnvId, p)
-              }
-            >
-              {p === 'ap' ? 'AP' : 'S&E'}
-            </button>
-          ))}
-        </div>
-      )}
-      {envs && envs.length === 0 && effectiveEnvId !== DEMO_SANDBOX_ENV_ID && !defaultBillEnvId && (
-        <div className="rail-empty" style={{ marginTop: 8 }}>
-          No real sandbox envs configured. Pick Demo Sandbox above or add one in Settings.
-        </div>
-      )}
-    </div>
   );
 }
 
