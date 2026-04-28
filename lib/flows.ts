@@ -1,7 +1,8 @@
 import type { DatasetKey } from './data';
+import { Q1_DOC_JSON, Q1_DOC_LOGISTICS_JSON, SLIDES_DEMO_JSON } from './demoArtifactData';
 
 /** @deprecated 'ap-table' is superseded by 'spreadsheet'. Kept for legacy artifact rendering only — do not create new ap-table artifacts. */
-export type ArtifactKind = 'ap-table' | 'spreadsheet' | 'spend-chart' | 'rule-net15' | 'crm-flow' | 'html' | 'document' | 'liquidity-burndown' | 'sweep-rule';
+export type ArtifactKind = 'ap-table' | 'spreadsheet' | 'spend-chart' | 'rule-net15' | 'crm-flow' | 'html' | 'document' | 'slides' | 'liquidity-burndown' | 'sweep-rule';
 
 export type ToolRowSpec = {
   verb: 'GET' | 'POST' | 'EXEC';
@@ -52,7 +53,7 @@ export type Flow = {
   id: string;
   title: string;
   steps: FlowStep[];
-  artifact?: { id: string; kind: ArtifactKind; label: string; filter?: string };
+  artifact?: { id: string; kind: ArtifactKind; label: string; filter?: string; dataJson?: string };
 };
 
 export const FLOWS = {
@@ -359,10 +360,31 @@ Review the rule in the artifact pane. You'll need to preview the dry-run before 
         meta: '3 sections · 6 KPIs · $112.3k total spend',
         icon: '◧' },
       { kind: 'agent-stream', delay: 500, text:
-`Report's ready — click the card to open it in the right pane. It covers Executive Summary, Vendor Breakdown (top 5), and AP Aging buckets. All figures are from Q1 paid bills.` },
+`Report's ready — click the card to open it in the right pane. It covers Executive Summary, Vendor Breakdown (top 5), and AP Aging buckets. All figures are from Q1 paid bills. The document is editable; your changes save automatically.` },
       { kind: 'suggest', items: ['Export as PDF', 'Add YoY comparison', 'Share with controller', 'Regenerate with different date range'] },
     ],
-    artifact: { id: 'art_doc_q1', kind: 'document', label: 'Q1 AP Report · CFO Summary' },
+    artifact: { id: 'art_doc_q1', kind: 'document', label: 'Q1 AP Report · CFO Summary', dataJson: Q1_DOC_JSON },
+  },
+
+  slides_demo: {
+    id: 'slides_demo',
+    title: 'Demo deck',
+    steps: [
+      { kind: 'user', text: '/slides — generate the standard demo deck' },
+      { kind: 'agent-stream', delay: 240, text:
+`Building a 4-slide demo deck. In real use, /slides runs a short questionnaire first — this canned demo path skips that.` },
+      { kind: 'libs', delay: 300, items: [
+        { pkg: '@univerjs/slides', ver: '0.21.1' },
+        { pkg: '@univerjs/slides-ui', ver: '0.21.1' },
+      ] },
+      { kind: 'building', delay: 500, label: 'Demo deck', sub: 'composing slides' },
+      { kind: 'artifact-card', delay: 1100, artifactId: 'art_slides_demo',
+        title: 'BILL Coworker — Demo Deck', sub: 'DECK · DRAFT',
+        meta: '4 slides · editable',
+        icon: '◧' },
+      { kind: 'suggest', items: ['Add a slide', 'Reorder slides', 'Export as PPTX', 'Share with the team'] },
+    ],
+    artifact: { id: 'art_slides_demo', kind: 'slides', label: 'BILL Coworker — Demo Deck', dataJson: SLIDES_DEMO_JSON },
   },
 } satisfies Record<string, Flow>;
 
@@ -672,10 +694,31 @@ Review the rule in the artifact pane. You'll need to preview the dry-run before 
         meta: '3 sections · 6 KPIs · $406k total spend',
         icon: '◧' },
       { kind: 'agent-stream', delay: 500, text:
-`Report's ready — click the card to open it in the right pane. It covers Executive Summary, Vendor Breakdown (top 5), and AP Aging buckets. All figures are from Q1 paid bills.` },
+`Report's ready — click the card to open it in the right pane. It covers Executive Summary, Vendor Breakdown (top 5), and AP Aging buckets. All figures are from Q1 paid bills. The document is editable; your changes save automatically.` },
       { kind: 'suggest', items: ['Export as PDF', 'Add YoY comparison', 'Share with controller', 'Regenerate with different date range'] },
     ],
-    artifact: { id: 'art_doc_q1', kind: 'document', label: 'Q1 AP Report · CFO Summary' },
+    artifact: { id: 'art_doc_q1', kind: 'document', label: 'Q1 AP Report · CFO Summary', dataJson: Q1_DOC_LOGISTICS_JSON },
+  },
+
+  slides_demo: {
+    id: 'slides_demo',
+    title: 'Demo deck',
+    steps: [
+      { kind: 'user', text: '/slides — generate the standard demo deck' },
+      { kind: 'agent-stream', delay: 240, text:
+`Building a 4-slide demo deck. In real use, /slides runs a short questionnaire first — this canned demo path skips that.` },
+      { kind: 'libs', delay: 300, items: [
+        { pkg: '@univerjs/slides', ver: '0.21.1' },
+        { pkg: '@univerjs/slides-ui', ver: '0.21.1' },
+      ] },
+      { kind: 'building', delay: 500, label: 'Demo deck', sub: 'composing slides' },
+      { kind: 'artifact-card', delay: 1100, artifactId: 'art_slides_demo',
+        title: 'BILL Coworker — Demo Deck', sub: 'DECK · DRAFT',
+        meta: '4 slides · editable',
+        icon: '◧' },
+      { kind: 'suggest', items: ['Add a slide', 'Reorder slides', 'Export as PPTX', 'Share with the team'] },
+    ],
+    artifact: { id: 'art_slides_demo', kind: 'slides', label: 'BILL Coworker — Demo Deck', dataJson: SLIDES_DEMO_JSON },
   },
 } satisfies Record<string, Flow>;
 

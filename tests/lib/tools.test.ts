@@ -39,9 +39,9 @@ vi.mock('@/lib/secrets', async () => {
 });
 
 describe('TOOLS definitions', () => {
-  it('exports 71 tools total (70 model + 1 internal)', () => {
-    expect(TOOLS).toHaveLength(71);
-    expect(MODEL_TOOLS).toHaveLength(70);
+  it('exports 73 tools total (72 model + 1 internal)', () => {
+    expect(TOOLS).toHaveLength(73);
+    expect(MODEL_TOOLS).toHaveLength(72);
     expect(INTERNAL_TOOLS).toHaveLength(1);
   });
 
@@ -86,17 +86,25 @@ describe('TOOLS definitions', () => {
     expect(tool.parameters.required).toContain('title');
   });
 
-  it('render_artifact kind enum has exactly 7 values', () => {
+  it('render_artifact kind enum covers exactly the curated non-typed kinds', () => {
     const tool = TOOLS.find(t => t.name === 'render_artifact')!;
     const kindEnum = tool.parameters.properties.kind.enum as string[];
-    expect(kindEnum).toHaveLength(7);
-    expect(kindEnum).toContain('ap-table');
-    expect(kindEnum).toContain('spend-chart');
-    expect(kindEnum).toContain('rule-net15');
-    expect(kindEnum).toContain('crm-flow');
-    expect(kindEnum).toContain('document');
-    expect(kindEnum).toContain('liquidity-burndown');
-    expect(kindEnum).toContain('sweep-rule');
+    // 'document', 'slides', 'spreadsheet', 'html', and 'ap-table' are intentionally
+    // excluded — they have their own typed tools (or are deprecated).
+    expect(kindEnum).toEqual([
+      'spend-chart',
+      'rule-net15',
+      'crm-flow',
+      'liquidity-burndown',
+      'sweep-rule',
+    ]);
+  });
+
+  it('exposes typed render tools for spreadsheet, document, and slides', () => {
+    const names = TOOLS.map(t => t.name);
+    expect(names).toContain('render_spreadsheet_artifact');
+    expect(names).toContain('render_document_artifact');
+    expect(names).toContain('render_slides_artifact');
   });
 
   it('list_bills status enum includes all valid statuses', () => {

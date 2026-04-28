@@ -2,16 +2,16 @@
 
 import '@univerjs/design/lib/index.css';
 import '@univerjs/ui/lib/index.css';
-import '@univerjs/docs-ui/lib/index.css';
+import '@univerjs/slides-ui/lib/index.css';
 
 import { useEffect, useRef } from 'react';
-import { transformToUniverDoc } from '@/lib/documentData';
+import { transformToUniverSlide } from '@/lib/slidesData';
 import { watchUniverUnit } from '@/lib/univerPersistence';
 import { useStore, type Artifact } from '@/lib/store';
 
 type Props = { artifact: Artifact };
 
-export function DocumentArtifact({ artifact }: Props) {
+export function SlidesArtifact({ artifact }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const disposeRef = useRef<(() => void) | null>(null);
   const setArtifacts = useStore(s => s.setArtifactsInActiveWorkspaceThread);
@@ -36,8 +36,11 @@ export function DocumentArtifact({ artifact }: Props) {
         { UniverUIPlugin },
         { UniverDocsPlugin },
         { UniverDocsUIPlugin },
+        { UniverSlidesPlugin },
+        { UniverSlidesUIPlugin },
         UILocale,
         DocsUILocale,
+        SlidesUILocale,
       ] = await Promise.all([
         import('@univerjs/core'),
         import('@univerjs/themes'),
@@ -45,13 +48,16 @@ export function DocumentArtifact({ artifact }: Props) {
         import('@univerjs/ui'),
         import('@univerjs/docs'),
         import('@univerjs/docs-ui'),
+        import('@univerjs/slides'),
+        import('@univerjs/slides-ui'),
         import('@univerjs/ui/locale/en-US'),
         import('@univerjs/docs-ui/locale/en-US'),
+        import('@univerjs/slides-ui/locale/en-US'),
       ]);
 
       if (cancelled || !containerRef.current) return;
 
-      const docData = transformToUniverDoc(artifact.dataJson!);
+      const slideData = transformToUniverSlide(artifact.dataJson!);
 
       const univer = new Univer({
         theme: defaultTheme,
@@ -60,6 +66,7 @@ export function DocumentArtifact({ artifact }: Props) {
           [LocaleType.EN_US]: {
             ...(UILocale.default ?? UILocale),
             ...(DocsUILocale.default ?? DocsUILocale),
+            ...(SlidesUILocale.default ?? SlidesUILocale),
           },
         },
       });
@@ -68,8 +75,10 @@ export function DocumentArtifact({ artifact }: Props) {
       univer.registerPlugin(UniverUIPlugin, { container: containerRef.current });
       univer.registerPlugin(UniverDocsPlugin);
       univer.registerPlugin(UniverDocsUIPlugin);
+      univer.registerPlugin(UniverSlidesPlugin);
+      univer.registerPlugin(UniverSlidesUIPlugin);
 
-      const unit = univer.createUnit(UniverInstanceType.UNIVER_DOC, docData);
+      const unit = univer.createUnit(UniverInstanceType.UNIVER_SLIDE, slideData);
 
       const stopWatching = watchUniverUnit(unit, {
         onChange: (json) => {
@@ -96,13 +105,16 @@ export function DocumentArtifact({ artifact }: Props) {
         disposeRef.current = null;
       }
     };
+    // We intentionally do not depend on artifact.dataJson here — re-rendering
+    // every keystroke would tear down the live editor. The artifact id changes
+    // when the user opens a different deck, so that's the right boundary.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [artifact.id]);
 
   if (!artifact.dataJson) {
     return (
       <div style={{ padding: 24, color: 'var(--ink-3)', fontFamily: 'var(--mono)', fontSize: 12 }}>
-        No document data.
+        No slide data.
       </div>
     );
   }

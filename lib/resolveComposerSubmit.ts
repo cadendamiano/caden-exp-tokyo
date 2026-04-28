@@ -53,7 +53,10 @@ export function resolveComposerSubmit(s: ComposerSubmitState): ComposerSubmitAct
   if (s.forcedCmd) {
     const cmd = s.forcedCmd as SlashCommand;
     const forceLlm =
-      cmd.name === 'dataviz' && wantsCustomViz(body);
+      (cmd.name === 'dataviz' && wantsCustomViz(body)) ||
+      // /slides always runs the questionnaire conversation through the LLM
+      // — there is no useful canned demo flow for it.
+      cmd.name === 'slides';
     if (s.mode === 'demo' && !forceLlm) {
       return { kind: 'flow', flowId: cmd.demoFlowId };
     }

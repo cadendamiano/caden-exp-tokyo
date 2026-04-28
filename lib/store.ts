@@ -524,7 +524,7 @@ export const useStore = create<State>()(
     {
       name: 'bcw:state',
       storage: createJSONStorage(() => localStorage),
-      version: 7,
+      version: 8,
       migrate: (persisted: any, fromVersion: number) => {
         if (persisted && fromVersion < 2) {
           persisted.tweaks = { ...DEFAULT_TWEAKS, ...(persisted.tweaks ?? {}) };
@@ -560,6 +560,19 @@ export const useStore = create<State>()(
           if (persisted.tweaks) {
             persisted.tweaks.defaultBillEnvId = persisted.tweaks.defaultBillEnvId ?? undefined;
             persisted.tweaks.defaultBillProduct = persisted.tweaks.defaultBillProduct ?? 'ap';
+          }
+        }
+        if (persisted && fromVersion < 8) {
+          // The 'document' kind switched from a static-HTML component to a
+          // Univer-backed editor that needs dataJson. Legacy persisted
+          // documents have no dataJson — drop the empty shells so the user
+          // can regenerate via /doc instead of seeing a blank editor.
+          for (const w of persisted.workspaces ?? []) {
+            for (const t of w.threads ?? []) {
+              t.artifacts = (t.artifacts ?? []).filter(
+                (a: any) => !(a?.kind === 'document' && !a?.dataJson)
+              );
+            }
           }
         }
         return persisted;

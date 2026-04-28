@@ -12,6 +12,7 @@ import { LiquidityBurndownArtifact } from './artifacts/LiquidityBurndownArtifact
 import { SweepRuleArtifact } from './artifacts/SweepRuleArtifact';
 import { DocumentArtifact } from './artifacts/DocumentArtifact';
 import { SpreadsheetArtifact } from './artifacts/SpreadsheetArtifact';
+import { SlidesArtifact } from './artifacts/SlidesArtifact';
 import { ArtifactPreview } from './ArtifactPreview';
 import { ArtifactCode } from './ArtifactCode';
 import type { ArtifactKind } from '@/lib/flows';
@@ -28,6 +29,7 @@ function glyphFor(kind: ArtifactKind) {
   if (kind === 'html') return <Icon.Chart />;
   if (kind === 'liquidity-burndown') return <Icon.Chart />;
   if (kind === 'sweep-rule') return <Icon.Rule />;
+  if (kind === 'slides') return <Icon.Doc />;
   return <Icon.Doc />;
 }
 
@@ -246,7 +248,8 @@ export function ArtifactPane() {
                 {view === 'logic' && cur.kind === 'html' && <HtmlArtifact artifact={cur} />}
                 {view === 'logic' && cur.kind === 'liquidity-burndown' && <LiquidityBurndownArtifact artifact={cur} />}
                 {view === 'logic' && cur.kind === 'sweep-rule' && <SweepRuleArtifact artifact={cur} />}
-                {view === 'logic' && cur.kind === 'document' && <DocumentArtifact />}
+                {view === 'logic' && cur.kind === 'document' && <DocumentArtifact artifact={cur} />}
+                {view === 'logic' && cur.kind === 'slides' && <SlidesArtifact artifact={cur} />}
               </div>
             </>
           ) : (
