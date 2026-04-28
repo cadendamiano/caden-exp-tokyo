@@ -217,7 +217,25 @@ export function ArtifactPane() {
                 {view === 'preview' && <ArtifactPreview artifact={cur} />}
                 {view === 'code' && <ArtifactCode artifact={cur} />}
                 {view === 'logic' && cur.kind === 'ap-table' && (
-                  <APTableArtifact selected={new Set(selectedBills)} onToggle={toggleBill} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '9px 16px',
+                      background: 'var(--surface-2, #f5f4f2)',
+                      borderBottom: '1px solid var(--border, #e5e3de)',
+                      fontFamily: 'var(--mono)', fontSize: 11.5, color: 'var(--ink-3)',
+                    }}>
+                      <span>This view has been superseded by Spreadsheet.</span>
+                      <button
+                        className="icon-btn"
+                        style={{ fontSize: 11, padding: '0 8px' }}
+                        onClick={() => openAsSpreadsheet(cur)}
+                      >
+                        Convert to Spreadsheet
+                      </button>
+                    </div>
+                    <APTableArtifact selected={new Set(selectedBills)} onToggle={toggleBill} />
+                  </div>
                 )}
                 {view === 'logic' && cur.kind === 'spreadsheet' && (
                   <SpreadsheetArtifact artifact={cur} />
@@ -251,7 +269,7 @@ function EmptyArtifact() {
           open here side-by-side.
         </div>
         <div style={{ marginTop: 12, color: 'var(--ink-3)' }}>
-          Tables · Charts · Rules · Flows · Docs · Code
+          Spreadsheets · Charts · Rules · Flows · Docs · Code
         </div>
       </div>
     </div>
