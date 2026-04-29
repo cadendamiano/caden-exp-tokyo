@@ -237,12 +237,41 @@ export async function handleApprove(batchId: string) {
   setApproval(batchId, 'submitting');
 
   try {
+    // Step 1: mint a server-signed approval token.
+    const requiresDual = ctx.payload?.requiresSecondApprover === true;
+    const mintRes = await fetch('/api/approvals', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        batchId,
+        approverId: 'usr_current_session',
+        // For the prototype, dual-control batches use a hardcoded second approver;
+        // real auth will resolve this from the org directory.
+        ...(requiresDual ? { secondApproverId: 'usr_second_approver' } : {}),
+      }),
+    });
+    if (!mintRes.ok) {
+      const errBody = await mintRes.json().catch(() => ({} as any));
+      throw new Error(`approval mint failed: ${errBody.error ?? mintRes.statusText}`);
+    }
+    const mintBody = (await mintRes.json()) as {
+      ok: boolean;
+      token?: unknown;
+      error?: string;
+    };
+    if (!mintBody.ok || !mintBody.token) {
+      throw new Error(`approval mint failed: ${mintBody.error ?? 'unknown'}`);
+    }
+
+    // Step 2: submit the batch with the token. The dispatcher's gate verifies
+    // the signature, expiry, batchId match, and dual-control claim, then
+    // redeems the nonce.
     const res = await fetch('/api/dryrun', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         tool: 'submit_payment_batch',
-        input: { batchId, payload: ctx.payload },
+        input: { batchId, approvalToken: mintBody.token },
         mode: ctx.mode,
         billEnvId: ctx.billEnvId,
         billProduct: ctx.billProduct,

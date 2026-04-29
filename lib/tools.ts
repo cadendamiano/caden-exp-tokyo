@@ -98,6 +98,29 @@ export type ToolContext = {
 
 type ApprovalPayload = Extract<FlowStep, { kind: 'approval' }>['payload'];
 
+import { fromUsd } from './domain/money';
+import { evaluatePolicy } from './policy/approvalPolicy';
+import { verifyApprovalToken, redeemNonce } from './approvals/token';
+import {
+  getStagedByKey, getStagedByBatchId, putStaged, recordConfirmation,
+  type StagedBatch, type StagedBatchLine,
+} from './payment/stagedBatchStore';
+import { getIdempotent, putIdempotent } from './idempotency';
+
+function stagedBatchToApprovalPayload(s: StagedBatch): ApprovalPayload {
+  const requiresSecondApprover = s.policy === 'requires-dual-control';
+  return {
+    batchId: s.batchId,
+    stake: requiresSecondApprover ? 'large-payment' : 'payment',
+    from: s.fundingAccount,
+    method: s.method,
+    scheduledFor: requiresSecondApprover ? 'Pending second approval' : 'Today, 4:00 PM PT',
+    items: s.lines,
+    total: s.total.minorUnits / 100,
+    requiresSecondApprover,
+  };
+}
+
 export const DEMO_SANDBOX_ENV_ID = '__demo_sandbox__';
 
 // ─── Tool definitions ─────────────────────────────────────────────────
@@ -632,12 +655,33 @@ async function runMockTool(
       if (billIds.length === 0) {
         return { ok: false, summary: 'stage_payment_batch requires billIds', data: null };
       }
+      const idempotencyKey = String(input?.idempotencyKey ?? '').trim();
+      if (!idempotencyKey) {
+        return {
+          ok: false,
+          summary: 'stage_payment_batch requires idempotencyKey (UUID v4)',
+          data: { code: 'E_IDEMPOTENCY' },
+        };
+      }
+      // Same key → same batch.
+      const existing = getStagedByKey(idempotencyKey);
+      if (existing) {
+        return {
+          ok: true,
+          summary: `Batch staged · ${existing.lines.length} items · $${(existing.total.minorUnits / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })} (idempotent replay)`,
+          data: {
+            approvalPayload: stagedBatchToApprovalPayload(existing),
+            simulated: true,
+            idempotent: true,
+          },
+        };
+      }
       const hints = new Map<string, any>(
         (Array.isArray(input?.billHints) ? input.billHints : []).map((h: any) => [String(h.id), h])
       );
       const vendorName: Record<string, string> = {};
       for (const v of VENDORS) vendorName[v.id] = v.name;
-      const lineItems = billIds.map((id: string) => {
+      const lineItems: StagedBatchLine[] = billIds.map((id: string) => {
         const bill = BILLS.find(b => b.id === id);
         if (bill) {
           return {
@@ -653,32 +697,95 @@ async function runMockTool(
           amount: Number(hint?.amount ?? 0),
         };
       });
-      const total = lineItems.reduce((s, li) => s + li.amount, 0);
-      const stake: ApprovalPayload['stake'] = total > 25000 ? 'large-payment' : 'payment';
+      const totalMajor = lineItems.reduce((s, li) => s + li.amount, 0);
+      const total = fromUsd(totalMajor);
+      const policyEval = evaluatePolicy({
+        total,
+        hasDuplicateInvoice: false,
+        vendorRiskFlags: [],
+      });
       const batchId = `btch_${Date.now().toString(36).slice(-6)}`;
+      const fundingAccount = String(input?.bankAccount ?? 'Ops Checking ••4821');
+      const method = (input?.method ?? 'ACH') as 'ACH' | 'Check' | 'Wire';
+      putStaged({
+        batchId,
+        idempotencyKey,
+        total,
+        policy: policyEval.policy,
+        lines: lineItems,
+        fundingAccount,
+        method,
+        createdAt: Date.now(),
+      });
+      const requiresSecondApprover = policyEval.policy === 'requires-dual-control';
+      const stake: ApprovalPayload['stake'] = requiresSecondApprover ? 'large-payment' : 'payment';
       const approvalPayload: ApprovalPayload = {
         batchId,
         stake,
-        from: input?.bankAccount ?? 'Ops Checking ••4821',
-        method: input?.method ?? 'ACH',
+        from: fundingAccount,
+        method,
         scheduledFor:
-          input?.scheduledFor ?? (stake === 'large-payment' ? 'Pending second approval' : 'Today, 4:00 PM PT'),
+          String(input?.scheduledFor ?? (requiresSecondApprover ? 'Pending second approval' : 'Today, 4:00 PM PT')),
         items: lineItems,
-        total,
-        requiresSecondApprover: stake === 'large-payment',
+        total: totalMajor,
+        requiresSecondApprover,
       };
       return {
         ok: true,
-        summary: `Batch staged · ${lineItems.length} items · $${total.toLocaleString('en-US', { maximumFractionDigits: 0 })} (simulated)`,
-        data: { approvalPayload, simulated: true },
+        summary: `Batch staged · ${lineItems.length} items · $${totalMajor.toLocaleString('en-US', { maximumFractionDigits: 0 })} · policy=${policyEval.policy} (simulated)`,
+        data: {
+          approvalPayload,
+          simulated: true,
+          policy: policyEval.policy,
+          policyReasons: policyEval.reasons,
+        },
       };
     }
     if (name === 'submit_payment_batch') {
       const batchId = String(input?.batchId ?? '').trim();
       if (!batchId) {
-        return { ok: false, summary: 'submit_payment_batch requires batchId', data: null };
+        return {
+          ok: false,
+          summary: 'submit_payment_batch requires batchId',
+          data: { code: 'E_NO_APPROVAL' },
+        };
       }
+      const staged = getStagedByBatchId(batchId);
+      if (!staged) {
+        return {
+          ok: false,
+          summary: `submit_payment_batch: no staged batch ${batchId}`,
+          data: { code: 'E_NO_APPROVAL' },
+        };
+      }
+      // Idempotent submit: if we've already issued a confirmation for this
+      // idempotencyKey, return the same one without redeeming the nonce again.
+      const priorConfirmation = getIdempotent<{ confirmationId: string }>('submit', staged.idempotencyKey);
+      if (priorConfirmation) {
+        return {
+          ok: true,
+          summary: 'Batch submitted (idempotent replay)',
+          data: { confirmationId: priorConfirmation.confirmationId, simulated: true, idempotent: true },
+        };
+      }
+      const verify = await verifyApprovalToken({
+        token: input?.approvalToken,
+        expectedBatchId: batchId,
+        expectedIdempotencyKey: staged.idempotencyKey,
+        requireDualControl: staged.policy === 'requires-dual-control',
+      });
+      if (!verify.ok) {
+        return {
+          ok: false,
+          summary: `submit_payment_batch refused: ${verify.reason}`,
+          data: { code: verify.code },
+        };
+      }
+      // Redeem nonce, persist confirmation, snapshot for idempotent retry.
+      redeemNonce(verify.nonce, Math.floor(Date.now() / 1000) + 24 * 60 * 60);
       const confirmationId = `PMT-${batchId.slice(-6).toUpperCase()}`;
+      recordConfirmation(batchId, confirmationId);
+      putIdempotent('submit', staged.idempotencyKey, { confirmationId });
       return {
         ok: true,
         summary: 'Batch submitted (simulated)',
@@ -1031,7 +1138,7 @@ Style:
 - When the user asks for a prose report, one-pager, memo, or narrative summary, call \`render_document_artifact\`. For slide decks call \`render_slides_artifact\` (only after /slides and an explicit user go-ahead).
 - When the user asks to visualize or open an interactive view (spend chart, Net-15 rule, CRM flow, cash runway, sweep rule), call \`render_artifact\` with the right kind. Kinds: spend-chart, rule-net15, crm-flow, liquidity-burndown, sweep-rule.
 - When the user asks to "create a spreadsheet", "turn this into a spreadsheet", "open as spreadsheet", or requests tabular data they can edit with formulas — call \`render_spreadsheet_artifact\`. First call the appropriate read tool (e.g. \`list_bills\`, \`get_category_spend\`) to get the data, then pass it as \`dataJson\` in the format \`{"sheets":[{"name":"Tab name","headers":[...],"rows":[[...]]}]}\`. Use one sheet per logical grouping. Use numbers (not strings) for currency amounts.
-- To stage a payment, call \`stage_payment_batch\` with the bill IDs — the UI will render an approval card with a typed-confirmation gate. Do not fabricate approvals. Wait for the user's approve/reject before describing an outcome.
+- To stage a payment, call \`stage_payment_batch\` with the bill IDs AND an \`idempotencyKey\` (a fresh UUID v4 you generate for this stage call). The UI renders an approval card with a typed-confirmation gate. Do not fabricate approvals. Wait for the user's approve/reject before describing an outcome. Never call submit_payment_batch yourself — it is internal and only fires after a human approves in the UI, which mints a server-signed token the LLM never sees.
 
 Tools are grouped into AP (bills, vendors, payments, aging, spend), AR (customers, invoices), Spend & Expense (expenses, cards, budgets, transactions, reimbursements), Org/Infra (funding accounts, users, GL, webhooks), and Payments (stage_payment_batch, create_automation_rule). Use the tool schemas you have access to — they list the exact names and parameters.
 
