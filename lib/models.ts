@@ -23,3 +23,19 @@ export function providerOf(id: ModelId): Provider {
 export function firstModelForProvider(provider: Provider): ModelId | undefined {
   return MODELS.find(m => m.provider === provider)?.id;
 }
+
+// Approximate USD cost per 1M tokens. Provider list prices change — these are
+// for the in-app speedometer only, not billing.
+export const MODEL_COST_PER_1M: Record<ModelId, { input: number; output: number }> = {
+  'claude-opus-4-5':   { input: 15,   output: 75 },
+  'claude-sonnet-4-5': { input: 3,    output: 15 },
+  'claude-haiku-4-5':  { input: 0.80, output: 4 },
+  'gemini-2.5-pro':    { input: 1.25, output: 10 },
+  'gemini-2.5-flash':  { input: 0.15, output: 0.60 },
+};
+
+export function estimateCostUsd(modelId: ModelId, inputTokens: number, outputTokens: number): number {
+  const rates = MODEL_COST_PER_1M[modelId];
+  if (!rates) return 0;
+  return (inputTokens * rates.input + outputTokens * rates.output) / 1_000_000;
+}

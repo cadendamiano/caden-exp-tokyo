@@ -492,6 +492,14 @@ export async function runLLM(userText: string, opts?: ForcedArtifact) {
             multiSelect: ev.multiSelect,
             freeText: ev.freeText,
           });
+        } else if (ev.type === 'usage') {
+          useStore.getState().recordUsage({
+            ts: Date.now(),
+            model: ev.model,
+            inputTokens: ev.inputTokens ?? 0,
+            outputTokens: ev.outputTokens ?? 0,
+            durationMs: ev.durationMs ?? 0,
+          });
         } else if (ev.type === 'done') {
           useStore.getState().updateTurnInActiveWorkspaceThread(agentId, { text: acc || ev.text || '', streaming: false });
         } else if (ev.type === 'error') {

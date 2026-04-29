@@ -91,6 +91,14 @@ export type Thread = {
   billProduct?: BillProduct;
 };
 
+export type UsageSample = {
+  ts: number;
+  model: ModelId;
+  inputTokens: number;
+  outputTokens: number;
+  durationMs: number;
+};
+
 type State = {
   tweaks: Tweaks;
   activeArtifact: string | null;
@@ -98,6 +106,9 @@ type State = {
   streaming: boolean;
   composer: string;
   settingsStatus: SettingsStatus | null;
+  tokenHistory: UsageSample[];
+  recordUsage: (sample: UsageSample) => void;
+  clearTokenHistory: () => void;
 
   mode: Mode;
 
@@ -185,6 +196,14 @@ export const useStore = create<State>()(
       streaming: false,
       composer: '',
       settingsStatus: null,
+      tokenHistory: [],
+      recordUsage: (sample) =>
+        set(s => {
+          const next = [...s.tokenHistory, sample];
+          if (next.length > 100) next.splice(0, next.length - 100);
+          return { tokenHistory: next };
+        }),
+      clearTokenHistory: () => set({ tokenHistory: [] }),
 
       mode: 'demo',
 

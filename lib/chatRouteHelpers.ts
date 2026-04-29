@@ -29,6 +29,13 @@ export type Event =
       multiSelect: boolean;
       freeText: boolean;
     }
+  | {
+      type: 'usage';
+      model: string;
+      inputTokens?: number;
+      outputTokens?: number;
+      durationMs: number;
+    }
   | { type: 'done' }
   | { type: 'error'; message: string };
 

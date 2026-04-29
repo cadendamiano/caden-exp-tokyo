@@ -101,7 +101,7 @@ export function BrainTrustColumn() {
   const liveTracingOn = Boolean(btView?.configured) && enabledInput && Boolean(projectInput);
 
   return (
-    <div className="scol-body">
+    <>
       {/* Configuration */}
       <section className="settings-section">
         <div className="settings-section-head">
@@ -204,6 +204,6 @@ export function BrainTrustColumn() {
           </a>
         </div>
       )}
-    </div>
+    </>
   );
 }

@@ -70,6 +70,10 @@ export async function POST(req: NextRequest) {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const send = (ev: Event) => controller.enqueue(encoder.encode(sseEncode(ev)));
+      const startedAt = Date.now();
+      let finalText = '';
+      let inputTokens: number | undefined;
+      let outputTokens: number | undefined;
       try {
         await traced(
           async (rootSpan) => {
@@ -77,9 +81,6 @@ export async function POST(req: NextRequest) {
               input: { userMessage, history, mode: ctx.mode, demoDataset: ctx.demoDataset },
               metadata: { model, provider, billProduct: ctx.billProduct, forcedKind, commandName: body.commandName },
             });
-            let finalText = '';
-            let inputTokens: number | undefined;
-            let outputTokens: number | undefined;
             const onFinish = (t: string, it?: number, ot?: number) => {
               finalText = t;
               inputTokens = it;
@@ -109,6 +110,13 @@ export async function POST(req: NextRequest) {
       } catch (e: any) {
         send({ type: 'error', message: e?.message ?? 'unknown error' });
       } finally {
+        send({
+          type: 'usage',
+          model,
+          inputTokens,
+          outputTokens,
+          durationMs: Date.now() - startedAt,
+        });
         send({ type: 'done' });
         controller.close();
       }
