@@ -33,11 +33,7 @@ export function Turn({
   if (turn.kind === 'user') {
     return (
       <div className="msg user fade-in">
-        <span className="msg-gutter user">›</span>
-        <div className="msg-body">
-          <span className="prompt-prefix">you</span>
-          {turn.text}
-        </div>
+        <div className="msg-body">{turn.text}</div>
       </div>
     );
   }
@@ -45,7 +41,6 @@ export function Turn({
   if (turn.kind === 'agent') {
     return (
       <div className="msg agent fade-in">
-        <span className="msg-gutter agent">⏵</span>
         <div className="msg-body">
           <Markdown text={turn.text} />
           {turn.streaming && <span className="caret" />}
@@ -57,7 +52,6 @@ export function Turn({
   if (turn.kind === 'tools') {
     return (
       <div className="msg agent fade-in">
-        <span className="msg-gutter agent" style={{ color: 'var(--ink-4)' }}>∙</span>
         <div className="msg-body">
           <div className="tool-call">
             {turn.rows.map((r, i) => <ToolRow key={i} row={r} />)}
@@ -80,7 +74,6 @@ export function Turn({
   if (turn.kind === 'approval') {
     return (
       <div className="msg agent fade-in">
-        <span className="msg-gutter agent" style={{ color: 'oklch(0.70 0.13 70)' }}>!</span>
         <div className="msg-body" style={{ minWidth: 0 }}>
           <ApprovalCard
             payload={turn.payload}
@@ -97,7 +90,6 @@ export function Turn({
   if (turn.kind === 'libs') {
     return (
       <div className="msg agent fade-in">
-        <span className="msg-gutter agent" style={{ color: 'var(--ink-4)' }}>∙</span>
         <div className="msg-body">
           <div
             style={{
@@ -133,7 +125,6 @@ export function Turn({
   if (turn.kind === 'building') {
     return (
       <div className="msg agent fade-in">
-        <span className="msg-gutter agent">⏵</span>
         <div className="msg-body">
           <div className="artifact-building">
             <div className="skel" />
@@ -156,7 +147,6 @@ export function Turn({
     const isActive = activeArtifact === turn.artifactId;
     return (
       <div className="msg agent fade-in">
-        <span className="msg-gutter agent">⏵</span>
         <div className="msg-body">
           <div style={{ fontSize: 13, color: 'var(--ink-3)', marginBottom: 4 }}>
             Artifact ready.
@@ -193,7 +183,6 @@ export function Turn({
   if (turn.kind === 'suggest') {
     return (
       <div className="msg agent fade-in">
-        <span className="msg-gutter agent" style={{ color: 'var(--ink-4)' }}>↳</span>
         <div className="msg-body" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {turn.items.map(s => {
             const isRecommend = s.startsWith('Recommend ');
@@ -258,7 +247,6 @@ function FormQuestion({ turn, onFormAnswer }: FormQuestionProps) {
 
   return (
     <div className="msg agent fade-in">
-      <span className="msg-gutter agent">⏵</span>
       <div className="msg-body">
         <div className="fq-question">{turn.question}</div>
         <div className="fq-options">

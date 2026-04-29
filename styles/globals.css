@@ -262,7 +262,7 @@ input, textarea, select{ font-family: inherit; color: inherit; }
 .convo-stream{
   overflow-y: auto;
   padding: 22px 28px 16px;
-  display: flex; flex-direction: column; gap: 18px;
+  display: flex; flex-direction: column; gap: 22px;
 }
 
 .session-header{
@@ -277,21 +277,20 @@ input, textarea, select{ font-family: inherit; color: inherit; }
   font-family: var(--mono); font-size: 11px; color: var(--ink-4);
 }
 
-.msg{ display: grid; grid-template-columns: 22px 1fr; gap: 12px; }
-.msg-gutter{
-  font-family: var(--mono); font-size: 10.5px; color: var(--ink-4);
-  padding-top: 2px; user-select: none;
-}
-.msg-gutter.user{ color: var(--ink-3); }
-.msg-gutter.agent{ color: var(--teal-ink); }
-.msg-gutter.warn{ color: var(--warn); font-weight: 700; }
+.msg{ display: block; }
 
 .msg-body{ min-width: 0; }
 
 .msg.user .msg-body{
-  font-family: var(--mono); font-size: 13px; color: var(--ink);
+  font-family: var(--sans); font-size: 13px; font-weight: 600; color: var(--teal-ink);
+  background: var(--teal-soft);
+  border: 1px solid var(--teal-line);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  justify-self: start;
+  max-width: min(100%, 60ch);
 }
-.msg.user .prompt-prefix{ color: var(--teal-ink); margin-right: 6px; }
+.msg.user .prompt-prefix{ color: var(--ink-3); margin-right: 6px; }
 
 .msg.agent .msg-body{
   font-size: var(--fs-body); color: var(--ink); line-height: var(--lh-agent);
@@ -322,6 +321,30 @@ input, textarea, select{ font-family: inherit; color: inherit; }
 .tool-row .result .ok{ color: var(--pos); }
 .tool-row.expand{ cursor: pointer; }
 .tool-row.expand:hover .endpoint{ color: var(--teal-ink); }
+
+.tool-row-wrap.collapsible .endpoint{
+  display: block; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tool-row-wrap.open .tool-row .filter{ display: none; }
+.tool-row-chev{
+  display: inline-flex; align-items: center; color: var(--ink-4);
+  transform: rotate(0deg); transition: transform 140ms ease;
+}
+.tool-row-chev.open{ transform: rotate(90deg); }
+.tool-row-detail{
+  margin: 4px 0 6px 22px;
+  font-family: var(--mono); font-size: 11px; line-height: 1.5;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  white-space: pre;
+  overflow-x: auto;
+  max-height: 360px;
+  overflow-y: auto;
+}
 
 .tool-summary{
   margin-top: 6px;
@@ -1485,7 +1508,7 @@ input, textarea, select{ font-family: inherit; color: inherit; }
 .fq-option:hover:not(:disabled){ border-color: var(--teal-line); background: var(--teal-soft); }
 .fq-option:disabled{ cursor: default; }
 .fq-option-selected{
-  border-color: var(--teal); background: var(--teal-soft);
+  border-color: var(--ink-3); background: var(--surface);
 }
 .fq-option-dim{ opacity: 0.35; }
 .fq-checkbox{
@@ -1496,7 +1519,7 @@ input, textarea, select{ font-family: inherit; color: inherit; }
   transition: border-color 0.12s, background 0.12s;
 }
 .fq-checkbox-checked{
-  border-color: var(--teal); background: var(--teal-soft);
+  border-color: var(--ink-3); background: var(--surface-2);
 }
 .fq-option-body{
   display: flex; flex-direction: column; gap: 2px; min-width: 0;
