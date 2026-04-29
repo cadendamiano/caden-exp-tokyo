@@ -8,6 +8,7 @@ import { providerOf } from '@/lib/models';
 import { buildModelTools, buildRequirementsBlock, coerceArtifactKind, filterToolsByAllowlist } from '@/lib/chatSchema';
 import { jsonSchemaToGemini, type Event, type ChatHistoryTurn, type ApprovalPayload } from '@/lib/chatRouteHelpers';
 import { ensureBraintrustLogger, traced, type Span } from '@/lib/braintrust';
+import { getDefinedTool, validateToolInput } from '@/lib/tools/index';
 
 export type RunAgentArgs = {
   model: string;
@@ -130,14 +131,32 @@ export async function runAgentOnce(args: RunAgentArgs): Promise<RunAgentResult> 
 
 // ─── Tool span wrapper ────────────────────────────────────────────────
 
+export type TracedToolResult =
+  | { ok: true; summary: string; data: unknown }
+  | { ok: false; summary: string; data: unknown; code?: 'E_SCHEMA' };
+
 async function tracedTool(
   name: string,
   input: any,
   ctx: ToolContext,
-): Promise<{ ok: boolean; summary: string; data: unknown }> {
+): Promise<TracedToolResult> {
   return traced(
     async (toolSpan: Span) => {
       toolSpan.log({ input });
+      // Validate against the registered Zod schema (if any) before dispatch.
+      const def = getDefinedTool(name);
+      if (def) {
+        const v = validateToolInput(def, input);
+        if (!v.ok) {
+          toolSpan.log({
+            output: { ok: false, summary: v.summary, code: v.code, issues: v.issues },
+            metadata: { rejected: true, reason: 'schema' },
+          });
+          return { ok: false, summary: v.summary, data: { issues: v.issues }, code: v.code } as const;
+        }
+        // Use the parsed/coerced value (e.g. defaults applied) for downstream calls.
+        input = v.input;
+      }
       const res = await runTool(name, input, ctx);
       toolSpan.log({ output: { ok: res.ok, summary: res.summary, data: res.data } });
       return res;
@@ -250,7 +269,11 @@ async function runAnthropic(
         return;
       }
       const res = await tracedTool(tu.name, tu.input, ctx);
-      send({ type: 'tool-result', id: tu.id, name: tu.name, input: tu.input, ok: res.ok, summary: res.summary });
+      if (!res.ok && (res as any).code === 'E_SCHEMA') {
+        send({ type: 'tool-error', id: tu.id, name: tu.name, input: tu.input, code: 'E_SCHEMA', summary: res.summary });
+      } else {
+        send({ type: 'tool-result', id: tu.id, name: tu.name, input: tu.input, ok: res.ok, summary: res.summary });
+      }
       if (tu.name === 'render_artifact') {
         const inp = tu.input as any;
         const kind = coerceArtifactKind(inp.kind, forcedKind);
@@ -442,7 +465,11 @@ async function runGemini(
         return;
       }
       const res = await tracedTool(tc.name, tc.input, ctx);
-      send({ type: 'tool-result', id: tc.id, name: tc.name, input: tc.input, ok: res.ok, summary: res.summary });
+      if (!res.ok && (res as any).code === 'E_SCHEMA') {
+        send({ type: 'tool-error', id: tc.id, name: tc.name, input: tc.input, code: 'E_SCHEMA', summary: res.summary });
+      } else {
+        send({ type: 'tool-result', id: tc.id, name: tc.name, input: tc.input, ok: res.ok, summary: res.summary });
+      }
       if (tc.name === 'render_artifact') {
         const inp = tc.input as any;
         const kind = coerceArtifactKind(inp.kind, forcedKind);

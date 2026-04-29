@@ -8,6 +8,14 @@ export type Event =
   | { type: 'tool-call'; id: string; name: string; input: any }
   | { type: 'tool-result'; id: string; name: string; input: any; ok: boolean; summary: string }
   | {
+      type: 'tool-error';
+      id: string;
+      name: string;
+      input: any;
+      code: 'E_SCHEMA' | 'E_NO_APPROVAL' | 'E_DUAL_CONTROL_REQUIRED' | 'E_NONCE_USED' | 'E_IDEMPOTENCY';
+      summary: string;
+    }
+  | {
       type: 'artifact';
       kind: string;
       title?: string;
