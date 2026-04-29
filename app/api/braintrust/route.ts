@@ -1,6 +1,5 @@
 import { NextRequest } from 'next/server';
 import { readSecrets } from '@/lib/secrets';
-import { getSpans, markPushed, clearBuffer } from '@/lib/spanBuffer';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,16 +17,10 @@ async function btFetch(path: string, apiKey: string, options?: RequestInit) {
   });
 }
 
-// GET /api/braintrust
-// action=test  → validate key + return org/project list
-// action=spans → return in-memory span buffer
+// GET /api/braintrust?action=test → validate key + return project list
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const action = searchParams.get('action') ?? 'spans';
-
-  if (action === 'spans') {
-    return Response.json({ spans: getSpans() });
-  }
+  const action = searchParams.get('action') ?? 'test';
 
   if (action === 'test') {
     const secrets = await readSecrets();
@@ -48,86 +41,6 @@ export async function GET(req: NextRequest) {
       return Response.json({ ok: true, projects });
     } catch (e: any) {
       return Response.json({ ok: false, error: e?.message ?? 'Network error' });
-    }
-  }
-
-  return Response.json({ error: 'unknown action' }, { status: 400 });
-}
-
-// POST /api/braintrust
-// body: { action: 'push', spanIds: string[] }  → push selected spans as dataset rows
-// body: { action: 'clear' }                     → clear the in-memory buffer
-export async function POST(req: NextRequest) {
-  let body: { action: string; spanIds?: string[] };
-  try {
-    body = await req.json();
-  } catch {
-    return Response.json({ error: 'invalid json' }, { status: 400 });
-  }
-
-  if (body.action === 'clear') {
-    clearBuffer();
-    return Response.json({ ok: true });
-  }
-
-  if (body.action === 'push') {
-    const secrets = await readSecrets();
-    const apiKey = secrets.braintrustApiKey;
-    if (!apiKey) return Response.json({ ok: false, error: 'No BrainTrust API key configured' });
-
-    const projectName = secrets.braintrustProjectName;
-    if (!projectName) return Response.json({ ok: false, error: 'No BrainTrust project configured' });
-
-    const allSpans = getSpans();
-    const targets = body.spanIds?.length
-      ? allSpans.filter(s => body.spanIds!.includes(s.id))
-      : allSpans;
-
-    if (targets.length === 0) return Response.json({ ok: false, error: 'No spans to push' });
-
-    // Resolve or create the dataset
-    let datasetId: string;
-    try {
-      const createRes = await btFetch('/dataset', apiKey, {
-        method: 'POST',
-        body: JSON.stringify({ name: 'coworker-traces', project_name: projectName }),
-      });
-      const createData = await createRes.json();
-      datasetId = createData.id;
-      if (!datasetId) throw new Error('Could not resolve dataset id');
-    } catch (e: any) {
-      return Response.json({ ok: false, error: `Dataset resolve failed: ${e?.message}` });
-    }
-
-    // Insert rows
-    const rows = targets.map(span => ({
-      input: {
-        systemPrompt: span.systemPrompt,
-        userMessage: span.userMessage,
-        toolCalls: span.toolCalls,
-      },
-      expected: span.responseText,
-      metadata: {
-        model: span.model,
-        inputTokens: span.inputTokens,
-        outputTokens: span.outputTokens,
-        timestamp: span.timestamp,
-      },
-    }));
-
-    try {
-      const insertRes = await btFetch(`/dataset/${datasetId}/insert`, apiKey, {
-        method: 'POST',
-        body: JSON.stringify({ events: rows }),
-      });
-      if (!insertRes.ok) {
-        const text = await insertRes.text();
-        return Response.json({ ok: false, error: `Insert failed (${insertRes.status}): ${text.slice(0, 200)}` });
-      }
-      targets.forEach(s => markPushed(s.id));
-      return Response.json({ ok: true, pushed: targets.length });
-    } catch (e: any) {
-      return Response.json({ ok: false, error: e?.message ?? 'Insert failed' });
     }
   }
 

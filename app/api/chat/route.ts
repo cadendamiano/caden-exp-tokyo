@@ -7,8 +7,8 @@ import type { ArtifactKind } from '@/lib/flows';
 import { getAnthropicKey, getGeminiKey, readSecrets } from '@/lib/secrets';
 import { providerOf } from '@/lib/models';
 import { buildModelTools, buildRequirementsBlock, coerceArtifactKind, filterToolsByAllowlist } from '@/lib/chatSchema';
-import { recordSpan, type ToolCallRecord } from '@/lib/spanBuffer';
 import { sseEncode, jsonSchemaToGemini, type Event, type ChatHistoryTurn, type ApprovalPayload } from '@/lib/chatRouteHelpers';
+import { ensureBraintrustLogger, traced, type Span } from '@/lib/braintrust';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -63,38 +63,52 @@ export async function POST(req: NextRequest) {
     ? filterToolsByAllowlist(afterDisabled, body.shortcutAllowedTools)
     : afterDisabled;
 
-  // Span accumulator for observability
-  const spanId = `span_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-  const spanToolCalls: ToolCallRecord[] = [];
-  let spanResponseText = '';
-  let spanInputTokens: number | undefined;
-  let spanOutputTokens: number | undefined;
   const forcedKind = body.forcedKind;
+  await ensureBraintrustLogger();
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const send = (ev: Event) => controller.enqueue(encoder.encode(sseEncode(ev)));
       try {
-        if (provider === 'gemini') {
-          await runGemini(model, userMessage, send, ctx, systemPrompt, tools, forcedKind, history, spanToolCalls, (t, it, ot) => { spanResponseText = t; spanInputTokens = it; spanOutputTokens = ot; });
-        } else {
-          await runAnthropic(model, userMessage, send, ctx, systemPrompt, tools, forcedKind, history, spanToolCalls, (t, it, ot) => { spanResponseText = t; spanInputTokens = it; spanOutputTokens = ot; });
-        }
+        await traced(
+          async (rootSpan) => {
+            rootSpan.log({
+              input: { userMessage, history, mode: ctx.mode, demoDataset: ctx.demoDataset },
+              metadata: { model, provider, billProduct: ctx.billProduct, forcedKind, commandName: body.commandName },
+            });
+            let finalText = '';
+            let inputTokens: number | undefined;
+            let outputTokens: number | undefined;
+            const onFinish = (t: string, it?: number, ot?: number) => {
+              finalText = t;
+              inputTokens = it;
+              outputTokens = ot;
+            };
+            try {
+              if (provider === 'gemini') {
+                await runGemini(model, userMessage, send, ctx, systemPrompt, tools, forcedKind, history, onFinish);
+              } else {
+                await runAnthropic(model, userMessage, send, ctx, systemPrompt, tools, forcedKind, history, onFinish);
+              }
+            } finally {
+              rootSpan.log({
+                output: finalText,
+                metrics: {
+                  ...(inputTokens !== undefined ? { prompt_tokens: inputTokens } : {}),
+                  ...(outputTokens !== undefined ? { completion_tokens: outputTokens } : {}),
+                  ...(inputTokens !== undefined && outputTokens !== undefined
+                    ? { tokens: inputTokens + outputTokens }
+                    : {}),
+                },
+              });
+            }
+          },
+          { name: 'chat.request', type: 'task' },
+        );
       } catch (e: any) {
         send({ type: 'error', message: e?.message ?? 'unknown error' });
       } finally {
-        recordSpan({
-          id: spanId,
-          timestamp: Date.now(),
-          model,
-          systemPrompt,
-          userMessage,
-          toolCalls: spanToolCalls,
-          responseText: spanResponseText,
-          inputTokens: spanInputTokens,
-          outputTokens: spanOutputTokens,
-        });
         send({ type: 'done' });
         controller.close();
       }
@@ -110,6 +124,22 @@ export async function POST(req: NextRequest) {
   });
 }
 
+async function tracedTool(
+  name: string,
+  input: any,
+  ctx: ToolContext,
+): Promise<{ ok: boolean; summary: string; data: unknown }> {
+  return traced(
+    async (toolSpan: Span) => {
+      toolSpan.log({ input });
+      const res = await runTool(name, input, ctx);
+      toolSpan.log({ output: { ok: res.ok, summary: res.summary, data: res.data } });
+      return res;
+    },
+    { name: `tool:${name}`, type: 'tool' },
+  );
+}
+
 // ── Anthropic ──────────────────────────────────────────────────────────
 async function runAnthropic(
   model: string,
@@ -120,7 +150,6 @@ async function runAnthropic(
   modelTools: ToolDef[],
   forcedKind: ArtifactKind | undefined,
   history: ChatHistoryTurn[],
-  spanToolCalls: ToolCallRecord[],
   onFinish: (text: string, inputTokens?: number, outputTokens?: number) => void
 ) {
   const apiKey = await getAnthropicKey();
@@ -146,34 +175,52 @@ async function runAnthropic(
   let totalOutputTokens = 0;
 
   for (let turn = 0; turn < 4; turn++) {
-    const stream = await client.messages.stream({
-      model,
-      max_tokens: 2048,
-      system: systemPrompt,
-      tools,
-      messages,
-    });
+    const turnResult = await traced(
+      async (turnSpan: Span) => {
+        turnSpan.log({ input: { messages, tools: tools.map(t => t.name) }, metadata: { model, turn } });
+        const stream = await client.messages.stream({
+          model,
+          max_tokens: 2048,
+          system: systemPrompt,
+          tools,
+          messages,
+        });
 
-    const toolUses: { id: string; name: string; input: any }[] = [];
-    let textAccum = '';
+        const toolUses: { id: string; name: string; input: any }[] = [];
+        let textAccum = '';
 
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-        textAccum += event.delta.text;
-        send({ type: 'text', text: event.delta.text });
-      }
-    }
+        for await (const event of stream) {
+          if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+            textAccum += event.delta.text;
+            send({ type: 'text', text: event.delta.text });
+          }
+        }
 
-    const final = await stream.finalMessage();
-    fullResponseText += textAccum;
-    totalInputTokens += final.usage?.input_tokens ?? 0;
-    totalOutputTokens += final.usage?.output_tokens ?? 0;
+        const final = await stream.finalMessage();
+        const inTok = final.usage?.input_tokens ?? 0;
+        const outTok = final.usage?.output_tokens ?? 0;
 
-    for (const block of final.content) {
-      if (block.type === 'tool_use') {
-        toolUses.push({ id: block.id, name: block.name, input: block.input });
-      }
-    }
+        for (const block of final.content) {
+          if (block.type === 'tool_use') {
+            toolUses.push({ id: block.id, name: block.name, input: block.input });
+          }
+        }
+
+        turnSpan.log({
+          output: { text: textAccum, toolUses: toolUses.map(t => ({ name: t.name })) },
+          metrics: { prompt_tokens: inTok, completion_tokens: outTok, tokens: inTok + outTok },
+        });
+
+        return { textAccum, inTok, outTok, toolUses, final };
+      },
+      { name: 'llm.turn', type: 'llm' },
+    );
+
+    fullResponseText += turnResult.textAccum;
+    totalInputTokens += turnResult.inTok;
+    totalOutputTokens += turnResult.outTok;
+    const toolUses = turnResult.toolUses;
+    const final = turnResult.final;
 
     if (toolUses.length === 0) {
       onFinish(fullResponseText, totalInputTokens, totalOutputTokens);
@@ -196,8 +243,7 @@ async function runAnthropic(
         onFinish(fullResponseText, totalInputTokens, totalOutputTokens);
         return;
       }
-      const res = await runTool(tu.name, tu.input, ctx);
-      spanToolCalls.push({ name: tu.name, input: tu.input, result: res.summary, ok: res.ok });
+      const res = await tracedTool(tu.name, tu.input, ctx);
       send({ type: 'tool-result', id: tu.id, name: tu.name, input: tu.input, ok: res.ok, summary: res.summary });
       if (tu.name === 'render_artifact') {
         const inp = tu.input as any;
@@ -289,7 +335,6 @@ async function runGemini(
   modelTools: ToolDef[],
   forcedKind: ArtifactKind | undefined,
   history: ChatHistoryTurn[],
-  spanToolCalls: ToolCallRecord[],
   onFinish: (text: string, inputTokens?: number, outputTokens?: number) => void
 ) {
   const apiKey = await getGeminiKey();
@@ -318,34 +363,54 @@ async function runGemini(
   let fullResponseText = '';
 
   for (let turn = 0; turn < 4; turn++) {
-    const stream = await ai.models.generateContentStream({
-      model,
-      contents,
-      config: {
-        systemInstruction: systemPrompt,
-        tools: geminiTools as any,
-      },
-    });
+    const turnResult = await traced(
+      async (turnSpan: Span) => {
+        turnSpan.log({
+          input: { contents, tools: modelTools.map(t => t.name) },
+          metadata: { model, turn },
+        });
+        const stream = await ai.models.generateContentStream({
+          model,
+          contents,
+          config: {
+            systemInstruction: systemPrompt,
+            tools: geminiTools as any,
+          },
+        });
 
-    const toolCalls: { id: string; name: string; input: any }[] = [];
-    const modelParts: any[] = [];
+        const toolCalls: { id: string; name: string; input: any }[] = [];
+        const modelParts: any[] = [];
+        let textAccum = '';
 
-    for await (const chunk of stream) {
-      const cand = chunk.candidates?.[0];
-      const parts = cand?.content?.parts ?? [];
-      for (const part of parts) {
-        if ((part as any).text) {
-          fullResponseText += (part as any).text;
-          send({ type: 'text', text: (part as any).text });
-          modelParts.push({ text: (part as any).text });
-        } else if ((part as any).functionCall) {
-          const fc = (part as any).functionCall;
-          const id = `fn_${toolCalls.length}_${Date.now()}`;
-          toolCalls.push({ id, name: fc.name, input: fc.args ?? {} });
-          modelParts.push({ functionCall: fc });
+        for await (const chunk of stream) {
+          const cand = chunk.candidates?.[0];
+          const parts = cand?.content?.parts ?? [];
+          for (const part of parts) {
+            if ((part as any).text) {
+              textAccum += (part as any).text;
+              send({ type: 'text', text: (part as any).text });
+              modelParts.push({ text: (part as any).text });
+            } else if ((part as any).functionCall) {
+              const fc = (part as any).functionCall;
+              const id = `fn_${toolCalls.length}_${Date.now()}`;
+              toolCalls.push({ id, name: fc.name, input: fc.args ?? {} });
+              modelParts.push({ functionCall: fc });
+            }
+          }
         }
-      }
-    }
+
+        turnSpan.log({
+          output: { text: textAccum, toolCalls: toolCalls.map(t => ({ name: t.name })) },
+        });
+
+        return { textAccum, toolCalls, modelParts };
+      },
+      { name: 'llm.turn', type: 'llm' },
+    );
+
+    fullResponseText += turnResult.textAccum;
+    const toolCalls = turnResult.toolCalls;
+    const modelParts = turnResult.modelParts;
 
     if (toolCalls.length === 0) {
       onFinish(fullResponseText);
@@ -370,8 +435,7 @@ async function runGemini(
         onFinish(fullResponseText);
         return;
       }
-      const res = await runTool(tc.name, tc.input, ctx);
-      spanToolCalls.push({ name: tc.name, input: tc.input, result: res.summary, ok: res.ok });
+      const res = await tracedTool(tc.name, tc.input, ctx);
       send({ type: 'tool-result', id: tc.id, name: tc.name, input: tc.input, ok: res.ok, summary: res.summary });
       if (tc.name === 'render_artifact') {
         const inp = tc.input as any;

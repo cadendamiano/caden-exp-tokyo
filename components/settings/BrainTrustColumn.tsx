@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import type { SpanRecord } from '@/lib/spanBuffer';
+import { useEffect, useState } from 'react';
 
 type BrainTrustView = {
   configured: boolean;
@@ -13,14 +12,11 @@ type BrainTrustView = {
 
 type Project = { id: string; name: string };
 
-function formatTs(ts: number) {
-  const d = new Date(ts);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
-
-function tokenCount(n?: number) {
-  if (!n) return '—';
-  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+function tracesUrl(orgName: string, projectName: string): string {
+  if (!orgName || !projectName) return 'https://www.braintrust.dev/app';
+  const org = encodeURIComponent(orgName);
+  const proj = encodeURIComponent(projectName);
+  return `https://www.braintrust.dev/app/${org}/p/${proj}/logs`;
 }
 
 export function BrainTrustColumn() {
@@ -36,12 +32,6 @@ export function BrainTrustColumn() {
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
   const [testError, setTestError] = useState('');
   const [projects, setProjects] = useState<Project[]>([]);
-
-  const [spans, setSpans] = useState<SpanRecord[]>([]);
-  const [selectedSpans, setSelectedSpans] = useState<Set<string>>(new Set());
-  const [pushing, setPushing] = useState(false);
-  const [pushResult, setPushResult] = useState<string | null>(null);
-  const [loadingSpans, setLoadingSpans] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,23 +50,6 @@ export function BrainTrustColumn() {
     })();
     return () => { cancelled = true; };
   }, []);
-
-  const loadSpans = useCallback(async () => {
-    setLoadingSpans(true);
-    try {
-      const res = await fetch('/api/braintrust?action=spans', { cache: 'no-store' });
-      if (!res.ok) return;
-      const data = await res.json();
-      setSpans(data.spans ?? []);
-    } catch { /* ignore */ }
-    finally { setLoadingSpans(false); }
-  }, []);
-
-  useEffect(() => {
-    loadSpans();
-    const id = setInterval(loadSpans, 8000);
-    return () => clearInterval(id);
-  }, [loadSpans]);
 
   async function saveBrainTrust() {
     setSaving(true);
@@ -125,59 +98,7 @@ export function BrainTrustColumn() {
     }
   }
 
-  function toggleSpan(id: string) {
-    setSelectedSpans(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function selectAll() {
-    setSelectedSpans(new Set(spans.map(s => s.id)));
-  }
-
-  function clearSelection() {
-    setSelectedSpans(new Set());
-  }
-
-  async function pushSelected() {
-    setPushing(true);
-    setPushResult(null);
-    try {
-      const res = await fetch('/api/braintrust', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          action: 'push',
-          spanIds: selectedSpans.size > 0 ? Array.from(selectedSpans) : undefined,
-        }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setPushResult(`Pushed ${data.pushed} span${data.pushed === 1 ? '' : 's'} to BrainTrust`);
-        setSelectedSpans(new Set());
-        loadSpans();
-      } else {
-        setPushResult(`Error: ${data.error}`);
-      }
-    } catch (e: any) {
-      setPushResult(`Error: ${e?.message}`);
-    } finally {
-      setPushing(false);
-    }
-  }
-
-  async function clearSpans() {
-    await fetch('/api/braintrust', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'clear' }),
-    });
-    setSpans([]);
-    setSelectedSpans(new Set());
-  }
+  const liveTracingOn = Boolean(btView?.configured) && enabledInput && Boolean(projectInput);
 
   return (
     <div className="scol-body">
@@ -226,13 +147,16 @@ export function BrainTrustColumn() {
 
       <section className="settings-section">
         <div className="settings-section-head">
-          <span>Logging enabled</span>
-          <span className={'status-pill' + (enabledInput ? ' ok' : '')}>{enabledInput ? 'on' : 'off'}</span>
+          <span>Live tracing</span>
+          <span className={'status-pill' + (liveTracingOn ? ' ok' : '')}>{liveTracingOn ? 'on' : 'off'}</span>
         </div>
         <label className="tweak-toggle" style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
           <input type="checkbox" checked={enabledInput} onChange={e => setEnabledInput(e.target.checked)} />
-          Log LLM traces to BrainTrust dataset
+          Stream LLM + tool spans to BrainTrust on every request
         </label>
+        <div className="settings-help" style={{ marginTop: 6 }}>
+          Each request opens a root span with child spans for every model turn and tool call. Token counts, latency, and errors are captured automatically.
+        </div>
       </section>
 
       {saveError && <div className="settings-error">{saveError}</div>}
@@ -267,89 +191,18 @@ export function BrainTrustColumn() {
         <div className="bt-test-result error">{testError}</div>
       )}
 
-      {/* Staging area */}
-      <div className="bt-staging-header">
-        <span className="settings-col-subtitle">Trace staging area</span>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button className="settings-link" onClick={loadSpans} disabled={loadingSpans}>
-            {loadingSpans ? 'Refreshing…' : 'Refresh'}
-          </button>
-          {spans.length > 0 && (
-            <button className="settings-link" onClick={clearSpans}>Clear all</button>
-          )}
+      {liveTracingOn && (
+        <div className="settings-footer" style={{ marginTop: 12 }}>
+          <a
+            className="settings-save"
+            href={tracesUrl(orgInput, projectInput)}
+            target="_blank"
+            rel="noreferrer"
+            style={{ textDecoration: 'none', display: 'inline-block' }}
+          >
+            Open traces in BrainTrust →
+          </a>
         </div>
-      </div>
-      <div className="settings-help" style={{ marginBottom: 8 }}>
-        Select traces from recent conversations to push to your BrainTrust dataset.
-      </div>
-
-      {spans.length === 0 && (
-        <div className="settings-empty">
-          No traces yet. Start a conversation to see spans here.
-        </div>
-      )}
-
-      {spans.length > 0 && (
-        <>
-          <div className="bt-span-controls">
-            <button className="settings-link" onClick={selectAll}>Select all</button>
-            <button className="settings-link" onClick={clearSelection}>Clear</button>
-            <span className="bt-span-count">{selectedSpans.size} selected</span>
-          </div>
-
-          <div className="bt-span-list">
-            {spans.map(span => (
-              <div
-                key={span.id}
-                className={'bt-span-row' + (selectedSpans.has(span.id) ? ' selected' : '') + (span.pushedToBraintrust ? ' pushed' : '')}
-                onClick={() => toggleSpan(span.id)}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedSpans.has(span.id)}
-                  onChange={() => toggleSpan(span.id)}
-                  onClick={e => e.stopPropagation()}
-                  className="bt-span-check"
-                />
-                <div className="bt-span-body">
-                  <div className="bt-span-model">
-                    <span className="bt-span-model-name">{span.model}</span>
-                    <span className="bt-span-ts">{formatTs(span.timestamp)}</span>
-                    {span.pushedToBraintrust && <span className="bt-span-pushed">pushed</span>}
-                  </div>
-                  <div className="bt-span-msg">{span.userMessage.slice(0, 120)}{span.userMessage.length > 120 ? '…' : ''}</div>
-                  {span.toolCalls.length > 0 && (
-                    <div className="bt-span-tools">
-                      {span.toolCalls.slice(0, 4).map((tc, i) => (
-                        <span key={i} className="bt-tool-chip">{tc.name}</span>
-                      ))}
-                      {span.toolCalls.length > 4 && <span className="bt-tool-chip">+{span.toolCalls.length - 4}</span>}
-                    </div>
-                  )}
-                  <div className="bt-span-meta">
-                    in {tokenCount(span.inputTokens)} / out {tokenCount(span.outputTokens)}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {pushResult && (
-            <div className={'settings-' + (pushResult.startsWith('Error') ? 'error' : 'saved')} style={{ marginTop: 8 }}>
-              {pushResult}
-            </div>
-          )}
-
-          <div className="settings-footer" style={{ marginTop: 12 }}>
-            <button
-              className="settings-save"
-              onClick={pushSelected}
-              disabled={pushing || (selectedSpans.size === 0)}
-            >
-              {pushing ? 'Pushing…' : selectedSpans.size > 0 ? `Push ${selectedSpans.size} to BrainTrust` : 'Push all to BrainTrust'}
-            </button>
-          </div>
-        </>
       )}
     </div>
   );
