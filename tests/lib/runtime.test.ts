@@ -54,22 +54,64 @@ function makePayload(batchId: string, total = 1000): ApprovalPayload {
   };
 }
 
+/**
+ * handleApprove now makes two fetch calls:
+ *   1. POST /api/approvals — mint a server-signed token
+ *   2. POST /api/dryrun    — submit the batch with the token
+ *
+ * Test fetch mocks distinguish by URL.
+ */
+const FAKE_TOKEN = {
+  claims: {
+    batchId: 'btch_test1',
+    idempotencyKey: '00000000-0000-4000-8000-000000000001',
+    approverId: 'usr_current_session',
+    issuedAt: 1700000000,
+    expiresAt: 1700000900,
+    nonce: 'aabbccdd11223344',
+    policyAtIssue: 'single-approver' as const,
+  },
+  signature: 'a'.repeat(64),
+};
+
 function mockFetchOk(data: any = { confirmationId: 'PMT-ABC123', simulated: true }) {
-  return vi.spyOn(global, 'fetch').mockResolvedValue({
-    ok: true,
-    status: 200,
-    json: async () => ({ ok: true, summary: 'Batch submitted (simulated)', data }),
-    text: async () => '',
-  } as unknown as Response);
+  return vi.spyOn(global, 'fetch').mockImplementation(async (input: any) => {
+    const url = typeof input === 'string' ? input : input?.url ?? '';
+    if (url.includes('/api/approvals')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, token: FAKE_TOKEN, policy: 'single-approver' }),
+        text: async () => '',
+      } as unknown as Response;
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, summary: 'Batch submitted (simulated)', data }),
+      text: async () => '',
+    } as unknown as Response;
+  });
 }
 
 function mockFetchFail() {
-  return vi.spyOn(global, 'fetch').mockResolvedValue({
-    ok: true,
-    status: 200,
-    json: async () => ({ ok: false, summary: 'network down', data: null }),
-    text: async () => '',
-  } as unknown as Response);
+  return vi.spyOn(global, 'fetch').mockImplementation(async (input: any) => {
+    const url = typeof input === 'string' ? input : input?.url ?? '';
+    if (url.includes('/api/approvals')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, token: FAKE_TOKEN, policy: 'single-approver' }),
+        text: async () => '',
+      } as unknown as Response;
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: false, summary: 'network down', data: null }),
+      text: async () => '',
+    } as unknown as Response;
+  });
 }
 
 function activeThreadTurns() {

@@ -3,6 +3,18 @@ import { TOOLS, MODEL_TOOLS, INTERNAL_TOOLS, runTool } from '@/lib/tools';
 import { BILLS, VENDORS, AGING, CATEGORY_SPEND, EXPENSES, EMPLOYEES } from '@/lib/data';
 import { __clearBillSessionCacheForTests } from '@/lib/bill/auth';
 import { __clearSeTokenCacheForTests } from '@/lib/bill/se';
+import { mintApprovalToken, __clearNonceStoreForTests } from '@/lib/approvals/token';
+import { __clearStagedBatchStoreForTests } from '@/lib/payment/stagedBatchStore';
+import { __clearIdempotencyForTests } from '@/lib/idempotency';
+import { randomUUID } from 'node:crypto';
+
+const TEST_HMAC_SECRET = 'test-hmac-secret-at-least-16-chars';
+
+beforeEach(() => {
+  __clearStagedBatchStoreForTests();
+  __clearNonceStoreForTests();
+  __clearIdempotencyForTests();
+});
 
 vi.mock('@/lib/secrets', async () => {
   const actual = await vi.importActual<typeof import('@/lib/secrets')>('@/lib/secrets');
@@ -492,17 +504,145 @@ describe('runTool — internal-tool guard', () => {
     expect(result.summary).toMatch(/internal/i);
   });
 
-  it('allows submit_payment_batch when allowInternal is true', async () => {
+  it('refuses submit_payment_batch without an approval token, even with allowInternal', async () => {
+    // Stage first so the batch exists.
+    const idempotencyKey = randomUUID();
+    const stageRes = await runTool('stage_payment_batch', {
+      billIds: ['bll_zzz999'],
+      billHints: [{ id: 'bll_zzz999', amount: 100 }],
+      idempotencyKey,
+    });
+    const batchId = (stageRes.data as any).approvalPayload.batchId as string;
     const result = await runTool(
       'submit_payment_batch',
-      { batchId: 'btch_abc123' },
+      { batchId },
+      undefined,
+      { allowInternal: true }
+    );
+    expect(result.ok).toBe(false);
+    expect((result.data as any).code).toBe('E_NO_APPROVAL');
+  });
+
+  it('accepts submit_payment_batch with a valid signed token', async () => {
+    process.env.APPROVAL_TOKEN_SECRET = TEST_HMAC_SECRET;
+    const idempotencyKey = randomUUID();
+    const stageRes = await runTool('stage_payment_batch', {
+      billIds: ['bll_zzz999'],
+      billHints: [{ id: 'bll_zzz999', amount: 100 }],
+      idempotencyKey,
+    });
+    const batchId = (stageRes.data as any).approvalPayload.batchId as string;
+    const policy = (stageRes.data as any).policy as 'auto-approvable' | 'single-approver' | 'requires-dual-control';
+    const token = await mintApprovalToken({
+      batchId,
+      idempotencyKey,
+      approverId: 'usr_alice',
+      policyAtIssue: policy,
+      secretOverride: TEST_HMAC_SECRET,
+    });
+    const result = await runTool(
+      'submit_payment_batch',
+      { batchId, approvalToken: token },
       undefined,
       { allowInternal: true }
     );
     expect(result.ok).toBe(true);
-    const data = result.data as any;
-    expect(data.confirmationId).toMatch(/^PMT-[A-Z0-9]{6}$/);
-    expect(data.simulated).toBe(true);
+    expect((result.data as any).confirmationId).toMatch(/^PMT-[A-Z0-9]{6}$/);
+  });
+
+  it('refuses dual-control batch when token lacks secondApproverId', async () => {
+    process.env.APPROVAL_TOKEN_SECRET = TEST_HMAC_SECRET;
+    const idempotencyKey = randomUUID();
+    const stageRes = await runTool('stage_payment_batch', {
+      billIds: ['bll_big'],
+      billHints: [{ id: 'bll_big', amount: 30000 }],
+      idempotencyKey,
+    });
+    const batchId = (stageRes.data as any).approvalPayload.batchId as string;
+    const tokenWithoutSecond = await mintApprovalToken({
+      batchId,
+      idempotencyKey,
+      approverId: 'usr_alice',
+      policyAtIssue: 'requires-dual-control',
+      secretOverride: TEST_HMAC_SECRET,
+    });
+    const result = await runTool(
+      'submit_payment_batch',
+      { batchId, approvalToken: tokenWithoutSecond },
+      undefined,
+      { allowInternal: true }
+    );
+    expect(result.ok).toBe(false);
+    expect((result.data as any).code).toBe('E_DUAL_CONTROL_REQUIRED');
+  });
+
+  it('idempotent submit: replaying the same token returns the same confirmation', async () => {
+    process.env.APPROVAL_TOKEN_SECRET = TEST_HMAC_SECRET;
+    const idempotencyKey = randomUUID();
+    const stageRes = await runTool('stage_payment_batch', {
+      billIds: ['bll_zzz999'],
+      billHints: [{ id: 'bll_zzz999', amount: 100 }],
+      idempotencyKey,
+    });
+    const batchId = (stageRes.data as any).approvalPayload.batchId as string;
+    const token = await mintApprovalToken({
+      batchId,
+      idempotencyKey,
+      approverId: 'usr_alice',
+      policyAtIssue: 'single-approver',
+      secretOverride: TEST_HMAC_SECRET,
+    });
+    const r1 = await runTool('submit_payment_batch', { batchId, approvalToken: token }, undefined, { allowInternal: true });
+    expect(r1.ok).toBe(true);
+    const r2 = await runTool('submit_payment_batch', { batchId, approvalToken: token }, undefined, { allowInternal: true });
+    expect(r2.ok).toBe(true);
+    expect((r2.data as any).confirmationId).toBe((r1.data as any).confirmationId);
+    expect((r2.data as any).idempotent).toBe(true);
+  });
+
+  it('rejects redeemed nonce when idempotency cache is bypassed (e.g. forged retry against a different batchId)', async () => {
+    process.env.APPROVAL_TOKEN_SECRET = TEST_HMAC_SECRET;
+    const idempotencyKey = randomUUID();
+    const stageRes = await runTool('stage_payment_batch', {
+      billIds: ['bll_zzz999'],
+      billHints: [{ id: 'bll_zzz999', amount: 100 }],
+      idempotencyKey,
+    });
+    const batchId = (stageRes.data as any).approvalPayload.batchId as string;
+    const token = await mintApprovalToken({
+      batchId,
+      idempotencyKey,
+      approverId: 'usr_alice',
+      policyAtIssue: 'single-approver',
+      secretOverride: TEST_HMAC_SECRET,
+    });
+    const r1 = await runTool('submit_payment_batch', { batchId, approvalToken: token }, undefined, { allowInternal: true });
+    expect(r1.ok).toBe(true);
+    // Direct call into the verify path with a different expected batchId —
+    // simulates an attacker reusing a redeemed nonce.
+    const { verifyApprovalToken } = await import('@/lib/approvals/token');
+    const v = await verifyApprovalToken({
+      token,
+      expectedBatchId: 'btch_other',
+      expectedIdempotencyKey: idempotencyKey,
+      requireDualControl: false,
+      secretOverride: TEST_HMAC_SECRET,
+    });
+    expect(v.ok).toBe(false);
+    if (!v.ok) {
+      // batchId mismatch is caught before the nonce check, so reason here is
+      // batchId mismatch. Now retry the original batch's verify directly: that
+      // is what the redeemed-nonce path catches.
+      const v2 = await verifyApprovalToken({
+        token,
+        expectedBatchId: batchId,
+        expectedIdempotencyKey: idempotencyKey,
+        requireDualControl: false,
+        secretOverride: TEST_HMAC_SECRET,
+      });
+      expect(v2.ok).toBe(false);
+      if (!v2.ok) expect(v2.code).toBe('E_NONCE_USED');
+    }
   });
 });
 
@@ -513,10 +653,19 @@ describe('runTool — stage_payment_batch', () => {
     expect(result.summary).toMatch(/billIds/);
   });
 
-  it('returns approvalPayload with stake=payment below $25k', async () => {
-    // Pick a small bill from fixtures to keep total small
+  it('requires idempotencyKey', async () => {
     const smallBill = BILLS.slice().sort((a, b) => a.amount - b.amount)[0];
     const result = await runTool('stage_payment_batch', { billIds: [smallBill.id] });
+    expect(result.ok).toBe(false);
+    expect((result.data as any).code).toBe('E_IDEMPOTENCY');
+  });
+
+  it('returns approvalPayload with stake=payment below $25k', async () => {
+    const smallBill = BILLS.slice().sort((a, b) => a.amount - b.amount)[0];
+    const result = await runTool('stage_payment_batch', {
+      billIds: [smallBill.id],
+      idempotencyKey: randomUUID(),
+    });
     expect(result.ok).toBe(true);
     const data = result.data as any;
     expect(data.simulated).toBe(true);
@@ -529,6 +678,7 @@ describe('runTool — stage_payment_batch', () => {
     const result = await runTool('stage_payment_batch', {
       billIds: ['bll_unknown_xyz'],
       billHints: [{ id: 'bll_unknown_xyz', amount: 30000, vendor: 'Unknown LLP', invoice: 'INV-X' }],
+      idempotencyKey: randomUUID(),
     });
     expect(result.ok).toBe(true);
     const data = result.data as any;
@@ -536,30 +686,58 @@ describe('runTool — stage_payment_batch', () => {
     expect(data.approvalPayload.requiresSecondApprover).toBe(true);
     expect(data.approvalPayload.items[0].amount).toBe(30000);
     expect(data.approvalPayload.items[0].vendor).toBe('Unknown LLP');
+    expect(data.policy).toBe('requires-dual-control');
   });
 
-  it('stake stays payment at boundary of $25k total', async () => {
+  it('stake stays payment at boundary just below $25k total', async () => {
     const result = await runTool('stage_payment_batch', {
       billIds: ['bll_boundary'],
-      billHints: [{ id: 'bll_boundary', amount: 25000 }],
+      billHints: [{ id: 'bll_boundary', amount: 24999 }],
+      idempotencyKey: randomUUID(),
     });
     expect(result.ok).toBe(true);
     const data = result.data as any;
     expect(data.approvalPayload.stake).toBe('payment');
   });
 
+  it('promotes to dual-control at exactly $25k total', async () => {
+    const result = await runTool('stage_payment_batch', {
+      billIds: ['bll_threshold'],
+      billHints: [{ id: 'bll_threshold', amount: 25000 }],
+      idempotencyKey: randomUUID(),
+    });
+    expect(result.ok).toBe(true);
+    const data = result.data as any;
+    expect(data.policy).toBe('requires-dual-control');
+  });
+
   it('falls back to hint-derived fields when bill id is not in the dataset', async () => {
     const result = await runTool('stage_payment_batch', {
       billIds: ['bll_zzz999'],
       billHints: [{ id: 'bll_zzz999', amount: 100 }],
+      idempotencyKey: randomUUID(),
     });
     expect(result.ok).toBe(true);
     const data = result.data as any;
     expect(data.approvalPayload.items).toHaveLength(1);
     expect(data.approvalPayload.items[0].amount).toBe(100);
-    // Falls back to hint vendor/invoice format even without explicit vendor
     expect(typeof data.approvalPayload.items[0].invoice).toBe('string');
     expect(typeof data.approvalPayload.items[0].vendor).toBe('string');
+  });
+
+  it('idempotent stage: same key returns the same batchId', async () => {
+    const idempotencyKey = randomUUID();
+    const args = {
+      billIds: ['bll_zzz999'],
+      billHints: [{ id: 'bll_zzz999', amount: 100 }],
+      idempotencyKey,
+    };
+    const r1 = await runTool('stage_payment_batch', args);
+    const r2 = await runTool('stage_payment_batch', args);
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    expect((r2.data as any).idempotent).toBe(true);
+    expect((r2.data as any).approvalPayload.batchId).toBe((r1.data as any).approvalPayload.batchId);
   });
 });
 

@@ -98,1068 +98,53 @@ export type ToolContext = {
 
 type ApprovalPayload = Extract<FlowStep, { kind: 'approval' }>['payload'];
 
+import { fromUsd } from './domain/money';
+import { evaluatePolicy } from './policy/approvalPolicy';
+import { verifyApprovalToken, redeemNonce } from './approvals/token';
+import {
+  getStagedByKey, getStagedByBatchId, putStaged, recordConfirmation,
+  type StagedBatch, type StagedBatchLine,
+} from './payment/stagedBatchStore';
+import { getIdempotent, putIdempotent } from './idempotency';
+
+function stagedBatchToApprovalPayload(s: StagedBatch): ApprovalPayload {
+  const requiresSecondApprover = s.policy === 'requires-dual-control';
+  return {
+    batchId: s.batchId,
+    stake: requiresSecondApprover ? 'large-payment' : 'payment',
+    from: s.fundingAccount,
+    method: s.method,
+    scheduledFor: requiresSecondApprover ? 'Pending second approval' : 'Today, 4:00 PM PT',
+    items: s.lines,
+    total: s.total.minorUnits / 100,
+    requiresSecondApprover,
+  };
+}
+
 export const DEMO_SANDBOX_ENV_ID = '__demo_sandbox__';
 
 // ─── Tool definitions ─────────────────────────────────────────────────
+//
+// Tool definitions live in `lib/tools/` (per-domain modules using
+// `defineTool` with Zod schemas). This file owns dispatch only.
 
-export const READ_TOOLS: ToolDef[] = [
-  {
-    name: 'list_bills',
-    label: 'List bills',
-    description: 'List accounts-payable bills from the BILL workspace. Optionally filter by status or vendor.',
-    parameters: {
-      type: 'object',
-      properties: {
-        status: {
-          type: 'string',
-          enum: ['overdue', 'due-soon', 'open', 'scheduled', 'all'],
-          description: 'Filter by bill status',
-        },
-        vendorId: { type: 'string', description: 'Filter by vendor id (vnd_XX)' },
-      },
-    },
-  },
-  {
-    name: 'list_vendors',
-    label: 'List vendors',
-    description: 'List all active vendors in the BILL workspace.',
-    parameters: { type: 'object', properties: {} },
-  },
-  {
-    name: 'get_aging_summary',
-    label: 'Get aging summary',
-    description: 'Get an aging-bucket summary of open accounts payable.',
-    parameters: { type: 'object', properties: {} },
-  },
-  {
-    name: 'get_category_spend',
-    label: 'Get category spend',
-    description: 'Get total paid spend grouped by vendor category for a named period.',
-    parameters: {
-      type: 'object',
-      properties: {
-        period: { type: 'string', description: 'e.g. "Q1 2026"', default: 'Q1 2026' },
-      },
-    },
-  },
-  {
-    name: 'find_duplicate_invoices',
-    label: 'Find duplicate invoices',
-    description: 'Scan recent bills for likely duplicates using fuzzy invoice-number matching.',
-    parameters: {
-      type: 'object',
-      properties: {
-        days: { type: 'integer', default: 60 },
-      },
-    },
-  },
-  {
-    name: 'get_liquidity_projection',
-    label: 'Get liquidity projection',
-    description: 'Project operating-account cash balance forward using scheduled AP, payroll, and AR.',
-    parameters: {
-      type: 'object',
-      properties: {
-        days: { type: 'number', description: 'Projection horizon in days (default 60, max 120).' },
-        threshold: { type: 'number', description: 'Low-balance floor in dollars (default from dataset).' },
-      },
-    },
-  },
-  {
-    name: 'list_expenses',
-    label: 'List expenses',
-    description: 'List expense reports or card transactions from Bill Spend & Expense. Optionally filter by employee or status.',
-    parameters: {
-      type: 'object',
-      properties: {
-        employeeId: { type: 'string', description: 'Filter by employee id' },
-        status: { type: 'string', description: 'Filter by expense status (e.g. approved, pending)' },
-      },
-    },
-  },
-  {
-    name: 'get_employee',
-    label: 'Get employee',
-    description: 'Get a single Bill Spend & Expense employee by id.',
-    parameters: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Employee id' },
-      },
-      required: ['id'],
-    },
-  },
-  // ── AP — Bills detail & management ──
-  {
-    name: 'get_bill',
-    label: 'Get bill',
-    description: 'Fetch full detail for a single accounts-payable bill by id, including line items and approval history.',
-    parameters: {
-      type: 'object',
-      properties: {
-        billId: { type: 'string', description: 'Bill id (bll_XX)' },
-      },
-      required: ['billId'],
-    },
-  },
-  {
-    name: 'get_vendor',
-    label: 'Get vendor',
-    description: 'Fetch full profile for a single vendor by id.',
-    parameters: {
-      type: 'object',
-      properties: {
-        vendorId: { type: 'string', description: 'Vendor id (vnd_XX)' },
-      },
-      required: ['vendorId'],
-    },
-  },
-  {
-    name: 'list_vendor_bank_accounts',
-    label: 'List vendor bank accounts',
-    description: 'List bank accounts on file for a vendor.',
-    parameters: {
-      type: 'object',
-      properties: {
-        vendorId: { type: 'string', description: 'Vendor id (vnd_XX)' },
-      },
-      required: ['vendorId'],
-    },
-  },
-  // ── AP — Payments ──
-  {
-    name: 'list_payments',
-    label: 'List payments',
-    description: 'List outgoing AP payments. Optionally filter by vendor, status, or date range.',
-    parameters: {
-      type: 'object',
-      properties: {
-        vendorId: { type: 'string', description: 'Filter by vendor id' },
-        status: { type: 'string', enum: ['pending', 'processing', 'paid', 'failed', 'all'], description: 'Filter by payment status' },
-        startDate: { type: 'string', description: 'ISO date lower bound (YYYY-MM-DD)' },
-        endDate: { type: 'string', description: 'ISO date upper bound (YYYY-MM-DD)' },
-      },
-    },
-  },
-  {
-    name: 'get_payment',
-    label: 'Get payment',
-    description: 'Fetch full detail for a single outgoing payment by id.',
-    parameters: {
-      type: 'object',
-      properties: {
-        paymentId: { type: 'string', description: 'Payment id' },
-      },
-      required: ['paymentId'],
-    },
-  },
-  {
-    name: 'get_payment_options',
-    label: 'Get payment options',
-    description: 'Get available payment methods and estimated delivery times for a vendor.',
-    parameters: {
-      type: 'object',
-      properties: {
-        vendorId: { type: 'string', description: 'Vendor id' },
-      },
-      required: ['vendorId'],
-    },
-  },
-  {
-    name: 'get_exchange_rate',
-    label: 'Get exchange rate',
-    description: 'Get the current FX exchange rate for international vendor payments.',
-    parameters: {
-      type: 'object',
-      properties: {
-        currency: { type: 'string', description: 'ISO 4217 currency code, e.g. EUR, GBP, CAD' },
-      },
-      required: ['currency'],
-    },
-  },
-  // ── AP — Approval policies ──
-  {
-    name: 'list_approval_policies',
-    label: 'List approval policies',
-    description: 'List bill approval policies configured in the BILL workspace.',
-    parameters: { type: 'object', properties: {} },
-  },
-  // ── AR — Customers ──
-  {
-    name: 'list_customers',
-    label: 'List customers',
-    description: 'List accounts-receivable customers in the BILL workspace.',
-    parameters: {
-      type: 'object',
-      properties: {
-        status: { type: 'string', enum: ['active', 'inactive', 'all'], description: 'Filter by customer status' },
-      },
-    },
-  },
-  {
-    name: 'get_customer',
-    label: 'Get customer',
-    description: 'Fetch full profile for a single AR customer by id.',
-    parameters: {
-      type: 'object',
-      properties: {
-        customerId: { type: 'string', description: 'Customer id (cust_XX)' },
-      },
-      required: ['customerId'],
-    },
-  },
-  // ── AR — Invoices ──
-  {
-    name: 'list_invoices',
-    label: 'List invoices',
-    description: 'List outgoing AR invoices. Optionally filter by customer, status, or date range.',
-    parameters: {
-      type: 'object',
-      properties: {
-        customerId: { type: 'string', description: 'Filter by customer id' },
-        status: { type: 'string', enum: ['draft', 'sent', 'paid', 'overdue', 'void', 'all'], description: 'Filter by invoice status' },
-        startDate: { type: 'string', description: 'ISO date lower bound (YYYY-MM-DD)' },
-        endDate: { type: 'string', description: 'ISO date upper bound (YYYY-MM-DD)' },
-      },
-    },
-  },
-  {
-    name: 'get_invoice',
-    label: 'Get invoice',
-    description: 'Fetch full detail for a single AR invoice by id.',
-    parameters: {
-      type: 'object',
-      properties: {
-        invoiceId: { type: 'string', description: 'Invoice id (inv_XX)' },
-      },
-      required: ['invoiceId'],
-    },
-  },
-  // ── AR — Estimates ──
-  {
-    name: 'list_estimates',
-    label: 'List estimates',
-    description: 'List sales estimates. Optionally filter by customer or status.',
-    parameters: {
-      type: 'object',
-      properties: {
-        customerId: { type: 'string', description: 'Filter by customer id' },
-        status: { type: 'string', enum: ['draft', 'sent', 'approved', 'rejected', 'converted', 'all'] },
-      },
-    },
-  },
-  // ── S&E — Employees, cards, budgets, transactions, reimbursements ──
-  {
-    name: 'list_employees',
-    label: 'List employees',
-    description: 'List all employees in Bill Spend & Expense. Optionally filter by department or status.',
-    parameters: {
-      type: 'object',
-      properties: {
-        department: { type: 'string', description: 'Filter by department name' },
-        status: { type: 'string', enum: ['active', 'inactive', 'all'] },
-      },
-    },
-  },
-  {
-    name: 'list_cards',
-    label: 'List cards',
-    description: 'List virtual and physical cards in Bill Spend & Expense. Optionally filter by employee or status.',
-    parameters: {
-      type: 'object',
-      properties: {
-        employeeId: { type: 'string', description: 'Filter by employee id' },
-        status: { type: 'string', enum: ['active', 'frozen', 'cancelled', 'all'] },
-      },
-    },
-  },
-  {
-    name: 'get_card',
-    label: 'Get card',
-    description: 'Fetch full detail for a single card including limit, spend, and status.',
-    parameters: {
-      type: 'object',
-      properties: {
-        cardId: { type: 'string', description: 'Card id' },
-      },
-      required: ['cardId'],
-    },
-  },
-  {
-    name: 'list_budgets',
-    label: 'List budgets',
-    description: 'List spending budgets in Bill Spend & Expense.',
-    parameters: {
-      type: 'object',
-      properties: {
-        ownerId: { type: 'string', description: 'Filter by owner employee id' },
-        status: { type: 'string', enum: ['active', 'expired', 'all'] },
-      },
-    },
-  },
-  {
-    name: 'get_budget',
-    label: 'Get budget',
-    description: 'Fetch detail and utilization for a single spending budget.',
-    parameters: {
-      type: 'object',
-      properties: {
-        budgetId: { type: 'string', description: 'Budget id' },
-      },
-      required: ['budgetId'],
-    },
-  },
-  {
-    name: 'list_transactions',
-    label: 'List transactions',
-    description: 'List card transactions in Bill Spend & Expense. Optionally filter by employee, card, date range, or category.',
-    parameters: {
-      type: 'object',
-      properties: {
-        employeeId: { type: 'string', description: 'Filter by employee id' },
-        cardId: { type: 'string', description: 'Filter by card id' },
-        startDate: { type: 'string', description: 'ISO date lower bound (YYYY-MM-DD)' },
-        endDate: { type: 'string', description: 'ISO date upper bound (YYYY-MM-DD)' },
-        category: { type: 'string', description: 'Filter by merchant category' },
-      },
-    },
-  },
-  {
-    name: 'get_transaction',
-    label: 'Get transaction',
-    description: 'Fetch full detail for a single card transaction.',
-    parameters: {
-      type: 'object',
-      properties: {
-        transactionId: { type: 'string', description: 'Transaction id' },
-      },
-      required: ['transactionId'],
-    },
-  },
-  {
-    name: 'list_reimbursements',
-    label: 'List reimbursements',
-    description: 'List out-of-pocket reimbursement requests. Optionally filter by employee or status.',
-    parameters: {
-      type: 'object',
-      properties: {
-        employeeId: { type: 'string', description: 'Filter by employee id' },
-        status: { type: 'string', enum: ['pending', 'approved', 'paid', 'rejected', 'all'] },
-      },
-    },
-  },
-  // ── Org / Infra ──
-  {
-    name: 'list_funding_accounts',
-    label: 'List funding accounts',
-    description: 'List connected bank funding accounts in the BILL workspace.',
-    parameters: { type: 'object', properties: {} },
-  },
-  {
-    name: 'get_funding_account',
-    label: 'Get funding account',
-    description: 'Fetch detail for a single funding account by id.',
-    parameters: {
-      type: 'object',
-      properties: {
-        accountId: { type: 'string', description: 'Funding account id' },
-      },
-      required: ['accountId'],
-    },
-  },
-  {
-    name: 'list_users',
-    label: 'List users',
-    description: 'List users in the BILL organization. Optionally filter by role or status.',
-    parameters: {
-      type: 'object',
-      properties: {
-        role: { type: 'string', description: 'Filter by role name (e.g. Administrator, Clerk)' },
-        status: { type: 'string', enum: ['active', 'inactive', 'all'] },
-      },
-    },
-  },
-  {
-    name: 'get_user',
-    label: 'Get user',
-    description: 'Fetch profile and permissions for a single BILL user.',
-    parameters: {
-      type: 'object',
-      properties: {
-        userId: { type: 'string', description: 'User id' },
-      },
-      required: ['userId'],
-    },
-  },
-  {
-    name: 'list_roles',
-    label: 'List roles',
-    description: 'List available user roles and their permission sets.',
-    parameters: { type: 'object', properties: {} },
-  },
-  {
-    name: 'list_chart_of_accounts',
-    label: 'List chart of accounts',
-    description: 'List general-ledger accounts in the chart of accounts. Optionally filter by type or active status.',
-    parameters: {
-      type: 'object',
-      properties: {
-        type: { type: 'string', enum: ['asset', 'liability', 'equity', 'income', 'expense', 'all'] },
-        active: { type: 'boolean', description: 'If true, return only active accounts' },
-      },
-    },
-  },
-  {
-    name: 'list_webhook_subscriptions',
-    label: 'List webhook subscriptions',
-    description: 'List active webhook subscriptions configured in the BILL workspace.',
-    parameters: { type: 'object', properties: {} },
-  },
-  {
-    name: 'list_event_catalog',
-    label: 'List event catalog',
-    description: 'List all event types available for webhook subscriptions.',
-    parameters: { type: 'object', properties: {} },
-  },
-  // ── UI artifacts ──
-  {
-    name: 'render_artifact',
-    label: 'Open artifact',
-    description:
-      'Open an interactive artifact card in the UI. Use when the user asks to visualize, list, or configure something that has a matching artifact kind.',
-    parameters: {
-      type: 'object',
-      properties: {
-        kind: {
-          type: 'string',
-          enum: ['spend-chart', 'rule-net15', 'crm-flow', 'liquidity-burndown', 'sweep-rule'],
-        },
-        title: { type: 'string' },
-        sub: { type: 'string', description: 'Short uppercase subtitle, e.g. "TABLE · INTERACTIVE"' },
-        meta: { type: 'string', description: 'Short summary with markdown bold supported.' },
-      },
-      required: ['kind', 'title'],
-    },
-  },
-  {
-    name: 'render_html_artifact',
-    label: 'Build custom artifact',
-    description:
-      'Open a custom HTML/CSS/JS artifact in the UI. Use this whenever the user asks for a visualization or layout that does not match one of the fixed kinds (spend-chart, rule-net15, crm-flow) — for example a line graph, treemap, heatmap, sankey, sunburst, scatter, KPI dashboard, or any freeform layout. The artifact renders inside a sandboxed iframe with ECharts v5, D3 v7, and Chart.js v4 available globally.',
-    parameters: {
-      type: 'object',
-      properties: {
-        title: { type: 'string', description: 'Display title for the artifact tab.' },
-        sub: { type: 'string', description: 'Short uppercase subtitle, e.g. "CHART · TREEMAP".' },
-        meta: { type: 'string', description: 'Short summary with markdown bold supported.' },
-        html: {
-          type: 'string',
-          description: 'Body HTML. A root element with id="root" is provided; you may also write into it or add your own containers.',
-        },
-        css: { type: 'string', description: 'Optional extra CSS applied inside the sandbox.' },
-        script: {
-          type: 'string',
-          description:
-            'JS that runs after ECharts, D3, and Chart.js are loaded. Access the piped dataset via `window.__DATA`. Mount into `#root`.',
-        },
-        dataJson: {
-          type: 'string',
-          description:
-            'JSON-serialized dataset to pipe in. Typically the data field from a prior read tool call (list_bills, get_category_spend, etc.), stringified. Exposed to the script as window.__DATA.',
-        },
-      },
-      required: ['title', 'html'],
-    },
-  },
-];
+import {
+  DEFINED_MODEL_TOOLS as _DEFINED_MODEL_TOOLS,
+  DEFINED_INTERNAL_TOOLS as _DEFINED_INTERNAL_TOOLS,
+  READ_TOOLS_V2 as _READ_TOOLS_V2,
+  FORM_TOOLS_V2 as _FORM_TOOLS_V2,
+  WRITE_TOOLS_V2 as _WRITE_TOOLS_V2,
+} from './tools/index';
 
-export const FORM_TOOLS: ToolDef[] = [
-  {
-    name: 'ask_question',
-    label: 'Ask clarifying question',
-    description:
-      'Ask the user a structured question to collect context before proceeding. Use this when intent is ambiguous — especially for automation setup. Prefer multi_select when several options might apply simultaneously. Set allow_free_text when the option list may not be exhaustive.',
-    parameters: {
-      type: 'object',
-      properties: {
-        question: { type: 'string', description: 'The question to display to the user.' },
-        options: {
-          type: 'array',
-          description: 'Choices to present. Each option needs an id (short slug) and a label.',
-          items: {
-            type: 'object',
-            properties: {
-              id: { type: 'string' },
-              label: { type: 'string' },
-              description: { type: 'string', description: 'Optional subtitle shown below the label.' },
-            },
-            required: ['id', 'label'],
-          },
-        },
-        multi_select: {
-          type: 'boolean',
-          description: 'If true, render checkboxes so the user can pick multiple options.',
-        },
-        allow_free_text: {
-          type: 'boolean',
-          description: 'If true, show a free-text input below the options for custom answers.',
-        },
-      },
-      required: ['question', 'options'],
-    },
-  },
-  {
-    name: 'render_spreadsheet_artifact',
-    label: 'Open spreadsheet',
-    description:
-      'Open an editable multi-sheet spreadsheet in the artifact panel. Use when the user asks to see data (bills, vendors, expenses, aging, spend), create a spreadsheet, or requests tabular data with formula editing. This is the primary way to surface tabular data — prefer it over any other table format.',
-    parameters: {
-      type: 'object',
-      properties: {
-        title: { type: 'string', description: 'Display title for the artifact tab.' },
-        sub: { type: 'string', description: 'Short uppercase subtitle, e.g. "SPREADSHEET · EDITABLE".' },
-        meta: { type: 'string', description: 'Short summary with markdown bold supported.' },
-        dataJson: {
-          type: 'string',
-          description: 'JSON string describing the workbook. Shape: {"sheets":[{"name":"Tab label","headers":["Col A","Col B"],"rows":[["cell","cell"]]}]}. Include one sheet object per logical grouping. Use numbers (not strings) for amounts so currency formatting applies.',
-        },
-      },
-      required: ['title', 'dataJson'],
-    },
-  },
-  {
-    name: 'render_document_artifact',
-    label: 'Open document',
-    description:
-      'Open an editable rich-text document in the artifact panel. Use when the user asks for a report, one-pager, memo, narrative summary, or any prose-and-structured-content document. The user can edit the document inline; their edits are persisted automatically.',
-    parameters: {
-      type: 'object',
-      properties: {
-        title: { type: 'string', description: 'Display title for the artifact tab.' },
-        sub: { type: 'string', description: 'Short uppercase subtitle, e.g. "DOCUMENT · DRAFT".' },
-        meta: { type: 'string', description: 'Short summary with markdown bold supported.' },
-        dataJson: {
-          type: 'string',
-          description: 'JSON string describing the document. Shape: {"title":"Report title","subtitle":"optional metadata line","sections":[{"heading":"Section heading","paragraphs":["A prose paragraph."],"bullets":["Bullet item"]}]}. Use one section per logical chunk. heading, paragraphs, bullets are all optional inside a section.',
-        },
-      },
-      required: ['title', 'dataJson'],
-    },
-  },
-  {
-    name: 'render_slides_artifact',
-    label: 'Open slide deck',
-    description:
-      'Open an editable slide-deck presentation in the artifact panel. Use ONLY when the user has invoked /slides AND has explicitly confirmed they are ready to generate the deck after the questionnaire. Do not call this tool to fulfil any other request.',
-    parameters: {
-      type: 'object',
-      properties: {
-        title: { type: 'string', description: 'Display title for the artifact tab.' },
-        sub: { type: 'string', description: 'Short uppercase subtitle, e.g. "DECK · DRAFT".' },
-        meta: { type: 'string', description: 'Short summary with markdown bold supported.' },
-        dataJson: {
-          type: 'string',
-          description: 'JSON string describing the deck. Shape: {"title":"Deck title","slides":[{"title":"Slide title","layout":"title|bullets|two-col|image","bullets":["..."],"body":"...","rightColumn":["..."],"notes":"speaker notes"}]}. layout defaults to "bullets" when bullets are present, otherwise "title". Include one slide object per page.',
-        },
-      },
-      required: ['title', 'dataJson'],
-    },
-  },
-];
-
-export const WRITE_TOOLS: ToolDef[] = [
-  {
-    name: 'stage_payment_batch',
-    label: 'Stage payment batch',
-    description:
-      'Stage a batch for human approval. The UI will render an approval card — do not fabricate one in text. Use billHints to supply amount/vendor for bill IDs not in the local dataset.',
-    parameters: {
-      type: 'object',
-      properties: {
-        billIds: { type: 'array', items: { type: 'string' } },
-        bankAccount: { type: 'string' },
-        method: { type: 'string', enum: ['ACH', 'Check', 'Wire'] },
-        scheduledFor: { type: 'string' },
-        billHints: {
-          type: 'array',
-          description: 'Optional per-bill hints for IDs not in the local fixture. amount required for correct stake classification.',
-          items: {
-            type: 'object',
-            properties: {
-              id: { type: 'string' },
-              amount: { type: 'number' },
-              vendor: { type: 'string' },
-              invoice: { type: 'string' },
-            },
-            required: ['id'],
-          },
-        },
-      },
-      required: ['billIds'],
-    },
-  },
-  // ── AP — Bill management writes ──
-  {
-    name: 'create_bill',
-    label: 'Create bill',
-    description: 'Create a new accounts-payable bill.',
-    parameters: {
-      type: 'object',
-      properties: {
-        vendorId: { type: 'string', description: 'Vendor id (vnd_XX)' },
-        invoiceNumber: { type: 'string', description: 'Vendor invoice number' },
-        amount: { type: 'number', description: 'Total bill amount in USD' },
-        dueDate: { type: 'string', description: 'Due date (YYYY-MM-DD)' },
-        description: { type: 'string', description: 'Optional memo or description' },
-        lineItems: {
-          type: 'array',
-          description: 'Optional line items',
-          items: {
-            type: 'object',
-            properties: {
-              description: { type: 'string' },
-              amount: { type: 'number' },
-              chartOfAccountId: { type: 'string' },
-            },
-          },
-        },
-      },
-      required: ['vendorId', 'invoiceNumber', 'amount', 'dueDate'],
-    },
-  },
-  {
-    name: 'update_bill',
-    label: 'Update bill',
-    description: 'Update fields on an existing accounts-payable bill.',
-    parameters: {
-      type: 'object',
-      properties: {
-        billId: { type: 'string', description: 'Bill id (bll_XX)' },
-        amount: { type: 'number' },
-        dueDate: { type: 'string', description: 'YYYY-MM-DD' },
-        description: { type: 'string' },
-      },
-      required: ['billId'],
-    },
-  },
-  {
-    name: 'delete_bill',
-    label: 'Delete bill',
-    description: 'Delete an accounts-payable bill by id.',
-    parameters: {
-      type: 'object',
-      properties: {
-        billId: { type: 'string', description: 'Bill id (bll_XX)' },
-      },
-      required: ['billId'],
-    },
-  },
-  {
-    name: 'approve_bill',
-    label: 'Approve bill',
-    description: 'Approve a bill in the BILL approval workflow.',
-    parameters: {
-      type: 'object',
-      properties: {
-        billId: { type: 'string', description: 'Bill id (bll_XX)' },
-      },
-      required: ['billId'],
-    },
-  },
-  {
-    name: 'reject_bill',
-    label: 'Reject bill',
-    description: 'Reject a bill in the BILL approval workflow with a reason.',
-    parameters: {
-      type: 'object',
-      properties: {
-        billId: { type: 'string', description: 'Bill id (bll_XX)' },
-        reason: { type: 'string', description: 'Reason for rejection' },
-      },
-      required: ['billId', 'reason'],
-    },
-  },
-  // ── AP — Vendor writes ──
-  {
-    name: 'create_vendor',
-    label: 'Create vendor',
-    description: 'Create a new vendor in the BILL workspace.',
-    parameters: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', description: 'Vendor business name' },
-        email: { type: 'string', description: 'Vendor contact email' },
-        address: { type: 'string', description: 'Vendor mailing address' },
-        terms: { type: 'string', description: 'Payment terms, e.g. Net30' },
-      },
-      required: ['name'],
-    },
-  },
-  {
-    name: 'update_vendor',
-    label: 'Update vendor',
-    description: 'Update contact info or payment terms for an existing vendor.',
-    parameters: {
-      type: 'object',
-      properties: {
-        vendorId: { type: 'string', description: 'Vendor id (vnd_XX)' },
-        name: { type: 'string' },
-        email: { type: 'string' },
-        address: { type: 'string' },
-        terms: { type: 'string' },
-      },
-      required: ['vendorId'],
-    },
-  },
-  {
-    name: 'create_vendor_bank_account',
-    label: 'Add vendor bank account',
-    description: 'Add ACH bank account details for a vendor to enable electronic payments.',
-    parameters: {
-      type: 'object',
-      properties: {
-        vendorId: { type: 'string', description: 'Vendor id (vnd_XX)' },
-        routingNumber: { type: 'string' },
-        accountNumber: { type: 'string' },
-        accountType: { type: 'string', enum: ['checking', 'savings'] },
-      },
-      required: ['vendorId', 'routingNumber', 'accountNumber', 'accountType'],
-    },
-  },
-  // ── AP — Approval policy writes ──
-  {
-    name: 'create_approval_policy',
-    label: 'Create approval policy',
-    description: 'Create a new bill approval policy with amount thresholds and approver rules.',
-    parameters: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', description: 'Policy name' },
-        type: { type: 'string', enum: ['amount', 'always', 'vendor'] },
-        threshold: { type: 'number', description: 'Dollar threshold for amount-based policies' },
-        approvers: { type: 'array', items: { type: 'string' }, description: 'User ids of approvers' },
-        minApprovers: { type: 'number', description: 'Minimum number of approvers required' },
-      },
-      required: ['name', 'type'],
-    },
-  },
-  {
-    name: 'update_approval_policy',
-    label: 'Update approval policy',
-    description: 'Update an existing bill approval policy.',
-    parameters: {
-      type: 'object',
-      properties: {
-        policyId: { type: 'string', description: 'Policy id' },
-        name: { type: 'string' },
-        threshold: { type: 'number' },
-        approvers: { type: 'array', items: { type: 'string' } },
-        minApprovers: { type: 'number' },
-      },
-      required: ['policyId'],
-    },
-  },
-  // ── AR — Customer, invoice, estimate writes ──
-  {
-    name: 'create_customer',
-    label: 'Create customer',
-    description: 'Create a new accounts-receivable customer.',
-    parameters: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', description: 'Customer business name' },
-        email: { type: 'string', description: 'Customer contact email' },
-        phone: { type: 'string' },
-        terms: { type: 'string', description: 'Payment terms, e.g. Net30' },
-      },
-      required: ['name'],
-    },
-  },
-  {
-    name: 'update_customer',
-    label: 'Update customer',
-    description: 'Update contact info or payment terms for an existing AR customer.',
-    parameters: {
-      type: 'object',
-      properties: {
-        customerId: { type: 'string', description: 'Customer id (cust_XX)' },
-        name: { type: 'string' },
-        email: { type: 'string' },
-        phone: { type: 'string' },
-        terms: { type: 'string' },
-      },
-      required: ['customerId'],
-    },
-  },
-  {
-    name: 'create_invoice',
-    label: 'Create invoice',
-    description: 'Create a new outgoing AR invoice for a customer.',
-    parameters: {
-      type: 'object',
-      properties: {
-        customerId: { type: 'string', description: 'Customer id (cust_XX)' },
-        dueDate: { type: 'string', description: 'Due date (YYYY-MM-DD)' },
-        lineItems: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              description: { type: 'string' },
-              quantity: { type: 'number' },
-              unitPrice: { type: 'number' },
-            },
-            required: ['description', 'quantity', 'unitPrice'],
-          },
-        },
-      },
-      required: ['customerId', 'dueDate', 'lineItems'],
-    },
-  },
-  {
-    name: 'update_invoice',
-    label: 'Update invoice',
-    description: 'Update an existing AR invoice (e.g. due date, line items).',
-    parameters: {
-      type: 'object',
-      properties: {
-        invoiceId: { type: 'string', description: 'Invoice id (inv_XX)' },
-        dueDate: { type: 'string' },
-        lineItems: { type: 'array', items: { type: 'object', properties: {} } },
-      },
-      required: ['invoiceId'],
-    },
-  },
-  {
-    name: 'delete_invoice',
-    label: 'Delete invoice',
-    description: 'Delete (void) an AR invoice by id.',
-    parameters: {
-      type: 'object',
-      properties: {
-        invoiceId: { type: 'string', description: 'Invoice id (inv_XX)' },
-      },
-      required: ['invoiceId'],
-    },
-  },
-  {
-    name: 'create_estimate',
-    label: 'Create estimate',
-    description: 'Create a new itemized sales estimate for a customer.',
-    parameters: {
-      type: 'object',
-      properties: {
-        customerId: { type: 'string', description: 'Customer id (cust_XX)' },
-        lineItems: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              description: { type: 'string' },
-              quantity: { type: 'number' },
-              unitPrice: { type: 'number' },
-            },
-            required: ['description', 'quantity', 'unitPrice'],
-          },
-        },
-      },
-      required: ['customerId', 'lineItems'],
-    },
-  },
-  {
-    name: 'convert_estimate_to_invoice',
-    label: 'Convert estimate to invoice',
-    description: 'Convert an approved estimate into an AR invoice.',
-    parameters: {
-      type: 'object',
-      properties: {
-        estimateId: { type: 'string', description: 'Estimate id (est_XX)' },
-        dueDate: { type: 'string', description: 'Due date for the resulting invoice (YYYY-MM-DD)' },
-      },
-      required: ['estimateId'],
-    },
-  },
-  // ── S&E — Card, budget, reimbursement writes ──
-  {
-    name: 'create_card',
-    label: 'Issue card',
-    description: 'Issue a new virtual or physical card to an employee.',
-    parameters: {
-      type: 'object',
-      properties: {
-        employeeId: { type: 'string', description: 'Employee id' },
-        limit: { type: 'number', description: 'Spending limit in USD' },
-        type: { type: 'string', enum: ['virtual', 'physical'], description: 'Card type' },
-      },
-      required: ['employeeId', 'limit', 'type'],
-    },
-  },
-  {
-    name: 'update_card',
-    label: 'Update card',
-    description: 'Update spending limit or freeze/unfreeze a card.',
-    parameters: {
-      type: 'object',
-      properties: {
-        cardId: { type: 'string', description: 'Card id' },
-        limit: { type: 'number', description: 'New spending limit in USD' },
-        status: { type: 'string', enum: ['active', 'frozen'], description: 'New card status' },
-      },
-      required: ['cardId'],
-    },
-  },
-  {
-    name: 'create_budget',
-    label: 'Create budget',
-    description: 'Create a new spending budget in Bill Spend & Expense.',
-    parameters: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', description: 'Budget name' },
-        limit: { type: 'number', description: 'Budget limit in USD' },
-        resetInterval: { type: 'string', enum: ['monthly', 'quarterly', 'annually', 'never'], description: 'When the budget resets' },
-        ownerId: { type: 'string', description: 'Employee id of the budget owner' },
-      },
-      required: ['name', 'limit'],
-    },
-  },
-  {
-    name: 'update_budget',
-    label: 'Update budget',
-    description: 'Update limit, reset interval, or owner of an existing budget.',
-    parameters: {
-      type: 'object',
-      properties: {
-        budgetId: { type: 'string', description: 'Budget id' },
-        limit: { type: 'number' },
-        resetInterval: { type: 'string', enum: ['monthly', 'quarterly', 'annually', 'never'] },
-        ownerId: { type: 'string' },
-      },
-      required: ['budgetId'],
-    },
-  },
-  {
-    name: 'create_reimbursement',
-    label: 'Submit reimbursement',
-    description: 'Submit an out-of-pocket expense reimbursement request.',
-    parameters: {
-      type: 'object',
-      properties: {
-        employeeId: { type: 'string', description: 'Employee id' },
-        amount: { type: 'number', description: 'Amount in USD' },
-        description: { type: 'string', description: 'Description of the expense' },
-        receiptUrl: { type: 'string', description: 'Optional URL to receipt image' },
-      },
-      required: ['employeeId', 'amount', 'description'],
-    },
-  },
-  {
-    name: 'approve_reimbursement',
-    label: 'Approve reimbursement',
-    description: 'Approve an out-of-pocket reimbursement request.',
-    parameters: {
-      type: 'object',
-      properties: {
-        reimbursementId: { type: 'string', description: 'Reimbursement id' },
-      },
-      required: ['reimbursementId'],
-    },
-  },
-  // ── Org / Infra writes ──
-  {
-    name: 'create_chart_of_account',
-    label: 'Create chart of account',
-    description: 'Create a new general-ledger account in the chart of accounts.',
-    parameters: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', description: 'Account name' },
-        number: { type: 'string', description: 'GL account number' },
-        type: { type: 'string', enum: ['asset', 'liability', 'equity', 'income', 'expense'] },
-        category: { type: 'string', description: 'Sub-category label' },
-      },
-      required: ['name', 'number', 'type'],
-    },
-  },
-  {
-    name: 'create_webhook_subscription',
-    label: 'Create webhook subscription',
-    description: 'Register a new webhook endpoint to receive BILL event notifications.',
-    parameters: {
-      type: 'object',
-      properties: {
-        url: { type: 'string', description: 'HTTPS endpoint URL to deliver events to' },
-        events: { type: 'array', items: { type: 'string' }, description: 'Event type slugs to subscribe to (from list_event_catalog)' },
-      },
-      required: ['url', 'events'],
-    },
-  },
-  // ── Existing write tools ──
-  // TODO: add 'automation' approval card UX — for now this tool returns inline success.
-  {
-    name: 'create_automation_rule',
-    label: 'Create automation rule',
-    description: 'Create a BILL automation rule. Returns inline confirmation; no approval card in this iteration.',
-    parameters: {
-      type: 'object',
-      properties: {
-        name: { type: 'string' },
-        trigger: { type: 'string' },
-        conditions: { type: 'array', items: { type: 'object', properties: {} } },
-        actions: { type: 'array', items: { type: 'object', properties: {} } },
-      },
-      required: ['name', 'trigger'],
-    },
-  },
-  {
-    name: 'approve_expense',
-    label: 'Approve expense',
-    description: 'Approve a Bill Spend & Expense item by id.',
-    parameters: {
-      type: 'object',
-      properties: {
-        expenseId: { type: 'string' },
-      },
-      required: ['expenseId'],
-    },
-  },
-  {
-    name: 'reject_expense',
-    label: 'Reject expense',
-    description: 'Reject a Bill Spend & Expense item by id, with a reason.',
-    parameters: {
-      type: 'object',
-      properties: {
-        expenseId: { type: 'string' },
-        reason: { type: 'string' },
-      },
-      required: ['expenseId', 'reason'],
-    },
-  },
-];
-
-// Tools the LLM can call.
-export const MODEL_TOOLS: ToolDef[] = [...READ_TOOLS, ...FORM_TOOLS, ...WRITE_TOOLS];
-
-// Internal dispatcher — not exposed to the LLM.
-export const INTERNAL_TOOLS: ToolDef[] = [
-  {
-    name: 'submit_payment_batch',
-    label: 'Submit payment batch',
-    description: 'Submit an approved payment batch. Internal — called only by handleApprove after user confirmation.',
-    parameters: {
-      type: 'object',
-      properties: {
-        batchId: { type: 'string' },
-        payload: { type: 'object', properties: {} },
-      },
-      required: ['batchId'],
-    },
-  },
-];
-
-// Union kept for internal callers / tests.
+export const MODEL_TOOLS: ToolDef[] = _DEFINED_MODEL_TOOLS;
+export const INTERNAL_TOOLS: ToolDef[] = _DEFINED_INTERNAL_TOOLS;
 export const TOOLS: ToolDef[] = [...MODEL_TOOLS, ...INTERNAL_TOOLS];
+
+export {
+  _READ_TOOLS_V2 as READ_TOOLS,
+  _FORM_TOOLS_V2 as FORM_TOOLS,
+  _WRITE_TOOLS_V2 as WRITE_TOOLS,
+};
 
 const INTERNAL_TOOL_NAMES = new Set(INTERNAL_TOOLS.map(t => t.name));
 
@@ -1670,12 +655,33 @@ async function runMockTool(
       if (billIds.length === 0) {
         return { ok: false, summary: 'stage_payment_batch requires billIds', data: null };
       }
+      const idempotencyKey = String(input?.idempotencyKey ?? '').trim();
+      if (!idempotencyKey) {
+        return {
+          ok: false,
+          summary: 'stage_payment_batch requires idempotencyKey (UUID v4)',
+          data: { code: 'E_IDEMPOTENCY' },
+        };
+      }
+      // Same key → same batch.
+      const existing = getStagedByKey(idempotencyKey);
+      if (existing) {
+        return {
+          ok: true,
+          summary: `Batch staged · ${existing.lines.length} items · $${(existing.total.minorUnits / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })} (idempotent replay)`,
+          data: {
+            approvalPayload: stagedBatchToApprovalPayload(existing),
+            simulated: true,
+            idempotent: true,
+          },
+        };
+      }
       const hints = new Map<string, any>(
         (Array.isArray(input?.billHints) ? input.billHints : []).map((h: any) => [String(h.id), h])
       );
       const vendorName: Record<string, string> = {};
       for (const v of VENDORS) vendorName[v.id] = v.name;
-      const lineItems = billIds.map((id: string) => {
+      const lineItems: StagedBatchLine[] = billIds.map((id: string) => {
         const bill = BILLS.find(b => b.id === id);
         if (bill) {
           return {
@@ -1691,32 +697,95 @@ async function runMockTool(
           amount: Number(hint?.amount ?? 0),
         };
       });
-      const total = lineItems.reduce((s, li) => s + li.amount, 0);
-      const stake: ApprovalPayload['stake'] = total > 25000 ? 'large-payment' : 'payment';
+      const totalMajor = lineItems.reduce((s, li) => s + li.amount, 0);
+      const total = fromUsd(totalMajor);
+      const policyEval = evaluatePolicy({
+        total,
+        hasDuplicateInvoice: false,
+        vendorRiskFlags: [],
+      });
       const batchId = `btch_${Date.now().toString(36).slice(-6)}`;
+      const fundingAccount = String(input?.bankAccount ?? 'Ops Checking ••4821');
+      const method = (input?.method ?? 'ACH') as 'ACH' | 'Check' | 'Wire';
+      putStaged({
+        batchId,
+        idempotencyKey,
+        total,
+        policy: policyEval.policy,
+        lines: lineItems,
+        fundingAccount,
+        method,
+        createdAt: Date.now(),
+      });
+      const requiresSecondApprover = policyEval.policy === 'requires-dual-control';
+      const stake: ApprovalPayload['stake'] = requiresSecondApprover ? 'large-payment' : 'payment';
       const approvalPayload: ApprovalPayload = {
         batchId,
         stake,
-        from: input?.bankAccount ?? 'Ops Checking ••4821',
-        method: input?.method ?? 'ACH',
+        from: fundingAccount,
+        method,
         scheduledFor:
-          input?.scheduledFor ?? (stake === 'large-payment' ? 'Pending second approval' : 'Today, 4:00 PM PT'),
+          String(input?.scheduledFor ?? (requiresSecondApprover ? 'Pending second approval' : 'Today, 4:00 PM PT')),
         items: lineItems,
-        total,
-        requiresSecondApprover: stake === 'large-payment',
+        total: totalMajor,
+        requiresSecondApprover,
       };
       return {
         ok: true,
-        summary: `Batch staged · ${lineItems.length} items · $${total.toLocaleString('en-US', { maximumFractionDigits: 0 })} (simulated)`,
-        data: { approvalPayload, simulated: true },
+        summary: `Batch staged · ${lineItems.length} items · $${totalMajor.toLocaleString('en-US', { maximumFractionDigits: 0 })} · policy=${policyEval.policy} (simulated)`,
+        data: {
+          approvalPayload,
+          simulated: true,
+          policy: policyEval.policy,
+          policyReasons: policyEval.reasons,
+        },
       };
     }
     if (name === 'submit_payment_batch') {
       const batchId = String(input?.batchId ?? '').trim();
       if (!batchId) {
-        return { ok: false, summary: 'submit_payment_batch requires batchId', data: null };
+        return {
+          ok: false,
+          summary: 'submit_payment_batch requires batchId',
+          data: { code: 'E_NO_APPROVAL' },
+        };
       }
+      const staged = getStagedByBatchId(batchId);
+      if (!staged) {
+        return {
+          ok: false,
+          summary: `submit_payment_batch: no staged batch ${batchId}`,
+          data: { code: 'E_NO_APPROVAL' },
+        };
+      }
+      // Idempotent submit: if we've already issued a confirmation for this
+      // idempotencyKey, return the same one without redeeming the nonce again.
+      const priorConfirmation = getIdempotent<{ confirmationId: string }>('submit', staged.idempotencyKey);
+      if (priorConfirmation) {
+        return {
+          ok: true,
+          summary: 'Batch submitted (idempotent replay)',
+          data: { confirmationId: priorConfirmation.confirmationId, simulated: true, idempotent: true },
+        };
+      }
+      const verify = await verifyApprovalToken({
+        token: input?.approvalToken,
+        expectedBatchId: batchId,
+        expectedIdempotencyKey: staged.idempotencyKey,
+        requireDualControl: staged.policy === 'requires-dual-control',
+      });
+      if (!verify.ok) {
+        return {
+          ok: false,
+          summary: `submit_payment_batch refused: ${verify.reason}`,
+          data: { code: verify.code },
+        };
+      }
+      // Redeem nonce, persist confirmation, snapshot for idempotent retry.
+      redeemNonce(verify.nonce, Math.floor(Date.now() / 1000) + 24 * 60 * 60);
       const confirmationId = `PMT-${batchId.slice(-6).toUpperCase()}`;
+      recordConfirmation(batchId, confirmationId);
+      putIdempotent('submit', staged.idempotencyKey, { confirmationId });
       return {
         ok: true,
         summary: 'Batch submitted (simulated)',
@@ -2069,7 +1138,7 @@ Style:
 - When the user asks for a prose report, one-pager, memo, or narrative summary, call \`render_document_artifact\`. For slide decks call \`render_slides_artifact\` (only after /slides and an explicit user go-ahead).
 - When the user asks to visualize or open an interactive view (spend chart, Net-15 rule, CRM flow, cash runway, sweep rule), call \`render_artifact\` with the right kind. Kinds: spend-chart, rule-net15, crm-flow, liquidity-burndown, sweep-rule.
 - When the user asks to "create a spreadsheet", "turn this into a spreadsheet", "open as spreadsheet", or requests tabular data they can edit with formulas — call \`render_spreadsheet_artifact\`. First call the appropriate read tool (e.g. \`list_bills\`, \`get_category_spend\`) to get the data, then pass it as \`dataJson\` in the format \`{"sheets":[{"name":"Tab name","headers":[...],"rows":[[...]]}]}\`. Use one sheet per logical grouping. Use numbers (not strings) for currency amounts.
-- To stage a payment, call \`stage_payment_batch\` with the bill IDs — the UI will render an approval card with a typed-confirmation gate. Do not fabricate approvals. Wait for the user's approve/reject before describing an outcome.
+- To stage a payment, call \`stage_payment_batch\` with the bill IDs AND an \`idempotencyKey\` (a fresh UUID v4 you generate for this stage call). The UI renders an approval card with a typed-confirmation gate. Do not fabricate approvals. Wait for the user's approve/reject before describing an outcome. Never call submit_payment_batch yourself — it is internal and only fires after a human approves in the UI, which mints a server-signed token the LLM never sees.
 
 Tools are grouped into AP (bills, vendors, payments, aging, spend), AR (customers, invoices), Spend & Expense (expenses, cards, budgets, transactions, reimbursements), Org/Infra (funding accounts, users, GL, webhooks), and Payments (stage_payment_batch, create_automation_rule). Use the tool schemas you have access to — they list the exact names and parameters.
 
