@@ -8,6 +8,7 @@ import { Icon } from './primitives/Icon';
 import { CredentialsColumn } from './settings/CredentialsColumn';
 import { BrainTrustColumn } from './settings/BrainTrustColumn';
 import { ToolsColumn } from './settings/ToolsColumn';
+import { UsageSparkline } from './settings/UsageSparkline';
 
 type EnvView = {
   id: string;
@@ -239,7 +240,12 @@ export function DevConfigPanel({ onClose }: { onClose: () => void }) {
               <TweaksSection />
             </div>
           )}
-          {tab === 'observability' && <BrainTrustColumn />}
+          {tab === 'observability' && (
+            <div className="scol-body">
+              <UsageSparkline />
+              <BrainTrustColumn />
+            </div>
+          )}
           {tab === 'tools' && <ToolsColumn />}
         </div>
       </div>

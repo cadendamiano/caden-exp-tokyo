@@ -11,6 +11,7 @@
     "lint": "next lint",
     "test": "vitest",
     "test:run": "vitest run",
+    "eval": "tsx evals/runDemos.eval.ts",
     "preflight": "node scripts/preflight.js",
     "electron:build-next": "next build",
     "electron:copy-standalone": "node scripts/copy-standalone.js",
@@ -58,6 +59,7 @@
     "electron": "^30.0.0",
     "electron-builder": "^24.13.0",
     "jsdom": "^29.0.2",
+    "tsx": "^4.21.0",
     "typescript": "^5",
     "vitest": "^4.1.4",
     "wait-on": "^7.2.0"
