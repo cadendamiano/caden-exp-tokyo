@@ -172,10 +172,18 @@ const DEFAULT_TWEAKS: Tweaks = {
   defaultBillProduct: 'ap',
 };
 
+const DEFAULT_THREAD_TITLES = new Set(['New task', 'New thread', 'Untitled thread', 'Untitled task']);
+
+function deriveTaskTitle(text: string): string {
+  const cleaned = text.replace(/\s+/g, ' ').trim();
+  const max = 50;
+  return cleaned.length <= max ? cleaned : cleaned.slice(0, max).trimEnd() + '…';
+}
+
 function createThread(title?: string, tweaks?: Tweaks): Thread {
   return {
     id: `thr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
-    title: title ?? 'New thread',
+    title: title ?? 'New task',
     createdAt: Date.now(),
     turns: [],
     artifacts: [],
@@ -374,11 +382,20 @@ export const useStore = create<State>()(
               w.id === s.activeWorkspaceId
                 ? {
                     ...w,
-                    threads: w.threads.map(th =>
-                      th.id === s.activeWorkspaceThreadId
-                        ? { ...th, turns: [...th.turns, t] }
-                        : th
-                    ),
+                    threads: w.threads.map(th => {
+                      if (th.id !== s.activeWorkspaceThreadId) return th;
+                      const isFirstUserTurn = t.kind === 'user' && !th.turns.some(x => x.kind === 'user');
+                      const shouldRename =
+                        isFirstUserTurn &&
+                        DEFAULT_THREAD_TITLES.has(th.title) &&
+                        t.kind === 'user' &&
+                        !!t.text?.trim();
+                      return {
+                        ...th,
+                        turns: [...th.turns, t],
+                        title: shouldRename && t.kind === 'user' ? deriveTaskTitle(t.text) : th.title,
+                      };
+                    }),
                   }
                 : w
             ),
@@ -509,7 +526,7 @@ export const useStore = create<State>()(
               ? {
                   ...w,
                   threads: w.threads.map(t =>
-                    t.id === threadId ? { ...t, title: title.trim() || 'Untitled thread' } : t
+                    t.id === threadId ? { ...t, title: title.trim() || 'Untitled task' } : t
                   ),
                 }
               : w

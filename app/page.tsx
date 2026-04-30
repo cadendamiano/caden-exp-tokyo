@@ -79,7 +79,7 @@ export default function Page() {
               <div>
                 <div className="glyph" style={{ fontSize: 42, color: 'var(--ink-4)' }}>◦</div>
                 <div style={{ marginTop: 10 }}>
-                  Pick a workspace thread to start, or create a new one.
+                  Pick a workspace task to start, or create a new one.
                 </div>
               </div>
             </div>
@@ -89,7 +89,7 @@ export default function Page() {
               <div>
                 <div className="glyph" style={{ fontSize: 42, color: 'var(--ink-4)' }}>◦</div>
                 <div style={{ marginTop: 10 }}>
-                  Starter thread for <em>{activeWsThread.title}</em>.
+                  Starter task for <em>{activeWsThread.title}</em>.
                 </div>
                 <button
                   className="mode-toggle-btn"

@@ -203,10 +203,13 @@ function WorkspaceItem({ workspace }: { workspace: Workspace }) {
   const newWorkspaceThread = useStore(s => s.newWorkspaceThread);
   const setActiveWorkspaceThread = useStore(s => s.setActiveWorkspaceThread);
   const deleteWorkspaceThread = useStore(s => s.deleteWorkspaceThread);
+  const renameWorkspaceThread = useStore(s => s.renameWorkspaceThread);
   const openWorkspaceArtifact = useStore(s => s.openWorkspaceArtifact);
 
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(workspace.name);
+  const [renamingThreadId, setRenamingThreadId] = useState<string | null>(null);
+  const [threadRenameValue, setThreadRenameValue] = useState('');
   const [expandedThreadIds, setExpandedThreadIds] = useState<Set<string>>(new Set());
 
   const toggleThreadExpanded = (id: string) =>
@@ -284,6 +287,7 @@ function WorkspaceItem({ workspace }: { workspace: Workspace }) {
                 <div
                   className={'ws-thread-item' + (isActive ? ' active' : '')}
                   onClick={() => {
+                    if (renamingThreadId === t.id) return;
                     setActiveWorkspaceThread(workspace.id, t.id);
                     if (hasArtifacts) toggleThreadExpanded(t.id);
                   }}
@@ -294,16 +298,49 @@ function WorkspaceItem({ workspace }: { workspace: Workspace }) {
                     </span>
                   )}
                   <span className="ws-thread-glyph">{'◦'}</span>
-                  <span className="ws-thread-title">{t.title}</span>
+                  {renamingThreadId === t.id ? (
+                    <input
+                      className="rail-rename-input"
+                      value={threadRenameValue}
+                      autoFocus
+                      onClick={e => e.stopPropagation()}
+                      onChange={e => setThreadRenameValue(e.target.value)}
+                      onBlur={() => {
+                        if (threadRenameValue.trim()) {
+                          renameWorkspaceThread(workspace.id, t.id, threadRenameValue.trim());
+                        }
+                        setRenamingThreadId(null);
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          if (threadRenameValue.trim()) {
+                            renameWorkspaceThread(workspace.id, t.id, threadRenameValue.trim());
+                          }
+                          setRenamingThreadId(null);
+                        } else if (e.key === 'Escape') {
+                          setRenamingThreadId(null);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <span
+                      className="ws-thread-title"
+                      onDoubleClick={e => {
+                        e.stopPropagation();
+                        setRenamingThreadId(t.id);
+                        setThreadRenameValue(t.title);
+                      }}
+                    >{t.title}</span>
+                  )}
                   {hasArtifacts && (
                     <span className="ws-thread-meta">{t.artifacts.length}</span>
                   )}
                   <button
                     className="icon-btn ws-thread-del"
-                    aria-label="Delete thread"
+                    aria-label="Delete task"
                     onClick={e => {
                       e.stopPropagation();
-                      if (confirm(`Delete thread "${t.title}"?`)) {
+                      if (confirm(`Delete task "${t.title}"?`)) {
                         deleteWorkspaceThread(workspace.id, t.id);
                       }
                     }}
@@ -329,7 +366,7 @@ function WorkspaceItem({ workspace }: { workspace: Workspace }) {
             onClick={() => newWorkspaceThread(workspace.id)}
           >
             <span className="ws-thread-glyph">{'＋'}</span>
-            <span className="ws-thread-title">New thread</span>
+            <span className="ws-thread-title">New task</span>
           </button>
 
           {workspace.files.map(f => (
@@ -373,11 +410,11 @@ function WorkspaceHistory({ onBack }: { onBack: () => void }) {
 
       <div className="ws-section">
         <div className="ws-section-header">
-          <span className="ws-section-label">Recent threads</span>
+          <span className="ws-section-label">Recent tasks</span>
         </div>
 
         {items.length === 0 && (
-          <div className="rail-empty">No threads yet.</div>
+          <div className="rail-empty">No tasks yet.</div>
         )}
 
         {items.map(item => (
